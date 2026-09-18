@@ -54,3 +54,4 @@ pub use strategy::{
 pub use types::{
     BacktestResult, Bar, EquityPoint, Fill, Order, Position, Side, Signal, Trade,
 };
+pub mod diagrams;
