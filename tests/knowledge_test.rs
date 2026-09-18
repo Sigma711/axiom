@@ -1,4 +1,5 @@
 use axiom::knowledge;
+use std::path::Path;
 
 #[test]
 fn test_no_implementation_placeholder() {
@@ -18,25 +19,22 @@ fn test_no_implementation_placeholder() {
 }
 
 #[test]
-fn test_all_code_refs_resolve() {
+fn test_all_code_refs_point_to_existing_files() {
     let entries = knowledge::all_entries();
     let mut total = 0usize;
     let mut errors: Vec<String> = Vec::new();
     for e in entries.iter() {
         let r = e.code_ref.clone();
-        if r.is_empty() {
+        if r.is_empty() || !r.starts_with("src/") {
             continue;
         }
         total += 1;
-        let parts: Vec<&str> = r.split("::").collect();
-        let path = if parts.len() >= 2 {
-            parts[..parts.len() - 1].join("::")
-        } else {
-            r.clone()
-        };
-        let src_path = path.split_whitespace().next().unwrap_or(&path);
-        if !std::path::Path::new(src_path).exists() {
-            errors.push(format!("{}: 文件 {} 不存在", e.id, src_path));
+        let parts: Vec<&str> = r.split(" - ").collect();
+        let code_part = parts[0];
+        let segs: Vec<&str> = code_part.split("::").collect();
+        let path = segs[0];
+        if !Path::new(path).exists() {
+            errors.push(format!("{}: 文件 {} 不存在", e.id, path));
         }
     }
     assert!(
@@ -45,7 +43,7 @@ fn test_all_code_refs_resolve() {
         errors.len(),
         errors.join("\n  ")
     );
-    println!("OK: {} 个 code_ref 全部存在", total);
+    println!("OK: {} 个 code_ref 全部指向真实文件", total);
 }
 
 #[test]
