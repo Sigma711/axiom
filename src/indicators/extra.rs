@@ -39,13 +39,13 @@ pub fn heikin_ashi(bars: &[Bar]) -> Vec<Bar> {
 /// PDF 第二十二章 K 线形态部分
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CandlePattern {
-    Doji,         // 十字星:开收几乎相等
-    Hammer,       // 锤子线:下影线 > 实体 × 2
-    ShootingStar, // 流星:上影线 > 实体 × 2
-    Marubozu,     // 光头光脚:实体几乎占满整根 K 线
-    Engulfing,    // 吞没:后一根实体完全包裹前一根(且方向相反)
-    Inside,       // 内包线:后一根高低点完全在前一根范围内
-    Outside,      // 外包线:后一根高低点完全超出前一根范围
+    Doji,           // 十字星:开收几乎相等
+    Hammer,         // 锤子线:下影线 > 实体 × 2
+    ShootingStar,   // 流星:上影线 > 实体 × 2
+    Marubozu,       // 光头光脚:实体几乎占满整根 K 线
+    Engulfing,      // 吞没:后一根实体完全包裹前一根(且方向相反)
+    Inside,         // 内包线:后一根高低点完全在前一根范围内
+    Outside,        // 外包线:后一根高低点完全超出前一根范围
     None,
 }
 
@@ -116,26 +116,11 @@ pub fn zscore(series: &[f64], period: usize) -> Vec<Option<f64>> {
 /// 简单的 K 线摘要(用于数据探索面板)
 pub fn bar_summary(bar: &Bar) -> String {
     let body = bar.close - bar.open;
-    let pct = if bar.open != 0.0 {
-        body / bar.open * 100.0
-    } else {
-        0.0
-    };
-    let direction = if body > 0.0 {
-        "↑ 阳线"
-    } else if body < 0.0 {
-        "↓ 阴线"
-    } else {
-        "─ 平"
-    };
+    let pct = if bar.open != 0.0 { body / bar.open * 100.0 } else { 0.0 };
+    let direction = if body > 0.0 { "↑ 阳线" } else if body < 0.0 { "↓ 阴线" } else { "─ 平" };
     format!(
         "{} 开盘 {:.2} 收盘 {:.2} 涨跌 {:+.2}% (幅度 {:.2}) 成交量 {:.0}",
-        direction,
-        bar.open,
-        bar.close,
-        pct,
-        bar.high - bar.low,
-        bar.volume
+        direction, bar.open, bar.close, pct, bar.high - bar.low, bar.volume
     )
 }
 /// 吞没形态: 后一根 K 线实体完全包裹前一根, 且方向相反
@@ -147,17 +132,23 @@ pub fn detect_engulfing(prev: &Bar, curr: &Bar) -> CandlePattern {
     let curr_body_min = curr.open.min(curr.close);
     let curr_body_max = curr.open.max(curr.close);
 
-    let prev_bull = prev.close > prev.open; // 前阳
-    let prev_bear = prev.close < prev.open; // 前阴
-    let curr_bull = curr.close > curr.open; // 后阳
-    let curr_bear = curr.close < curr.open; // 后阴
+    let prev_bull = prev.close > prev.open;  // 前阳
+    let prev_bear = prev.close < prev.open;  // 前阴
+    let curr_bull = curr.close > curr.open;  // 后阳
+    let curr_bear = curr.close < curr.open;  // 后阴
 
     // 看涨吞没: 前阴后阳, 后阳实体完全包裹前阴实体
-    if prev_bear && curr_bull && curr_body_min <= prev_body_min && curr_body_max >= prev_body_max {
+    if prev_bear && curr_bull
+        && curr_body_min <= prev_body_min
+        && curr_body_max >= prev_body_max
+    {
         return CandlePattern::Engulfing;
     }
     // 看跌吞没: 前阳后阴, 后阴实体完全包裹前阳实体
-    if prev_bull && curr_bear && curr_body_min <= prev_body_min && curr_body_max >= prev_body_max {
+    if prev_bull && curr_bear
+        && curr_body_min <= prev_body_min
+        && curr_body_max >= prev_body_max
+    {
         return CandlePattern::Engulfing;
     }
     CandlePattern::None
@@ -171,10 +162,41 @@ pub fn detect_inside_outside(prev: &Bar, curr: &Bar) -> CandlePattern {
     let outside = curr.high > prev.high && curr.low < prev.low;
 
     if inside {
-        return CandlePattern::Inside; // 需要扩展枚举
+        return CandlePattern::Inside;  // 需要扩展枚举
     }
     if outside {
-        return CandlePattern::Outside; // 需要扩展枚举
+        return CandlePattern::Outside;  // 需要扩展枚举
     }
     CandlePattern::None
+}
+
+/// 枢轴点 (Pivot Points): 基于前一周期 H/L/C 计算支撑/阻力位
+/// R3 = H + 2*(P - L)
+/// R2 = P + (H - L)
+/// R1 = 2*P - L
+/// P  = (H + L + C) / 3
+/// S1 = 2*P - H
+/// S2 = P - (H - L)
+/// S3 = L - 2*(H - P)
+pub fn pivot_points(prev_high: f64, prev_low: f64, prev_close: f64) -> PivotPoints {
+    let p = (prev_high + prev_low + prev_close) / 3.0;
+    PivotPoints {
+        r3: prev_high + 2.0 * (p - prev_low),
+        r2: p + (prev_high - prev_low),
+        r1: 2.0 * p - prev_low,
+        pivot: p,
+        s1: 2.0 * p - prev_high,
+        s2: p - (prev_high - prev_low),
+        s3: prev_low - 2.0 * (prev_high - p),
+    }
+}
+
+pub struct PivotPoints {
+    pub r3: f64,
+    pub r2: f64,
+    pub r1: f64,
+    pub pivot: f64,
+    pub s1: f64,
+    pub s2: f64,
+    pub s3: f64,
 }

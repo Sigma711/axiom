@@ -69,7 +69,7 @@ impl Bar {
 pub struct Signal {
     pub timestamp: DateTime<Utc>,
     pub side: Side,
-    pub strength: f64,            // 0~1, 信号强度
+    pub strength: f64,           // 0~1, 信号强度
     pub reason: String,           // 人类可读解释
     pub target_size: Option<f64>, // 可选:策略直接指定下单数量
 }
@@ -118,7 +118,7 @@ impl Fill {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Position {
     pub symbol: String,
-    pub size: f64, // 正=多头, 负=空头, 0=空仓
+    pub size: f64,             // 正=多头, 负=空头, 0=空仓
     pub avg_entry_price: f64,
     pub realized_pnl: f64,
 }
@@ -166,11 +166,7 @@ impl Trade {
         match (self.is_closed(), self.exit_price) {
             (true, Some(exit)) => {
                 let gross = (exit - self.entry_price) * self.size;
-                let gross = if self.side == Side::Sell {
-                    -gross
-                } else {
-                    gross
-                };
+                let gross = if self.side == Side::Sell { -gross } else { gross };
                 gross - self.total_commission()
             }
             _ => 0.0,
@@ -223,6 +219,9 @@ impl BacktestResult {
             .unwrap_or(0.0)
     }
     pub fn final_equity(&self) -> f64 {
-        self.equity_curve.last().map(|p| p.equity).unwrap_or(0.0)
+        self.equity_curve
+            .last()
+            .map(|p| p.equity)
+            .unwrap_or(0.0)
     }
 }

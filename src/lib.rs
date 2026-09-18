@@ -51,5 +51,8 @@ pub use strategy::{
     IchimokuStrategy, KdjStrategy, MacdStrategy, PpoStrategy, RandomStrategy, RsiStrategy,
     SmaCrossStrategy, Strategy, SupertrendStrategy, VortexStrategy, VwapReversionStrategy,
 };
-pub use types::{BacktestResult, Bar, EquityPoint, Fill, Order, Position, Side, Signal, Trade};
+pub use types::{
+    BacktestResult, Bar, EquityPoint, Fill, Order, Position, Side, Signal, Trade,
+};
 pub mod diagrams;
+

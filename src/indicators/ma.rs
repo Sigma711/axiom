@@ -129,13 +129,10 @@ pub fn dema(prices: &[f64], period: usize) -> Vec<Option<f64>> {
     let e1 = ema(prices, period);
     let e2_in: Vec<f64> = e1.iter().map(|x| x.unwrap_or(0.0)).collect();
     let e2 = ema(&e2_in, period);
-    e1.iter()
-        .zip(e2.iter())
-        .map(|(a, b)| match (a, b) {
-            (Some(x), Some(y)) => Some(2.0 * x - y),
-            _ => None,
-        })
-        .collect()
+    e1.iter().zip(e2.iter()).map(|(a, b)| match (a, b) {
+        (Some(x), Some(y)) => Some(2.0 * x - y),
+        _ => None,
+    }).collect()
 }
 
 /// TEMA
@@ -145,14 +142,10 @@ pub fn tema(prices: &[f64], period: usize) -> Vec<Option<f64>> {
     let e2 = ema(&e2_in, period);
     let e3_in: Vec<f64> = e2.iter().map(|x| x.unwrap_or(0.0)).collect();
     let e3 = ema(&e3_in, period);
-    e1.iter()
-        .zip(e2.iter())
-        .zip(e3.iter())
-        .map(|((a, b), c)| match (a, b, c) {
-            (Some(x), Some(y), Some(z)) => Some(3.0 * x - 3.0 * y + z),
-            _ => None,
-        })
-        .collect()
+    e1.iter().zip(e2.iter()).zip(e3.iter()).map(|((a, b), c)| match (a, b, c) {
+        (Some(x), Some(y), Some(z)) => Some(3.0 * x - 3.0 * y + z),
+        _ => None,
+    }).collect()
 }
 
 /// VWMA 成交量加权均线
@@ -188,28 +181,21 @@ pub fn bbi(bars: &[Bar]) -> Vec<Option<f64>> {
     let m6 = sma(&closes, 6);
     let m12 = sma(&closes, 12);
     let m24 = sma(&closes, 24);
-    m3.iter()
-        .zip(m6.iter())
-        .zip(m12.iter())
-        .zip(m24.iter())
-        .map(|(((a, b), c), d)| match (a, b, c, d) {
+    m3.iter().zip(m6.iter()).zip(m12.iter()).zip(m24.iter()).map(|(((a, b), c), d)| {
+        match (a, b, c, d) {
             (Some(x1), Some(x2), Some(x3), Some(x4)) => Some((x1 + x2 + x3 + x4) / 4.0),
             _ => None,
-        })
-        .collect()
+        }
+    }).collect()
 }
 
 /// BIAS 乖离率
 pub fn bias(prices: &[f64], period: usize) -> Vec<Option<f64>> {
     let ma = sma(prices, period);
-    prices
-        .iter()
-        .zip(ma.iter())
-        .map(|(p, m)| match m {
-            Some(ma_val) if *ma_val != 0.0 => Some((p - ma_val) / ma_val * 100.0),
-            _ => None,
-        })
-        .collect()
+    prices.iter().zip(ma.iter()).map(|(p, m)| match m {
+        Some(ma_val) if *ma_val != 0.0 => Some((p - ma_val) / ma_val * 100.0),
+        _ => None,
+    }).collect()
 }
 
 #[cfg(test)]
@@ -256,4 +242,63 @@ mod tests {
         let b = bias(&p, 5);
         assert!(b.iter().skip(4).all(|x| x.unwrap() == 0.0));
     }
+}
+/// Williams Alligator: 三条 SMMA (蓝/红/绿) 鳄鱼指标
+/// 蓝唇 (Jaw) = SMMA(13, 中价, 向前 8)
+/// 红齿 (Teeth) = SMMA(8, 中价, 向前 5)
+/// 绿唇 (Lips) = SMMA(5, 中价, 向前 3)
+/// 中价 = (H+L)/2
+pub fn alligator(bars: &[Bar]) -> AlligatorOutput {
+    let mid: Vec<f64> = bars.iter().map(|b| (b.high + b.low) / 2.0).collect();
+    AlligatorOutput {
+        jaw: smma_offset(&mid, 13, 8),
+        teeth: smma_offset(&mid, 8, 5),
+        lips: smma_offset(&mid, 5, 3),
+    }
+}
+
+pub struct AlligatorOutput {
+    pub jaw: Vec<Option<f64>>,
+    pub teeth: Vec<Option<f64>>,
+    pub lips: Vec<Option<f64>>,
+}
+
+/// 平滑移动平均 (Wilder) — 与 rma 等价, 但带向前偏移 (用于鳄鱼等指标)
+fn smma_offset(vals: &[f64], period: usize, offset: usize) -> Vec<Option<f64>> {
+    let n = vals.len();
+    let mut out = vec![None; n];
+    if n < period { return out; }
+    let mut prev = vals[..period].iter().sum::<f64>() / period as f64;
+    if period + offset <= n {
+        out[period + offset - 1] = Some(prev);
+    }
+    for i in period..n {
+        prev = (prev * (period as f64 - 1.0) + vals[i]) / period as f64;
+        if i + offset < n {
+            out[i + offset] = Some(prev);
+        }
+    }
+    out
+}
+
+/// Williams Fractal: 5 根 K 线中, 中间那根是最高点 (上分型) 或最低点 (下分型)
+/// 返回每个位置的分型方向: 1 = 上分型, -1 = 下分型, 0 = 无
+pub fn fractal(bars: &[Bar]) -> Vec<i8> {
+    let n = bars.len();
+    let mut out = vec![0i8; n];
+    if n < 5 { return out; }
+    for i in 2..n - 2 {
+        let mid = &bars[i];
+        let is_top = (0..5).all(|j| {
+            let idx = i as i64 + j as i64 - 2;
+            if idx == i as i64 { true } else { mid.high >= bars[idx as usize].high }
+        });
+        let is_bot = (0..5).all(|j| {
+            let idx = i as i64 + j as i64 - 2;
+            if idx == i as i64 { true } else { mid.low <= bars[idx as usize].low }
+        });
+        if is_top { out[i] = 1; }
+        if is_bot { out[i] = -1; }
+    }
+    out
 }

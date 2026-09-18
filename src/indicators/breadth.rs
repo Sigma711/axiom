@@ -6,13 +6,7 @@
 /// 上涨下跌家数 (Advance/Decline) — 单根 K 线级别
 /// 返回 (+1, -1) 表示 涨/跌
 pub fn advance_decline_one_bar(close: f64, prev_close: f64) -> i32 {
-    if close > prev_close {
-        1
-    } else if close < prev_close {
-        -1
-    } else {
-        0
-    }
+    if close > prev_close { 1 } else if close < prev_close { -1 } else { 0 }
 }
 
 /// 累积派发线 ADL (Accumulation/Distribution Line)
@@ -21,39 +15,31 @@ pub fn advance_decline_one_bar(close: f64, prev_close: f64) -> i32 {
 /// ADL += CLV × Volume
 pub fn adl_one_bar(prev_adl: f64, high: f64, low: f64, close: f64, volume: f64) -> f64 {
     let range = high - low;
-    let clv = if range == 0.0 {
-        0.0
-    } else {
-        ((close - low) - (high - close)) / range
-    };
+    let clv = if range == 0.0 { 0.0 }
+              else { ((close - low) - (high - close)) / range };
     prev_adl + clv * volume
 }
 
 /// 上涨下跌比 (AD Ratio)
 /// PDF 第二十一章 3 节
 pub fn ad_ratio(advances: f64, declines: f64) -> f64 {
-    if declines == 0.0 {
-        return 0.0;
-    }
+    if declines == 0.0 { return 0.0; }
     advances / declines
 }
 
 /// 新高新低比 (New High/New Low)
 /// PDF 第二十一章 5 节
 pub fn new_high_low_ratio(new_highs: f64, new_lows: f64) -> f64 {
-    if new_lows == 0.0 {
-        return 0.0;
-    }
+    if new_lows == 0.0 { return 0.0; }
     new_highs / new_lows
 }
 
 /// TRIN (Arms Index) = (上涨股数/下跌股数) / (上涨量/下跌量)
 /// PDF 第二十一章 8 节
 /// < 0.5 强势, > 2 弱势
-pub fn trin(advances: f64, declines: f64, up_volume: f64, down_volume: f64) -> f64 {
-    if declines == 0.0 || down_volume == 0.0 {
-        return 0.0;
-    }
+pub fn trin(advances: f64, declines: f64,
+           up_volume: f64, down_volume: f64) -> f64 {
+    if declines == 0.0 || down_volume == 0.0 { return 0.0; }
     (advances / declines) / (up_volume / down_volume)
 }
 
@@ -70,7 +56,7 @@ fn ema_simple(prev: f64, _delta: f64, period: usize) -> f64 {
     let alpha = 2.0 / (period as f64 + 1.0);
     // 需要上一个 EMA 值才能算;这里只是简单返回 prev + 增量
     // 实际 EMA 需要历史 EMA 值
-    prev // 简化
+    prev  // 简化
 }
 
 /// 市场宽度脉冲 (Breadth Thrust)
@@ -84,9 +70,7 @@ pub fn breadth_thrust(ad_now: f64, ad_10_days_ago: f64, threshold: f64) -> bool 
 /// 上涨成交量比 (Up Down Volume)
 /// PDF 第二十一章 4 节
 pub fn up_down_volume_ratio(up_vol: f64, down_vol: f64) -> f64 {
-    if down_vol == 0.0 {
-        return 0.0;
-    }
+    if down_vol == 0.0 { return 0.0; }
     up_vol / down_vol
 }
 
@@ -96,11 +80,8 @@ pub fn advances_declines(closes: &[f64]) -> (usize, usize) {
     let mut adv = 0;
     let mut dec = 0;
     for w in closes.windows(2) {
-        if w[1] > w[0] {
-            adv += 1;
-        } else if w[1] < w[0] {
-            dec += 1;
-        }
+        if w[1] > w[0] { adv += 1; }
+        else if w[1] < w[0] { dec += 1; }
     }
     (adv, dec)
 }
@@ -109,8 +90,17 @@ pub fn advances_declines(closes: &[f64]) -> (usize, usize) {
 /// PDF 第二十一章 10 节
 /// 上涨/总股票数 × 100
 pub fn bullish_percent_index(advances: f64, total_stocks: f64) -> f64 {
-    if total_stocks == 0.0 {
-        return 0.0;
-    }
+    if total_stocks == 0.0 { return 0.0; }
     advances / total_stocks * 100.0
+}
+
+/// Tick Index: 上涨成交笔数 - 下跌成交笔数 之和
+/// 输入: (up_ticks, down_ticks) 数组
+pub fn tick_index(up_ticks: &[u64], down_ticks: &[u64]) -> Vec<i64> {
+    let n = up_ticks.len().min(down_ticks.len());
+    let mut acc = 0i64;
+    (0..n).map(|i| {
+        acc += up_ticks[i] as i64 - down_ticks[i] as i64;
+        acc
+    }).collect()
 }
