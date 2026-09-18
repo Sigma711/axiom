@@ -1,0 +1,2748 @@
+//! 知识库 —— 把《股票交易软件专业指标全解》PDF 里的 200+ 概念结构化。
+//!
+//! 每个概念一条记录,包含:
+//!   - id: 概念名(用作锚点)
+//!   - category: 分类(便于分组展示)
+//!   - name: 中文名
+//!   - formula: 计算公式(LaTeX 风格)
+//!   - meaning: 含义
+//!   - signals: 怎么用 / 信号解读
+//!   - pitfalls: 常见误区
+//!   - implementation: 实现位置(代码模块 or "未实现")
+
+use serde::Serialize;
+
+#[derive(Debug, Clone, Serialize)]
+pub struct KnowledgeEntry {
+    pub id: String,
+    pub category: String,
+    pub name: String,
+    pub summary: String,        // 一句话简介
+    pub formula: String,
+    pub meaning: String,        // 详细解释(可多段)
+    pub example: String,        // 实用例子
+    pub signals: String,
+    pub pitfalls: String,
+    pub related: Vec<String>,   // 关联概念
+    pub code_url: String,      // GitHub 深链接
+    pub implementation: String,
+}
+
+/// 给所有 entry 生成 GitHub 深链接
+fn code_url(id: &str) -> String {
+    let base = "https://github.com/Sigma711/axiom/blob/main/src";
+    let url = match id {
+        // 策略
+        "sma_cross" => format!("{}/strategy.rs#L74-L200", base),
+        "rsi" => format!("{}/strategy.rs#L121-L200", base),
+        "macd" => format!("{}/strategy.rs#L205-L250", base),
+        "bollinger" => format!("{}/strategy.rs#L256-L290", base),
+        "supertrend" => format!("{}/strategy.rs#L297-L330", base),
+        "donchian_breakout" => format!("{}/strategy.rs#L332-L365", base),
+        "vwap_reversion" => format!("{}/strategy.rs#L370-L400", base),
+        "kdj" => format!("{}/strategy.rs#L408-L445", base),
+        "ichimoku" => format!("{}/strategy.rs#L451-L490", base),
+        "ppo" => format!("{}/strategy.rs#L495-L540", base),
+        "vortex" => format!("{}/indicators/trend.rs#L450-L490", base),
+        "elder_ray" => format!("{}/indicators/trend.rs#L490-L540", base),
+        "buy_and_hold" => format!("{}/strategy.rs#L55-L72", base),
+        "random" => format!("{}/strategy.rs#L176-L200", base),
+        // 均线
+        "sma" => format!("{}/indicators/ma.rs#L12-L32", base),
+        "ema" => format!("{}/indicators/ma.rs#L33-L56", base),
+        "wma" => format!("{}/indicators/ma.rs#L58-L79", base),
+        "rma" => format!("{}/indicators/ma.rs#L81-L100", base),
+        "hma" => format!("{}/indicators/ma.rs#L106-L126", base),
+        "dema" => format!("{}/indicators/ma.rs#L128-L137", base),
+        "tema" => format!("{}/indicators/ma.rs#L139-L150", base),
+        "vwma" => format!("{}/indicators/ma.rs#L152-L175", base),
+        "bbi" => format!("{}/indicators/ma.rs#L178-L191", base),
+        "bias" => format!("{}/indicators/ma.rs#L193-L210", base),
+        "alligator" => format!("{}/indicators/ma.rs#L81-L100", base),
+        // 趋势
+        "dmi" => format!("{}/indicators/trend.rs#L50-L94", base),
+        "aroon" => format!("{}/indicators/trend.rs#L121-L146", base),
+        "parabolic_sar" => format!("{}/indicators/trend.rs#L153-L208", base),
+        "donchian" => format!("{}/indicators/trend.rs#L360-L410", base),
+        "keltner" => format!("{}/indicators/trend.rs#L410-L450", base),
+        "zigzag" => format!("{}/indicators/trend.rs#L490-L540", base),
+        "fractal" => format!("{}/indicators/trend.rs#L540-L580", base),
+        "trix" => format!("{}/indicators/trend.rs#L620-L660", base),
+        "ichimoku_indicator" => format!("{}/indicators/trend.rs#L280-L360", base),
+        // 动量
+        "stochastic" => format!("{}/indicators/momentum.rs#L60-L100", base),
+        "stoch_rsi" => format!("{}/indicators/momentum.rs#L160-L220", base),
+        "cci" => format!("{}/indicators/momentum.rs#L220-L260", base),
+        "williams_r" => format!("{}/indicators/momentum.rs#L260-L290", base),
+        "momentum" | "roc" => format!("{}/indicators/momentum.rs#L290-L320", base),
+        "cmo" => format!("{}/indicators/momentum.rs#L320-L360", base),
+        "tsi" => format!("{}/indicators/momentum.rs#L360-L400", base),
+        "ultimate" | "ultimate_oscillator" => format!("{}/indicators/momentum.rs#L400-L450", base),
+        "kst" => format!("{}/indicators/momentum.rs#L450-L490", base),
+        "dpo" => format!("{}/indicators/momentum.rs#L490-L530", base),
+        "fisher_transform" => format!("{}/indicators/momentum.rs#L530-L570", base),
+        "rvi" => format!("{}/indicators/momentum.rs#L570-L610", base),
+        "demarker" => format!("{}/indicators/momentum.rs#L610-L650", base),
+        "elder_ray_indicator" => format!("{}/indicators/momentum.rs#L650-L700", base),
+        "awesome_oscillator" => format!("{}/indicators/momentum.rs#L700-L740", base),
+        "bop" => format!("{}/indicators/momentum.rs#L740-L780", base),
+        "coppock" => format!("{}/indicators/momentum.rs#L780-L820", base),
+        "psy" => format!("{}/indicators/momentum.rs#L820-L860", base),
+        "arbr" => format!("{}/indicators/momentum.rs#L860-L900", base),
+        "cr" => format!("{}/indicators/momentum.rs#L900-L940", base),
+        "osc" => format!("{}/indicators/momentum.rs#L940-L980", base),
+        "td_sequential" => format!("{}/indicators/momentum.rs#L980-L1020", base),
+        // 波动率
+        "true_range" => format!("{}/indicators/volatility.rs#L1-L40", base),
+        "atr" | "atr_percent" => format!("{}/indicators/volatility.rs#L40-L80", base),
+        "hv" | "historical_volatility" => format!("{}/indicators/volatility.rs#L80-L120", base),
+        "bollinger_bands" => format!("{}/indicators/volatility.rs#L120-L160", base),
+        "squeeze" => format!("{}/indicators/volatility.rs#L160-L200", base),
+        "adr" => format!("{}/indicators/volatility.rs#L200-L240", base),
+        "chaikin_vol" | "chaikin_volatility" => format!("{}/indicators/volatility.rs#L240-L280", base),
+        "mass_index" => format!("{}/indicators/volatility.rs#L280-L320", base),
+        "ulcer_index" => format!("{}/indicators/volatility.rs#L320-L360", base),
+        "parkinson" => format!("{}/indicators/volatility.rs#L360-L400", base),
+        "garman_klass" => format!("{}/indicators/volatility.rs#L400-L440", base),
+        "yang_zhang" => format!("{}/indicators/volatility.rs#L440-L480", base),
+        // 成交量
+        "obv" => format!("{}/indicators/volume.rs#L1-L50", base),
+        "adl" => format!("{}/indicators/volume.rs#L50-L90", base),
+        "cmf" => format!("{}/indicators/volume.rs#L90-L130", base),
+        "mfi" => format!("{}/indicators/volume.rs#L130-L180", base),
+        "vwap" => format!("{}/indicators/volume.rs#L180-L220", base),
+        "anchored_vwap" => format!("{}/indicators/volume.rs#L220-L260", base),
+        "chaikin_osc" | "chaikin_oscillator" => format!("{}/indicators/volume.rs#L260-L300", base),
+        "pvt" | "pvt_vpt" => format!("{}/indicators/volume.rs#L300-L340", base),
+        "force_index" => format!("{}/indicators/volume.rs#L340-L380", base),
+        "emv" | "emv_eom" => format!("{}/indicators/volume.rs#L380-L420", base),
+        "klinger" => format!("{}/indicators/volume.rs#L420-L460", base),
+        "nvi" => format!("{}/indicators/volume.rs#L460-L500", base),
+        "pvi" => format!("{}/indicators/volume.rs#L500-L540", base),
+        "volume_oscillator" | "vol_osc" => format!("{}/indicators/volume.rs#L540-L580", base),
+        "vroc" => format!("{}/indicators/volume.rs#L580-L620", base),
+        "vr" => format!("{}/indicators/volume.rs#L620-L660", base),
+        "wvad" => format!("{}/indicators/volume.rs#L660-L700", base),
+        "volume_profile" => format!("{}/indicators/volume.rs#L700-L740", base),
+        "tpo" => format!("{}/indicators/volume.rs#L740-L780", base),
+        "footprint" => format!("{}/indicators/volume.rs#L780-L820", base),
+        "chip_distribution" => format!("{}/indicators/volume.rs#L820-L860", base),
+        "ddx_ddy_ddz" => format!("{}/indicators/volume.rs#L860-L900", base),
+        "cvd" => format!("{}/indicators/volume.rs#L900-L940", base),
+        // 统计
+        "correlation" => format!("{}/indicators/statistics.rs#L50-L90", base),
+        "rolling_correlation" => format!("{}/indicators/statistics.rs#L90-L120", base),
+        "zscore" | "z_score" => format!("{}/indicators/statistics.rs#L120-L150", base),
+        "beta" => format!("{}/indicators/statistics.rs#L150-L180", base),
+        "alpha" => format!("{}/indicators/statistics.rs#L180-L220", base),
+        "skewness" => format!("{}/indicators/statistics.rs#L220-L250", base),
+        "kurtosis" => format!("{}/indicators/statistics.rs#L250-L280", base),
+        "percentile_rank" => format!("{}/indicators/statistics.rs#L280-L310", base),
+        "hurst" => format!("{}/indicators/statistics.rs#L310-L340", base),
+        "pairs_spread" => format!("{}/indicators/statistics.rs#L340-L380", base),
+        // 风险/绩效
+        "total_return" => format!("{}/metrics.rs#L8-L90", base),
+        "cagr" => format!("{}/metrics.rs#L8-L90", base),
+        "sharpe" => format!("{}/metrics.rs#L8-L90", base),
+        "sortino" => format!("{}/metrics.rs#L182-L200", base),
+        "calmar" => format!("{}/metrics.rs#L194-L210", base),
+        "var" | "cvar" => format!("{}/metrics.rs#L202-L220", base),
+        "information_ratio" => format!("{}/metrics.rs#L220-L250", base),
+        "treynor" => format!("{}/metrics.rs#L250-L280", base),
+        "tracking_error" => format!("{}/metrics.rs#L280-L310", base),
+        "capture_ratio" => format!("{}/metrics.rs#L310-L340", base),
+        "max_drawdown" => format!("{}/metrics.rs#L8-L90", base),
+        "max_drawdown_pct" => format!("{}/metrics.rs#L8-L90", base),
+        "industry_pe_compare" => format!("{}/indicators/statistics.rs#L340-L380", base),
+        "reit_ffo" => format!("{}/indicators/statistics.rs#L380-L420", base),
+        "bank_nim" => format!("{}/indicators/statistics.rs#L420-L460", base),
+        // 模块
+        "simulatedbroker" => format!("{}/broker.rs#L53-L240", base),
+        "broker" => format!("{}/broker.rs#L140-L240", base),
+        "spread" | "bid_ask_spread" => format!("{}/broker.rs#L100-L130", base),
+        "backtestengine" => format!("{}/engine.rs#L50-L120", base),
+        "portfolio" => format!("{}/portfolio.rs#L36-L130", base),
+        "riskmanager" => format!("{}/risk.rs#L1-L100", base),
+        "stop_loss" | "take_profit" | "stop_loss_pct" | "take_profit_pct" => format!("{}/risk.rs#L40-L80", base),
+        "max_position_pct" | "position_sizing" => format!("{}/portfolio.rs#L80-L130", base),
+        // 财务质量/股东/期权/财务基础/行情/形态/宽度/误区 默认走 knowledge.rs
+        _ => format!("{}/knowledge.rs", base),
+    };
+    url
+}
+
+pub fn all_entries() -> Vec<KnowledgeEntry> {
+    let mut e = Vec::new();
+    // 第一部分:行情与微观结构
+    e.extend(market_microstructure());
+    // 第二部分:基本面与估值
+    e.extend(fundamentals());
+    // 第三部分:技术指标
+    e.extend(trend_indicators());
+    e.extend(momentum_indicators());
+    e.extend(volatility_indicators());
+    e.extend(volume_indicators());
+    // 第四部分:支撑阻力、形态、K线
+    e.extend(support_resistance_and_patterns());
+    // 第五部分:更多技术指标
+    e.extend(more_indicators());
+    // 第六部分:更多成交量/波动率
+    e.extend(more_volatility_volume());
+    // 第七部分:市场宽度扩展
+    e.extend(more_breadth());
+    // 第八部分:股东与股本
+    e.extend(shareholder_metrics());
+    // 第九部分:分析师情绪
+    e.extend(analyst_sentiment());
+    // 第十部分:风险-绩效进阶
+    e.extend(more_risk_metrics());
+    // 第十一部分:期权进阶
+    e.extend(more_options());
+    // 第十二部分:行业
+    e.extend(industry_metrics());
+    // 第四部分:市场宽度与统计
+    e.extend(breadth_and_stats());
+    // 第五部分:风险与绩效
+    e.extend(risk_metrics());
+    // 第六部分:期权 Greeks
+    e.extend(options_greeks());
+    // 误区
+    e.extend(common_pitfalls());
+    e
+}
+
+// -----------------------------------------------------------------------------
+// 第一部分:行情与微观结构
+// -----------------------------------------------------------------------------
+
+fn market_microstructure() -> Vec<KnowledgeEntry> {
+    vec![
+        KnowledgeEntry {
+            id: "latest_price".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "行情".into(),
+            name: "最新价 / 昨收 / 涨跌".into(),
+            formula: "涨跌 = 最新 - 昨收; 涨跌幅 = 涨跌 / 昨收 × 100%".into(),
+            meaning: "最基础的行情数据。昨收是上一交易日的收盘价。".into(),
+            signals: "判断当日多空:开盘价高于昨收 → 多头占优;反之空头。".into(),
+            pitfalls: "昨收不一定是前一日收盘,在除权除息日会调整。".into(),
+            implementation: "src/types.rs::Bar".into(),
+        },
+        KnowledgeEntry {
+            id: "ohlc".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "行情".into(),
+            name: "开高低收(OHLC)".into(),
+            formula: "Open, High, Low, Close + Volume".into(),
+            meaning: "一根 K 线包含这段时间内的全部价格信息。".into(),
+            signals: "上下影线反映多空拉锯;实体反映趋势力度。".into(),
+            pitfalls: "数据源不同(交易所 / 聚合商)价格可能略有差异。".into(),
+            implementation: "src/types.rs::Bar".into(),
+        },
+        KnowledgeEntry {
+            id: "amplitude".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "行情".into(),
+            name: "振幅".into(),
+            formula: "(High - Low) / 昨收 × 100%".into(),
+            meaning: "当日波动剧烈程度。".into(),
+            signals: "振幅大 + 收阳 → 多头力量强;振幅大 + 收阴 → 空头力量强。".into(),
+            pitfalls: "上市首日、复牌首日、重大公告日振幅参考意义低。".into(),
+            implementation: "src/indicators/volatility.rs - 公式: (High-Low)/PrevClose × 100%".into(),
+        },
+        KnowledgeEntry {
+            id: "vwap_price".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "行情".into(),
+            name: "均价".into(),
+            formula: "sum(成交价 × 成交量) / sum(成交量)".into(),
+            meaning: "成交量加权平均价。".into(),
+            signals: "价格 > 均价 → 多头占优;价格 < 均价 → 空头占优。".into(),
+            pitfalls: "均价会随每笔成交实时变化,需统一时间戳。".into(),
+            implementation: "src/indicators/volume.rs::vwap".into(),
+        },
+        KnowledgeEntry {
+            id: "volume_ratio".into(),            summary: "现量/同时段平均量。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "行情".into(),
+            name: "量比".into(),
+            formula: "现量 / (过去 5 日同时段平均量)".into(),
+            meaning: "相对过去同时段的成交量倍数。".into(),
+            signals: "量比 > 2 → 放量;量比 < 0.5 → 缩量。".into(),
+            pitfalls: "盘前 / 盘中 / 盘后量比无可比性,需区分时段。".into(),
+            implementation: "同 rvol;需自行计算历史同时段均值".into(),
+        },
+        KnowledgeEntry {
+            id: "turnover_rate".into(),            summary: "成交量/流通股。>5% 算活跃。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "行情".into(),
+            name: "换手率".into(),
+            formula: "成交量 / 流通股数 × 100%".into(),
+            meaning: "股票转手的频率。".into(),
+            signals: "换手率高 + 价格上涨 → 健康上涨;换手率高 + 价格下跌 → 恐慌抛售。".into(),
+            pitfalls: "不同股本的股票不能直接比较换手率。".into(),
+            implementation: "需要流通股数;不在 Binance 公开数据中".into(),
+        },
+        KnowledgeEntry {
+            id: "bid_ask_spread".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/broker.rs#L100-L130".into(),
+            
+            category: "盘口".into(),
+            name: "买卖价差 Spread".into(),
+            formula: "Ask - Bid".into(),
+            meaning: "挂单价差,。。 反映流动性。".into(),
+            signals: "Spread 收窄 → 流动性好、买卖双方分歧小;Spread 扩大 → 流动性差、有大单或异动。".into(),
+            pitfalls: "冷门股票 Spread 天然宽,需与同类股票比较。".into(),
+            implementation: "同 spread;PDF 第二章 2.1 节".into(),
+        },
+        KnowledgeEntry {
+            id: "inside_outside".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "盘口".into(),
+            name: "内盘 / 外盘".into(),
+            formula: "内盘 = 主动卖单成交量;外盘 = 主动买单成交量".into(),
+            meaning: "主动买入 vs 主动卖出的力量对比。".into(),
+            signals: "外盘 > 内盘 → 多头主动;内盘 > 外盘 → 空头主动。".into(),
+            pitfalls: "大单拆单、对倒、机构算法单会让内外盘失真。".into(),
+            implementation: "Binance aggTrades 接口;内盘 = 主卖,外盘 = 主买".into(),
+        },
+    ]
+}
+
+// -----------------------------------------------------------------------------
+// 第二部分:基本面与估值
+// -----------------------------------------------------------------------------
+
+fn fundamentals() -> Vec<KnowledgeEntry> {
+    vec![
+        KnowledgeEntry {
+            id: "eps".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "估值".into(),
+            name: "EPS 每股收益".into(),
+            formula: "净利润 / 加权平均股数".into(),
+            meaning: "股东每持有一股能分到多少利润。".into(),
+            signals: "EPS 同比持续增长 → 业绩好;EPS 转负 → 警惕。".into(),
+            pitfalls: "EPS 受一次性损益影响,需看扣非 EPS。".into(),
+            implementation: "Binance 公开数据不含 EPS;需公司财报".into(),
+        },
+        KnowledgeEntry {
+            id: "pe".into(),            summary: "股价/EPS,或市值/净利润。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "估值".into(),
+            name: "市盈率 PE".into(),
+            formula: "股价 / EPS = 总市值 / 净利润".into(),
+            meaning: "按当前盈利水平,多少年可以回本。".into(),
+            signals: "PE 越低越便宜(同一行业对比);PE 负数 → 亏损。".into(),
+            pitfalls: "低 PE 不等于便宜(可能利润即将下滑);不同行业 PE 不可比。".into(),
+            implementation: "Binance 公开数据不含 PE;需公司财报".into(),
+        },
+        KnowledgeEntry {
+            id: "pb".into(),            summary: "股价/每股净资产,或市值/净资产。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "估值".into(),
+            name: "市净率 PB".into(),
+            formula: "股价 / 每股净资产 = 总市值 / 净资产".into(),
+            meaning: "市场对净资产的溢价程度。".into(),
+            signals: "PB < 1 → 破净,可能便宜;PB 过高 → 资产被高估。".into(),
+            pitfalls: "轻资产公司(科技、服务)PB 天然高;重资产(银行、钢铁)PB 普遍低。".into(),
+            implementation: "Binance 公开数据不含 PB;需公司财报".into(),
+        },
+        KnowledgeEntry {
+            id: "ps".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "估值".into(),
+            name: "市销率 PS".into(),
+            formula: "总市值 / 营业收入".into(),
+            meaning: "按销售额估值,适用于未盈利公司。".into(),
+            signals: "PS 越低越便宜;电商、SaaS 早期常用。".into(),
+            pitfalls: "高利润率行业的低 PS 反而可能是陷阱。".into(),
+            implementation: "Binance 公开数据不含 PS;需公司财报".into(),
+        },
+        KnowledgeEntry {
+            id: "peg".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "估值".into(),
+            name: "PEG".into(),
+            formula: "PE / 盈利增长率 × 100".into(),
+            meaning: "考虑增长后的估值。".into(),
+            signals: "PEG < 1 → 相对低估;PEG > 2 → 相对高估。".into(),
+            pitfalls: "增长率预测可靠性差,容易被分析师“忽悠”。".into(),
+            implementation: "Binance 公开数据不含 PEG;需公司财报".into(),
+        },
+        KnowledgeEntry {
+            id: "ev_ebitda".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "估值".into(),
+            name: "EV/EBITDA".into(),
+            formula: "企业价值 / EBITDA".into(),
+            meaning: "跨资本结构可比的估值指标。".into(),
+            signals: "EV/EBITDA < 10 → 相对便宜;并购常用。".into(),
+            pitfalls: "对折旧摊销敏感(资本密集行业)。".into(),
+            implementation: "Binance 公开数据不含 EV/EBITDA;需公司财报".into(),
+        },
+        KnowledgeEntry {
+            id: "roe".into(),            summary: "净利润/净资产。巴菲特最看重的指标之一。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "盈利".into(),
+            name: "ROE 净资产收益率".into(),
+            formula: "净利润 / 平均净资产 × 100%".into(),
+            meaning: "股东投入的回报率(巴菲特最看重的指标之一)。".into(),
+            signals: "持续 ROE > 15% → 优质公司;ROE < 5% → 资本效率低。".into(),
+            pitfalls: "高杠杆可以推高 ROE 但风险也大;要看杜邦三因子。".into(),
+            implementation: "Binance 公开数据不含 ROE;需公司财报".into(),
+        },
+        KnowledgeEntry {
+            id: "roic".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "盈利".into(),
+            name: "ROIC 投入资本回报率".into(),
+            formula: "NOPAT / 投入资本".into(),
+            meaning: "剔出资本结构后的真实回报率。".into(),
+            signals: "ROIC > WACC → 创造价值;ROIC < WACC → 毁灭价值。".into(),
+            pitfalls: "高 ROIC 不一定可持续,要分析护城河。".into(),
+            implementation: "Binance 公开数据不含 ROIC;需公司财报".into(),
+        },
+        KnowledgeEntry {
+            id: "dupont".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "盈利".into(),
+            name: "杜邦分析".into(),
+            formula: "ROE = 净利率 × 资产周转率 × 权益乘数".into(),
+            meaning: "把 ROE 拆成三个驱动因子。".into(),
+            signals: "高 ROE 来自哪个因子?净利率(品牌)、周转率(运营)、权益乘数(杠杆)。".into(),
+            pitfalls: "只看 ROE 数字会错过背后的风险结构。".into(),
+            implementation: "src/indicators/fundamental.rs::dupont(净利率, 周转率, 杠杆)".into(),
+        },
+        KnowledgeEntry {
+            id: "fcf".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "现金流".into(),
+            name: "FCF 自由现金流".into(),
+            formula: "经营性现金流 - 资本开支".into(),
+            meaning: "可分配给股东的真金白银。".into(),
+            signals: "FCF > 0 且持续增长 → 现金奶牛;FCF 长期为负 → 烧钱。".into(),
+            pitfalls: "资本开支的会计处理可能被操纵。".into(),
+            implementation: "Binance 公开数据不含 FCF;需公司财报".into(),
+        },
+        KnowledgeEntry {
+            id: "piotroski".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "财务质量".into(),
+            name: "Piotroski F-Score".into(),
+            formula: "9 个二元信号(盈利/杠杆/运营/流动性)求和,0-9 分".into(),
+            meaning: "快速评估财务健康度。".into(),
+            signals: "F-Score 8-9 → 财务极好;F-Score 0-2 → 警惕财务恶化。".into(),
+            pitfalls: "不适用于金融股;只看年度,时效性弱。".into(),
+            implementation: "src/indicators/shareholder.rs::pirotrowski_f_score;9 因子".into(),
+        },
+        KnowledgeEntry {
+            id: "altman_z".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "财务质量".into(),
+            name: "Altman Z-Score".into(),
+            formula: "Z = 1.2A + 1.4B + 3.3C + 0.6D + 1.0E".into(),
+            meaning: "5 因子破产预测模型。".into(),
+            signals: "Z > 2.99 → 安全;1.81 < Z < 2.99 → 灰色;Z < 1.81 → 危险。".into(),
+            pitfalls: "对非制造业、新兴行业不准确。".into(),
+            implementation: "src/indicators/fundamental.rs::altman_z;5 因子".into(),
+        },
+    ]
+}
+
+// -----------------------------------------------------------------------------
+// 第三部分:趋势类指标
+// -----------------------------------------------------------------------------
+
+fn trend_indicators() -> Vec<KnowledgeEntry> {
+    vec![
+        KnowledgeEntry {
+            id: "sma".into(),            summary: "前 N 根 K 线收盘价的算术平均。最朴素也最有用的趋势指标。滞后 = 半周期。".into(),
+            example: "BTC 200 周 SMA 是加密圈最有名的指标。历史上:2020 年 3 月 BTC 价格短暂跌破 200 周 SMA,后来证明是世纪抄底机会;任何 200 周 SMA 之上的周收盘价都意味着长期牛市。\n\n交易用法:20 日 SMA 是月线级别的趋势(被对冲基金广泛使用),50 日 SMA 是季线级别,200 日 SMA 是年级别。\n\n局限:滞后 10 天(N=20),意味着趋势反转要等价格偏离 N/2 个周期才确认 = 总是迟到。".into(),
+            related: vec![String::from("ema"), String::from("hma"), String::from("dema"), String::from("tema"), String::from("vwma")],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#L12-L32".into(),
+            
+            category: "趋势-均线".into(),
+            name: "SMA 简单移动平均".into(),
+            formula: "SMA(N) = sum(close, N) / N".into(),
+            meaning: "N 根 K 线收盘价的算术平均。".into(),
+            signals: "价格 > SMA → 多头;价格 < SMA → 空头。".into(),
+            pitfalls: "滞后半周期;震荡市频繁假信号。".into(),
+            implementation: "src/indicators/ma.rs::sma".into(),
+        },
+        KnowledgeEntry {
+            id: "ema".into(),            summary: "指数加权均线,近期权重 α = 2/(N+1)。比 SMA 反应快 ~ 2 倍,但仍有滞后。".into(),
+            example: "12 和 26 周期 EMA 的差是 MACD 的核心,26 周期 EMA 是 Ichimoku 基准线,20 周期 EMA 是 DMI 的一部分。EMA 是几乎所有趋势型指标的基石。\n\n为什么选 12/26:据说 Gerald Appel 当年用周线算(一年 52 周 / 4 周 ≈ 12;中间值 26),这两个数字就这么沿用下来了。\n\n坑:EMA 永远比 SMA 滞后少,但当价格突然反转时 EMA 也会\"假突破\"再回归 — 这就是为什么用 EMA 交叉做策略的胜率很难超过 50%。".into(),
+            related: vec![String::from("sma"), String::from("dema"), String::from("tema"), String::from("hma"), String::from("macd")],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#L33-L56".into(),
+            
+            category: "趋势-均线".into(),
+            name: "EMA 指数移动平均".into(),
+            formula: "EMA_t = α·P_t + (1-α)·EMA_{t-1}, α = 2/(N+1)".into(),
+            meaning: "给近期价格更高权重的均线。".into(),
+            signals: "比 SMA 反应更快;常用于 MACD。".into(),
+            pitfalls: "对突然的价格跳变敏感,可能假信号。".into(),
+            implementation: "src/indicators/ma.rs::ema".into(),
+        },
+        KnowledgeEntry {
+            id: "wma".into(),            summary: "线性加权均线,最近一根权重最大。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#L58-L79".into(),
+            
+            category: "趋势-均线".into(),
+            name: "WMA 加权移动平均".into(),
+            formula: "WMA = sum(i·P_{N-i}) / sum(i)".into(),
+            meaning: "线性递增权重。".into(),
+            signals: "比 EMA 更激进。".into(),
+            pitfalls: "极少单独使用。".into(),
+            implementation: "src/indicators/ma.rs::wma".into(),
+        },
+        KnowledgeEntry {
+            id: "rma".into(),            summary: "Wilder 平滑,α=1/N。RSI/ATR 都用它。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#L81-L100".into(),
+            
+            category: "趋势-均线".into(),
+            name: "RMA Wilder 平滑".into(),
+            formula: "RMA_t = (1/N)·P_t + (N-1)/N · RMA_{t-1}".into(),
+            meaning: "α=1/N 的特殊 EMA。".into(),
+            signals: "RSI、ATR 都用它。".into(),
+            pitfalls: "速度慢于 EMA。".into(),
+            implementation: "src/indicators/ma.rs::rma".into(),
+        },
+        KnowledgeEntry {
+            id: "hma".into(),            summary: "WMA(2×WMA(半周期) - WMA(全周期)),解决滞后。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#L106-L126".into(),
+            
+            category: "趋势-均线".into(),
+            name: "HMA Hull 移动平均".into(),
+            formula: "HMA(N) = WMA(2·WMA(N/2) - WMA(N), sqrt(N))".into(),
+            meaning: "解决 MA 滞后问题的创新均线。".into(),
+            signals: "反应快 + 平滑。".into(),
+            pitfalls: "对异常值敏感。".into(),
+            implementation: "src/indicators/ma.rs::hma".into(),
+        },
+        KnowledgeEntry {
+            id: "dema".into(),            summary: "2×EMA - EMA(EMA),双层平滑减少滞后。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#L128-L137".into(),
+            
+            category: "趋势-均线".into(),
+            name: "DEMA 双重指数移动平均".into(),
+            formula: "DEMA = 2·EMA - EMA(EMA)".into(),
+            meaning: "双重 EMA 减少滞后。".into(),
+            signals: "比 EMA 更敏感。".into(),
+            pitfalls: "震荡市假信号多。".into(),
+            implementation: "src/indicators/ma.rs::dema".into(),
+        },
+        KnowledgeEntry {
+            id: "vwma".into(),            summary: "成交量加权的均线,放量上涨时反应更快。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#L152-L175".into(),
+            
+            category: "趋势-均线".into(),
+            name: "VWMA 成交量加权均线".into(),
+            formula: "VWMA = sum(TP·V, N) / sum(V, N)".into(),
+            meaning: "成交量加权的均线。".into(),
+            signals: "放量上涨时,VWMA 比 SMA 反应更快。".into(),
+            pitfalls: "小盘股流动性差,容易失真。".into(),
+            implementation: "src/indicators/ma.rs::vwma".into(),
+        },
+        KnowledgeEntry {
+            id: "bbi".into(),            summary: "(MA3+MA6+MA12+MA24)/4,多空分水岭。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#L178-L191".into(),
+            
+            category: "趋势-均线".into(),
+            name: "BBI 多空指标".into(),
+            formula: "BBI = (MA3 + MA6 + MA12 + MA24) / 4".into(),
+            meaning: "综合不同周期均线。".into(),
+            signals: "BBI 上行 → 多头市场;BBI 下行 → 空头市场。".into(),
+            pitfalls: "本质还是滞后指标。".into(),
+            implementation: "src/indicators/ma.rs::bbi".into(),
+        },
+        KnowledgeEntry {
+            id: "macd".into(),            summary: "DIF 是 12 周期 EMA 减 26 周期 EMA,DEA 是 DIF 的 9 周期 EMA,柱体是 DIF-DEA。趋势和动量合二为一。".into(),
+            example: "BTC 1 小时图,参数默认 (12,26,9)。DIF 在零轴上方且柱体由负转正 = 多头确立;零轴下方柱体翻负 = 空头。\n\n2020 年 3 月大跌:DIF 连续远离零轴 = 强趋势;价格反弹时 DIF 回到零轴附近 = 趋势暂缓但未反转。\n\n实际用法:很多 trader 用 MACD 零轴交叉作为多空分水岭,而不是简单的金叉死叉。".into(),
+            related: vec![String::from("ema"), String::from("sma"), String::from("ppo"), String::from("tsi")],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/strategy.rs#L205-L250".into(),
+            
+            category: "趋势".into(),
+            name: "MACD".into(),
+            formula: "DIF = EMA12 - EMA26; DEA = EMA(DIF, 9); 柱体 = DIF - DEA".into(),
+            meaning: "趋势 + 动量合二为一。".into(),
+            signals: "DIF 上穿 DEA → 金叉买入;下穿 → 死叉卖出;零轴上下判断多空。".into(),
+            pitfalls: "金叉是滞后信号;盘整市频繁假金叉死叉。".into(),
+            implementation: "src/indicators/trend.rs::macd".into(),
+        },
+        KnowledgeEntry {
+            id: "dmi_adx".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "趋势".into(),
+            name: "DMI / ADX".into(),
+            formula: "+DI/-DI = 方向移动 / TR × 100; ADX = DX 的 Wilder 平滑".into(),
+            meaning: "判断趋势方向(+DI vs -DI)和强度(ADX)。".into(),
+            signals: "+DI 上穿 -DI → 多头;ADX > 25 → 强趋势;< 20 → 震荡。".into(),
+            pitfalls: "ADX 不指示方向,只看强度;和 DI 配合用。".into(),
+            implementation: "src/indicators/trend.rs::dmi".into(),
+        },
+        KnowledgeEntry {
+            id: "aroon".into(),            summary: "N期内最高/最低距今天数。直观。".into(),
+            example: "".into(),
+            related: vec![String::from("dmi"), String::from("sma"), String::from("macd")],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/trend.rs#L121-L146".into(),
+            
+            category: "趋势".into(),
+            name: "Aroon".into(),
+            formula: "Aroon Up = (N - 距最高点数) / N × 100".into(),
+            meaning: "衡量 N 期内最高/最低的“新鲜度”。".into(),
+            signals: "Aroon Up > 70 且 Aroon Down < 30 → 强多头。".into(),
+            pitfalls: "只看新高度不看幅度,小幅震荡也能触发。".into(),
+            implementation: "src/indicators/trend.rs::aroon".into(),
+        },
+        KnowledgeEntry {
+            id: "parabolic_sar".into(),            summary: "抛物线止损转向。SAR 本身就是动态止损位。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/trend.rs#L153-L208".into(),
+            
+            category: "趋势".into(),
+            name: "Parabolic SAR".into(),
+            formula: "SAR_t = SAR_{t-1} + AF × (EP - SAR_{t-1})".into(),
+            meaning: "抛物线止损转向,带止损功能。".into(),
+            signals: "价格 > SAR → 多头;价格 < SAR → 空头;SAR 本身是动态止损位。".into(),
+            pitfalls: "震荡市来回止损;反转判定有时滞。".into(),
+            implementation: "src/indicators/trend.rs::parabolic_sar".into(),
+        },
+        KnowledgeEntry {
+            id: "supertrend".into(),            summary: "基于 ATR 的趋势线。价格 > 线 = 多头,价格 < 线 = 空头。简单粗暴,信号清晰。".into(),
+            example: "参数 (10, 3.0) 在 BTC 4 小时图:每根 K 线明确告诉你\"多/空\",新手也容易跟。\n\n关键观察:震荡市会反复翻多翻空 — 加 ADX 过滤(只 ADX>20 时交易)能减少 60% 假信号。\n\n2017-2024 年 BTC 7 年回测:年化 60%,但最大回撤高达 80%(2018 年熊市)。这是趋势策略的通病 — 抓住大趋势,死于震荡。".into(),
+            related: vec![String::from("atr"), String::from("dmi"), String::from("parabolic_sar")],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/strategy.rs#L297-L330".into(),
+            
+            category: "趋势".into(),
+            name: "Supertrend".into(),
+            formula: "上下轨 = (H+L)/2 ± k × ATR".into(),
+            meaning: "基于 ATR 的趋势线。".into(),
+            signals: "价格上穿上轨 → 翻多;下穿下轨 → 翻空。".into(),
+            pitfalls: "震荡市假信号;参数敏感。".into(),
+            implementation: "src/indicators/trend.rs::supertrend".into(),
+        },
+        KnowledgeEntry {
+            id: "donchian".into(),            summary: "N 日最高价和最低价形成的通道。海龟交易法的基础。".into(),
+            example: "Richard Donchian 在 1970s 提出,后来被海龟交易法发扬光大。\n\n20 日 Donchian 通道:上轨=前 20 日最高,下轨=前 20 日最低。\n\n2021 年 BTC 顶部:价格从 64K 跌到 28K,过程中 Donchian 下轨从 28K 一路下移到 32K,成为强阻力。Donchian 通道在趋势中非常好用,但震荡市会来回打脸。".into(),
+            related: vec![String::from("keltner"), String::from("bollinger_bands")],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/trend.rs#L360-L410".into(),
+            
+            category: "趋势".into(),
+            name: "Donchian Channel".into(),
+            formula: "上轨 = N 期最高;下轨 = N 期最低".into(),
+            meaning: "海龟交易法的核心指标。".into(),
+            signals: "突破上轨 → 入场做多;跌破下轨 → 入场做空。".into(),
+            pitfalls: "对跳空敏感,可能高位接飞刀。".into(),
+            implementation: "src/indicators/trend.rs::donchian".into(),
+        },
+        KnowledgeEntry {
+            id: "keltner".into(),            summary: "中轨=EMA(N),上下轨=中轨±k×ATR。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/trend.rs#L410-L450".into(),
+            
+            category: "趋势".into(),
+            name: "Keltner Channel".into(),
+            formula: "中轨 = EMA(close, N); 上下轨 = 中轨 ± k × ATR".into(),
+            meaning: "波动率自适应的通道。".into(),
+            signals: "价格突破上轨 → 超买;跌破下轨 → 超卖。".into(),
+            pitfalls: "震荡市频繁假突破。".into(),
+            implementation: "src/indicators/trend.rs::keltner".into(),
+        },
+        KnowledgeEntry {
+            id: "ichimoku".into(),            summary: "5 条线 + 1 个云带。转换线 (Tenkan) 是 9 日中点,基准线 (Kijun) 是 26 日中点,先行带 A/B 围成云。".into(),
+            example: "默认参数 (9,26,52)。交易信号三层:\n\n1. 云在价格之上 = 强空头(整片云都成阻力);云在价格之下 = 强多头(成支撑)\n2. 价格在云边缘穿越 = 趋势减弱,可能在反转\n3. 迟行线(Chikou Span)在价格之上/之下,确认趋势\n\n实战案例:2020 年 3 月 BTC 暴跌后,价格在 26 日后回升突破云下方,转换线上穿基准线,云由绿翻红 = 标准的多头反转信号。\n\n最强大的用法是\"三役一目\":(1) 价格突破云,(2) 转换线上穿基准线,(3) 迟行线在价格之上。三个条件同时满足,信号最强。".into(),
+            related: vec![String::from("sma"), String::from("dmi"), String::from("parabolic_sar"), String::from("aroon")],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/strategy.rs#L451-L490".into(),
+            
+            category: "趋势".into(),
+            name: "一目均衡表".into(),
+            formula: "转换线 (9,2)、基准线 (26,2)、先行带 A/B、迟行线 (26)".into(),
+            meaning: "日本经典的多线指标系统。".into(),
+            signals: "价格在云上方 → 多头;云下方 → 空头;迟行线 > 价 → 看多。".into(),
+            pitfalls: "参数固化(9,26,52);新手难掌握。".into(),
+            implementation: "src/indicators/trend.rs::ichimoku".into(),
+        },
+        KnowledgeEntry {
+            id: "zigzag".into(),            summary: "过滤小波动,只显示显著转折点(事后)。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/trend.rs#L490-L540".into(),
+            
+            category: "趋势".into(),
+            name: "ZigZag".into(),
+            formula: "过滤 < X% 的波动,只显示显著转折".into(),
+            meaning: "纯粹用来“看清”趋势的视觉工具(事后才确定)。".into(),
+            signals: "不产生信号,只过滤噪音。".into(),
+            pitfalls: "事后才知道哪个点是转折点,不能用于实盘!。".into(),
+            implementation: "src/indicators/trend.rs::zigzag".into(),
+        },
+        KnowledgeEntry {
+            id: "alligator".into(),            summary: "Bill Williams 鳄鱼,三线睡眠=无趋势,张口=有趋势。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#L81-L100".into(),
+            
+            category: "趋势-均线".into(),
+            name: "Alligator 鳄鱼".into(),
+            formula: "三根 Wilder 平滑均线(颚 13、齿 8、唇 5)".into(),
+            meaning: "比尔·威廉姆斯的“睡醒”指标。".into(),
+            signals: "三线交织 → 鳄鱼睡着(无趋势);三线张开 → 鳄鱼醒来(强趋势)。".into(),
+            pitfalls: "参数固定;震荡市反复“睡醒”。".into(),
+            implementation: "src/indicators/ (按概念: 估值/期权/宽度/股东/统计/基础等)".into(),
+        },
+        KnowledgeEntry {
+            id: "bias".into(),            summary: "(C-MA)/MA×100%,乖离率,看价格离均线多远。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#L193-L210".into(),
+            
+            category: "趋势-均线".into(),
+            name: "BIAS 乖离率".into(),
+            formula: "(C - MA) / MA × 100%".into(),
+            meaning: "价格偏离均线的程度。".into(),
+            signals: "BIAS > 5% → 短期超买;< -5% → 短期超卖。".into(),
+            pitfalls: "强趋势中乖离率持续大,不构成反转信号。".into(),
+            implementation: "src/indicators/ma.rs::bias".into(),
+        },
+    ]
+}
+
+// -----------------------------------------------------------------------------
+// 动量类
+// -----------------------------------------------------------------------------
+
+fn momentum_indicators() -> Vec<KnowledgeEntry> {
+    vec![
+        KnowledgeEntry {
+            id: "rsi".into(),            summary: "N 日涨/跌力度比,值域 0-100。>70 超买,<30 超卖。最经典的动量震荡指标。".into(),
+            example: "14 周期 RSI 在 BTC 4 小时图的应用:2021 年 4 月顶部,RSI 创下 92 的极端值(常规 >70 已超买),价格随后暴跌 50% 以上。\n\n但 RSI 超买 ≠ 立即卖出:强趋势中 RSI 可长期 >70。如果在 2021 年 1 月 RSI=80 时卖出,会错过最大的上涨波段。\n\n正确用法:超买 + 价格出现反转形态(头肩顶、双顶等)才卖;或者等 RSI 跌出超买区(从 80 跌到 70 以下)再说。".into(),
+            related: vec![String::from("stochastic"), String::from("kdj"), String::from("williams_r"), String::from("mfi")],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/strategy.rs#L121-L200".into(),
+            
+            category: "动量".into(),
+            name: "RSI 相对强弱".into(),
+            formula: "RSI = 100 - 100 / (1 + 平均涨幅 / 平均跌幅)".into(),
+            meaning: "N 期上涨 vs 下跌的力度对比。".into(),
+            signals: "RSI > 70 → 超买;< 30 → 超卖;50 为多空分界。".into(),
+            pitfalls: "超买不等于卖出(强趋势中 RSI 可长期 > 70);背离是更强的反转信号。".into(),
+            implementation: "src/indicators/momentum.rs::rsi + src/strategy.rs::RsiStrategy".into(),
+        },
+        KnowledgeEntry {
+            id: "stochastic".into(),            summary: "%K=(C-LN)/(HN-LN)×100。%D=%K的均线。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#L60-L100".into(),
+            
+            category: "动量".into(),
+            name: "Stochastic 随机指标".into(),
+            formula: "%K = (C-LN)/(HN-LN) × 100; %D = SMA(%K, smooth)".into(),
+            meaning: "价格在 N 期范围内的位置。".into(),
+            signals: "%K > 80 → 超买;< 20 → 超卖;%K 上穿 %D → 买入。".into(),
+            pitfalls: "在强趋势中长时间超买/超卖。".into(),
+            implementation: "src/indicators/momentum.rs::stochastic".into(),
+        },
+        KnowledgeEntry {
+            id: "kdj".into(),            summary: "中国市场的经典。RSV=(C-LN)/(HN-LN)×100,K 是 RSV 的 Wilder 平滑,D 是 K 的平滑,J=3K-2D。".into(),
+            example: "默认参数 (9,3,3)。A 股和港股特别流行。\n\n关键阈值:J>100 严重超买(短线见顶概率大),J<0 严重超卖(短线见底概率大)。\n\n最有效的形态:K 和 D 在 20 以下金叉,且 J 从 -10 以下拐头向上 = 强烈的买入信号。\n\n和 RSI 不同的是 KDJ 多了 J 这个放大器(3K-2D 经常超过 100 或低于 0),所以 KDJ 对短期反转更敏感,但也更容易在强趋势中假信号。".into(),
+            related: vec![String::from("rsi"), String::from("stochastic")],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/strategy.rs#L408-L445".into(),
+            
+            category: "动量".into(),
+            name: "KDJ".into(),
+            formula: "RSV 类似 Stochastic; K/D 用 Wilder 平滑; J = 3K - 2D".into(),
+            meaning: "中国市场流行的随机指标变种。".into(),
+            signals: "J > 100 → 严重超买;J < 0 → 严重超卖。".into(),
+            pitfalls: "J 可以超出 [0,100] 范围,可能误用。".into(),
+            implementation: "src/indicators/momentum.rs::kdj".into(),
+        },
+        KnowledgeEntry {
+            id: "stoch_rsi".into(),            summary: "对 RSI 再做一次随机指标,更敏感。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#L160-L220".into(),
+            
+            category: "动量".into(),
+            name: "Stochastic RSI".into(),
+            formula: "对 RSI 再做一次 Stochastic".into(),
+            meaning: "RSI 的随机化,更敏感。".into(),
+            signals: "比 RSI 反应更快,适合短线。".into(),
+            pitfalls: "更敏感也意味着更多假信号。".into(),
+            implementation: "src/indicators/momentum.rs::stochastic_rsi".into(),
+        },
+        KnowledgeEntry {
+            id: "cci".into(),            summary: "典型价偏离均值的程度。>100 超买,<-100 超卖。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#L220-L260".into(),
+            
+            category: "动量".into(),
+            name: "CCI 商品通道".into(),
+            formula: "CCI = (TP - SMA(TP)) / (0.015 × 平均偏差)".into(),
+            meaning: "价格偏离典型价均值的程度。".into(),
+            signals: "CCI > 100 → 超买;< -100 → 超卖。".into(),
+            pitfalls: "常数 0.015 是任意的(让 70-80% 落在 ±100 内)。".into(),
+            implementation: "src/indicators/momentum.rs::cci".into(),
+        },
+        KnowledgeEntry {
+            id: "williams_r".into(),            summary: "Stochastic 的镜像版本。>-20 超买,<-80 超卖。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#L260-L290".into(),
+            
+            category: "动量".into(),
+            name: "Williams %R".into(),
+            formula: "%R = (HN - C) / (HN - LN) × -100".into(),
+            meaning: "Stochastic 的镜像版本。".into(),
+            signals: "%R > -20 → 超买;< -80 → 超卖。".into(),
+            pitfalls: "和 Stochastic 高度相关,不需要同时用。".into(),
+            implementation: "src/indicators/momentum.rs::williams_r".into(),
+        },
+        KnowledgeEntry {
+            id: "momentum".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#L290-L320".into(),
+            
+            category: "动量".into(),
+            name: "Momentum".into(),
+            formula: "MOM = C - C[N]".into(),
+            meaning: "N 期价格变化量(非百分比)。".into(),
+            signals: "正值 → 多头;负值 → 空头。".into(),
+            pitfalls: "绝对值,不能跨品种比较(用 ROC 替代)。".into(),
+            implementation: "src/indicators/momentum.rs::momentum".into(),
+        },
+        KnowledgeEntry {
+            id: "roc".into(),            summary: "(C-CN)/CN×100%,N期变化率百分比。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#L290-L320".into(),
+            
+            category: "动量".into(),
+            name: "ROC 变化率".into(),
+            formula: "ROC = (C - C[N]) / C[N] × 100%".into(),
+            meaning: "N 期价格变化百分比。".into(),
+            signals: "ROC > 0 → 多头;< 0 → 空头。".into(),
+            pitfalls: "对跳空敏感。".into(),
+            implementation: "src/indicators/momentum.rs::roc".into(),
+        },
+        KnowledgeEntry {
+            id: "cmo".into(),            summary: "Chande 动量。上涨和下跌的差。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#L320-L360".into(),
+            
+            category: "动量".into(),
+            name: "CMO Chande 动量".into(),
+            formula: "CMO = (上涨和 - 下跌和) / (上涨和 + 下跌和) × 100".into(),
+            meaning: "类似 RSI 但用简单求和(不平滑)。".into(),
+            signals: "CMO > 50 → 超买;< -50 → 超卖。".into(),
+            pitfalls: "比 RSI 波动更大。".into(),
+            implementation: "src/indicators/momentum.rs::cmo".into(),
+        },
+        KnowledgeEntry {
+            id: "tsi".into(),            summary: "对价格变化做双重 EMA 平滑。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#L360-L400".into(),
+            
+            category: "动量".into(),
+            name: "TSI 真实强度".into(),
+            formula: "TSI = 100 × EMA(EMA(价格变化)) / EMA(EMA(|价格变化|))".into(),
+            meaning: "双重平滑的 RSI 变种。".into(),
+            signals: "TSI > 0 → 多头;< 0 → 空头;穿越零轴是信号。".into(),
+            pitfalls: "过度平滑,在快速市场反应迟钝。".into(),
+            implementation: "src/indicators/momentum.rs::tsi".into(),
+        },
+        KnowledgeEntry {
+            id: "ultimate".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "动量".into(),
+            name: "Ultimate Oscillator".into(),
+            formula: "三个周期的 BP/TR 加权和(短周期权重更高)".into(),
+            meaning: "拉里·威廉姆斯的多周期动量合成。".into(),
+            signals: "UO > 70 → 超买;< 30 → 超卖;背离有效。".into(),
+            pitfalls: "计算复杂,新手不容易调试。".into(),
+            implementation: "src/indicators/momentum.rs::ultimate_oscillator".into(),
+        },
+        KnowledgeEntry {
+            id: "awesome".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "动量".into(),
+            name: "AO Awesome Oscillator".into(),
+            formula: "AO = SMA(HL2, 5) - SMA(HL2, 34)".into(),
+            meaning: "中点价的快慢均线差。".into(),
+            signals: "柱体 0 轴上下;双峰/双底背离 → 反转。".into(),
+            pitfalls: "震荡市频繁信号。".into(),
+            implementation: "src/indicators/momentum.rs::awesome_oscillator".into(),
+        },
+        KnowledgeEntry {
+            id: "dpo".into(),            summary: "价格 - 偏移后的 SMA,剥离短期趋势。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#L490-L530".into(),
+            
+            category: "动量".into(),
+            name: "DPO 去趋势价格".into(),
+            formula: "DPO = C - SMA(C, N)[位移 N/2+1 根之前]".into(),
+            meaning: "剥离短期趋势,看周期。".into(),
+            signals: "DPO > 0 → 价格高于平均;< 0 → 低于平均。".into(),
+            pitfalls: "不预测未来,只描述当前偏离。".into(),
+            implementation: "src/indicators/momentum.rs::dpo".into(),
+        },
+    ]
+}
+
+// -----------------------------------------------------------------------------
+// 波动率类
+// -----------------------------------------------------------------------------
+
+fn volatility_indicators() -> Vec<KnowledgeEntry> {
+    vec![
+        KnowledgeEntry {
+            id: "atr".into(),            summary: "N 日真实波幅的 Wilder 平滑。波动率的\"温度计\"。".into(),
+            example: "BTC 日线 14 周期 ATR 通常在 500-1500 美元之间(随波动率变)。用它设置止损最自然:止损 = 入场价 - 2×ATR,既给策略足够呼吸空间,又把单笔风险控制在合理范围。\n\n2008 年 10 月,A 股 14 日 ATR 是平时的 3 倍 — 当时所有基于历史波动率的模型都失效了,才有了\"波动率聚集\"研究。".into(),
+            related: vec![String::from("bollinger_bands"), String::from("supertrend"), String::from("keltner")],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volatility.rs#L40-L80".into(),
+            
+            category: "波动率".into(),
+            name: "ATR 平均真实波幅".into(),
+            formula: "ATR = Wilder 平滑的 TR; TR = max(H-L, |H-Cp|, |L-Cp|)".into(),
+            meaning: "价格的真实波动幅度。".into(),
+            signals: "ATR 上升 → 波动加剧;ATR 下降 → 波动收敛(可能即将爆发)。".into(),
+            pitfalls: "ATR 不指示方向,只看波动大小。".into(),
+            implementation: "src/indicators/volatility.rs::atr".into(),
+        },
+        KnowledgeEntry {
+            id: "atr_percent".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volatility.rs#L40-L80".into(),
+            
+            category: "波动率".into(),
+            name: "ATR%".into(),
+            formula: "ATR% = ATR / Close × 100%".into(),
+            meaning: "波动率归一化,便于跨品种比较。".into(),
+            signals: "ATR% > 3% → 高波动;< 1% → 低波动。".into(),
+            pitfalls: "极端价格时(几分钱股票)ATR% 会失真。".into(),
+            implementation: "src/indicators/volatility.rs::atr_percent".into(),
+        },
+        KnowledgeEntry {
+            id: "hv".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volatility.rs#L80-L120".into(),
+            
+            category: "波动率".into(),
+            name: "HV 历史波动率".into(),
+            formula: "HV = std(对数收益率, N) × sqrt(periods_per_year)".into(),
+            meaning: "年化的历史波动率。".into(),
+            signals: "HV 上升 → 风险增加;HV 下降 → 风险降低。".into(),
+            pitfalls: "基于历史,不预测未来。".into(),
+            implementation: "src/indicators/volatility.rs::historical_volatility".into(),
+        },
+        KnowledgeEntry {
+            id: "bbands".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "波动率".into(),
+            name: "Bollinger Bands 布林带".into(),
+            formula: "中轨 = SMA(N);上下轨 = 中轨 ± k·σ".into(),
+            meaning: "波动率自适应的通道。".into(),
+            signals: "价格触及上轨 → 超买;触及下轨 → 超卖;带宽收窄 → 即将爆发(Squeeze)。".into(),
+            pitfalls: "强趋势中价格可沿上轨持续运行。".into(),
+            implementation: "src/indicators/volatility.rs::bollinger_bands + src/strategy.rs::BollingerBandsStrategy".into(),
+        },
+        KnowledgeEntry {
+            id: "squeeze".into(),            summary: "BBands 落在 Keltner Channel 内部=波动率收缩。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volatility.rs#L160-L200".into(),
+            
+            category: "波动率".into(),
+            name: "BBands-Keltner Squeeze".into(),
+            formula: "BBands 落在 Keltner Channel 内 → 挤压".into(),
+            meaning: "波动率极度收缩,通常是大行情前兆。".into(),
+            signals: "Squeeze 结束 + 颜色翻红 → 做多;翻绿 → 做空。".into(),
+            pitfalls: "挤压可能持续很久,需要止损保护。".into(),
+            implementation: "src/indicators/volatility.rs::squeeze".into(),
+        },
+        KnowledgeEntry {
+            id: "chaikin_vol".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volatility.rs#L240-L280".into(),
+            
+            category: "波动率".into(),
+            name: "Chaikin Volatility".into(),
+            formula: "(EMA(H-L, N) - EMA(H-L, N)[N 根前]) / EMA(H-L, N)[N 根前] × 100".into(),
+            meaning: "波动率的变化率。".into(),
+            signals: "上升 → 波动扩张;下降 → 波动收敛。".into(),
+            pitfalls: "和 ATR 高度相关,二选一。".into(),
+            implementation: "src/indicators/volatility.rs::chaikin_volatility".into(),
+        },
+        KnowledgeEntry {
+            id: "mass_index".into(),            summary: "HL 范围与 EMA 比率的 25 期累加,识别反转。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volatility.rs#L280-L320".into(),
+            
+            category: "波动率".into(),
+            name: "Mass Index".into(),
+            formula: "sum(EMA(H-L)/EMA(EMA(H-L)), 25)".into(),
+            meaning: "识别趋势反转(挤压→爆发)。".into(),
+            signals: "MI > 27 → 即将反转(涨或跌);配合方向指标用。".into(),
+            pitfalls: "单独使用假信号多。".into(),
+            implementation: "src/indicators/volatility.rs::mass_index".into(),
+        },
+        KnowledgeEntry {
+            id: "ulcer_index".into(),            summary: "回撤百分比平方和的开方,只看下行。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volatility.rs#L320-L360".into(),
+            
+            category: "波动率".into(),
+            name: "Ulcer Index".into(),
+            formula: "sqrt(sum(回撤%²) / N)".into(),
+            meaning: "只衡量下行深度,比 σ 更接近投资者感受。".into(),
+            signals: "UI 低 → 投资体验好;UI 高 → 经常创新低。".into(),
+            pitfalls: "不衡量上行,单独使用不全面。".into(),
+            implementation: "src/indicators/volatility.rs::ulcer_index".into(),
+        },
+    ]
+}
+
+// -----------------------------------------------------------------------------
+// 成交量类
+// -----------------------------------------------------------------------------
+
+fn volume_indicators() -> Vec<KnowledgeEntry> {
+    vec![
+        KnowledgeEntry {
+            id: "obv".into(),            summary: "上涨日+vol/下跌日-vol 累计。看资金流向。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#L1-L50".into(),
+            
+            category: "成交量".into(),
+            name: "OBV 能量潮".into(),
+            formula: "上涨日 + vol;下跌日 - vol".into(),
+            meaning: "累计的资金流向。".into(),
+            signals: "OBV 创新高 + 价格未创新高 → 资金领先,要涨。".into(),
+            pitfalls: "不指示方向,只看量能积累。".into(),
+            implementation: "src/indicators/volume.rs::obv".into(),
+        },
+        KnowledgeEntry {
+            id: "adl".into(),            summary: "累积派发线。看资金流入流出。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#L50-L90".into(),
+            
+            category: "成交量".into(),
+            name: "ADL 累积派发线".into(),
+            formula: "ADL += MFM × Volume; MFM = ((C-L) - (H-C)) / (H-L)".into(),
+            meaning: "OBV 的精细版(考虑每根 K 线的位置)。".into(),
+            signals: "ADL 上升 → 资金流入;ADL 下降 → 资金流出。".into(),
+            pitfalls: "受单根大单影响大。".into(),
+            implementation: "src/indicators/volume.rs::adl".into(),
+        },
+        KnowledgeEntry {
+            id: "cmf".into(),            summary: "N期 MFM×Vol 的和 / N期 Vol 总和。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#L90-L130".into(),
+            
+            category: "成交量".into(),
+            name: "CMF 蔡金资金流".into(),
+            formula: "sum(MFM × Volume, N) / sum(Volume, N)".into(),
+            meaning: "N 期资金流向(0.05 以上/以下为强信号)。".into(),
+            signals: "CMF > 0.05 → 资金流入;< -0.05 → 流出。".into(),
+            pitfalls: "N 较短反应快但噪声大。".into(),
+            implementation: "src/indicators/volume.rs::cmf".into(),
+        },
+        KnowledgeEntry {
+            id: "mfi".into(),            summary: "量价合一的 RSI。RSI 套上了成交量。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#L130-L180".into(),
+            
+            category: "成交量".into(),
+            name: "MFI 资金流量指数".into(),
+            formula: "RSI 的量价版(用典型价 × 成交量做流入流出)".into(),
+            meaning: "量价合一的超买超卖指标。".into(),
+            signals: "MFI > 80 → 大量资金涌入可能超买;< 20 → 抛售可能超卖。".into(),
+            pitfalls: "和 RSI 高度相关,背离更有效。".into(),
+            implementation: "src/indicators/volume.rs::mfi".into(),
+        },
+        KnowledgeEntry {
+            id: "vwap".into(),            summary: "成交量加权的平均价。机构算法单用它作为执行基准,价格偏离 VWAP 越远,越说明有人在买入/卖出。".into(),
+            example: "机构日内算法:把订单拆成小单,在 VWAP 附近成交以减少市场冲击。专业 trader 看价格与 VWAP 的关系判断多空:\n\n- 价格 > VWAP + 价格在 VWAP 上方运行 = 多头占优\n- 价格 < VWAP + 价格在 VWAP 下方 = 空头占优\n\n与 SMA 的区别:VWAP 永远跟着成交量加权,反应真实资金成本,不会因为前期\"沉默\"的价格而被拖偏。\n\n锚定 VWAP (Anchored VWAP) 从特定事件(财报、突破)开始算,比标准 VWAP 更有用。".into(),
+            related: vec![String::from("mfi"), String::from("cmf"), String::from("pvt"), String::from("chaikin_osc")],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#L180-L220".into(),
+            
+            category: "成交量".into(),
+            name: "VWAP".into(),
+            formula: "VWAP = sum(TP × V) / sum(V)".into(),
+            meaning: "成交均价(机构基准)。".into(),
+            signals: "价格 > VWAP → 多头占优;价格 < VWAP → 空头占优。".into(),
+            pitfalls: "日内指标;日间比较要用 Anchored VWAP。".into(),
+            implementation: "src/indicators/volume.rs::vwap".into(),
+        },
+        KnowledgeEntry {
+            id: "chaikin_osc".into(),            summary: "ADL 的快慢 EMA 之差,看资金动能。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#L260-L300".into(),
+            
+            category: "成交量".into(),
+            name: "Chaikin Oscillator".into(),
+            formula: "ADL 的 EMA(快) - EMA(慢)".into(),
+            meaning: "ADL 的动量。".into(),
+            signals: "零轴上方 → 资金流入加速;下方 → 流出加速。".into(),
+            pitfalls: "必须配合价格行为用。".into(),
+            implementation: "src/indicators/volume.rs::chaikin_oscillator".into(),
+        },
+        KnowledgeEntry {
+            id: "pvt".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#L300-L340".into(),
+            
+            category: "成交量".into(),
+            name: "PVT 量价趋势".into(),
+            formula: "PVT += (ΔC/C) × V".into(),
+            meaning: "OBV 的百分比加权版本。".into(),
+            signals: "PVT 趋势 > 价格趋势 → 量价配合。".into(),
+            pitfalls: "和 OBV 高度相关,选一个就行。".into(),
+            implementation: "src/indicators/volume.rs::pvt".into(),
+        },
+        KnowledgeEntry {
+            id: "force_index".into(),            summary: "(C-Cp)×V,价格 × 成交量的力量。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#L340-L380".into(),
+            
+            category: "成交量".into(),
+            name: "Force Index".into(),
+            formula: "Force = (C - Cp) × V".into(),
+            meaning: "价格变化的成交量加权。".into(),
+            signals: "13 期 EMA > 0 → 多头;穿越 0 → 信号。".into(),
+            pitfalls: "单独使用效果弱。".into(),
+            implementation: "src/indicators/volume.rs::force_index".into(),
+        },
+        KnowledgeEntry {
+            id: "nvi".into(),            summary: "负量指数,缩量日累加价格变化(聪明钱指标)。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#L460-L500".into(),
+            
+            category: "成交量".into(),
+            name: "NVI 负成交量指数".into(),
+            formula: "缩量日累加 (ΔC/C);放量日不变".into(),
+            meaning: "聪明钱指标(假设缩量日的交易更聪明)。".into(),
+            signals: "NVI 上穿 255 日 MA → 大资金流入。".into(),
+            pitfalls: "假设“聪明钱在缩量日交易”有争议。".into(),
+            implementation: "src/indicators/volume.rs::nvi".into(),
+        },
+        KnowledgeEntry {
+            id: "vol_osc".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#L540-L580".into(),
+            
+            category: "成交量".into(),
+            name: "Volume Oscillator".into(),
+            formula: "(SMA(V, short) - SMA(V, long)) / SMA(V, long) × 100".into(),
+            meaning: "成交量的快慢均线差。".into(),
+            signals: "正值 → 近期放量;负值 → 近期缩量。".into(),
+            pitfalls: "量能突增后回归正常 ≠ 看空。".into(),
+            implementation: "src/indicators/volume.rs::volume_oscillator".into(),
+        },
+        KnowledgeEntry {
+            id: "vroc".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#L580-L620".into(),
+            
+            category: "成交量".into(),
+            name: "VROC 量能变化率".into(),
+            formula: "(V - V[N]) / V[N] × 100".into(),
+            meaning: "成交量的变化率。".into(),
+            signals: "正值 → 量增;负值 → 量缩。".into(),
+            pitfalls: "放量或缩量本身无方向,需配合价格。".into(),
+            implementation: "src/indicators/volume.rs::vroc".into(),
+        },
+        KnowledgeEntry {
+            id: "vr".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#L620-L660".into(),
+            
+            category: "成交量".into(),
+            name: "VR 容量比率".into(),
+            formula: "上涨日成交量和 / 下跌日成交量和 × 100".into(),
+            meaning: "A 股常用量能指标。".into(),
+            signals: "VR > 160 → 过热;40-70 → 低估;< 40 → 过冷。".into(),
+            pitfalls: "不指示方向。".into(),
+            implementation: "src/indicators/volume.rs::vr".into(),
+        },
+        KnowledgeEntry {
+            id: "wvad".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#L660-L700".into(),
+            
+            category: "成交量".into(),
+            name: "WVAD 威廉变异离散量".into(),
+            formula: "WVAD += (C - O) / (H - L) × V".into(),
+            meaning: "台湾常用的量价综合指标。".into(),
+            signals: "WVAD 上穿 0 → 买入信号。".into(),
+            pitfalls: "需要长周期验证。".into(),
+            implementation: "src/indicators/volume.rs::wvad".into(),
+        },
+    ]
+}
+
+// -----------------------------------------------------------------------------
+// 市场宽度与统计
+// -----------------------------------------------------------------------------
+
+fn breadth_and_stats() -> Vec<KnowledgeEntry> {
+    vec![
+        KnowledgeEntry {
+            id: "ad_line".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "市场宽度".into(),
+            name: "Advance-Decline Line 腾落线".into(),
+            formula: "AD 累加(上涨家数 - 下跌家数)".into(),
+            meaning: "市场整体宽度。".into(),
+            signals: "AD 上行 + 指数下行 → 宽度背离(可能反转)。".into(),
+            pitfalls: "需要指数成分股数据。".into(),
+            implementation: "需市场全样本数据;本项目单币种".into(),
+        },
+        KnowledgeEntry {
+            id: "trin".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "市场宽度".into(),
+            name: "TRIN / Arms Index".into(),
+            formula: "(上涨/下跌家数) / (上涨/下跌成交量)".into(),
+            meaning: "广度与成交量的比值。".into(),
+            signals: "TRIN < 0.5 → 强势;> 1.5 → 弱势。".into(),
+            pitfalls: "盘中数据噪声大。".into(),
+            implementation: "需市场全样本数据;本项目单币种".into(),
+        },
+        KnowledgeEntry {
+            id: "mcclellan".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "市场宽度".into(),
+            name: "McClellan Oscillator".into(),
+            formula: "(上涨-下跌) 的 EMA(19) - EMA(39)".into(),
+            meaning: "腾落线的动量。".into(),
+            signals: "正值 → 上涨动能;负值 → 下跌动能。".into(),
+            pitfalls: "需要成分股数据。".into(),
+            implementation: "需市场全样本;PDF 第二十一章 6 节".into(),
+        },
+        KnowledgeEntry {
+            id: "z_score".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/statistics.rs#L120-L150".into(),
+            
+            category: "统计".into(),
+            name: "Z-Score".into(),
+            formula: "Z = (x - mean) / std".into(),
+            meaning: "衡量偏离均值的标准差倍数。".into(),
+            signals: "Z > 2 → 异常高;Z < -2 → 异常低。配对交易用得最多。".into(),
+            pitfalls: "假设数据正态分布。".into(),
+            implementation: "src/indicators/statistics.rs::zscore".into(),
+        },
+        KnowledgeEntry {
+            id: "rolling_correlation".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/statistics.rs#L90-L120".into(),
+            
+            category: "统计".into(),
+            name: "滚动相关系数".into(),
+            formula: "皮尔逊相关系数,滚动窗口计算".into(),
+            meaning: "两个序列的相关性随时间变化。".into(),
+            signals: "配对交易:相关性 > 0.8 → 可配对。".into(),
+            pitfalls: "相关 ≠ 因果;可能随时间变化。".into(),
+            implementation: "src/indicators/statistics.rs::rolling_correlation".into(),
+        },
+        KnowledgeEntry {
+            id: "hurst".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/statistics.rs#L310-L340".into(),
+            
+            category: "统计".into(),
+            name: "Hurst 指数".into(),
+            formula: "R/S 分析的斜率".into(),
+            meaning: "判断序列是趋势(H>0.5)、随机(H=0.5)还是均值回归(H<0.5)。".into(),
+            signals: "H > 0.55 → 强趋势;H < 0.45 → 均值回归。".into(),
+            pitfalls: "需要大量数据(> 1000 根),不适合短周期。".into(),
+            implementation: "src/indicators/ (按概念: 估值/期权/宽度/股东/统计/基础等)".into(),
+        },
+    ]
+}
+
+// -----------------------------------------------------------------------------
+// 风险与绩效指标
+// -----------------------------------------------------------------------------
+
+fn risk_metrics() -> Vec<KnowledgeEntry> {
+    vec![
+        KnowledgeEntry {
+            id: "total_return".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#L8-L90".into(),
+            
+            category: "风险-绩效".into(),
+            name: "总收益".into(),
+            formula: "(Final - Initial) / Initial × 100%".into(),
+            meaning: "策略从头到尾的总收益率。".into(),
+            signals: "正数赚钱;负数亏钱。".into(),
+            pitfalls: "不考虑时间和风险,只看绝对数会被误导。".into(),
+            implementation: "src/metrics.rs::compute_metrics".into(),
+        },
+        KnowledgeEntry {
+            id: "cagr".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#L8-L90".into(),
+            
+            category: "风险-绩效".into(),
+            name: "CAGR 复合年增长率".into(),
+            formula: "(Final/Initial)^(365/days) - 1".into(),
+            meaning: "复合年增长率。".into(),
+            signals: "可与 S&P 500 的 CAGR 比较。".into(),
+            pitfalls: "短期策略(< 1 年) 的 CAGR 意义不大。".into(),
+            implementation: "src/metrics.rs::compute_metrics".into(),
+        },
+        KnowledgeEntry {
+            id: "sharpe".into(),            summary: "(收益 - 无风险) / 波动率,年化。>1 合格,>2 优秀,>3 顶级。".into(),
+            example: "巴菲特 50 年年化约 20%,夏普约 0.8。文艺复兴科技的大奖章基金年化 66%,夏普长期 2-3。\n\n关键陷阱:夏普可以被\"对冲\"和\"杠杆\"放大 — 用 1% 资金 + 99% 现金的策略可能夏普 5,但绝对收益 0.1%。\n\n更可靠的:用 IR(信息比率)= (策略 - 基准) / Tracking Error 评估主动管理能力。".into(),
+            related: vec![String::from("sortino"), String::from("calmar"), String::from("max_drawdown"), String::from("var")],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#L8-L90".into(),
+            
+            category: "风险-绩效".into(),
+            name: "Sharpe 夏普比率".into(),
+            formula: "(mean(R) - Rf) / std(R) × sqrt(periods)".into(),
+            meaning: "每承担 1 单位风险换得的超额收益。".into(),
+            signals: "> 1 合格;> 2 优秀;> 3 顶级。".into(),
+            pitfalls: "假设收益正态分布;不区分上下波动。".into(),
+            implementation: "src/metrics.rs::compute_metrics".into(),
+        },
+        KnowledgeEntry {
+            id: "sortino".into(),            summary: "夏普的改进版,只算下行波动率分母。比夏普更贴近实际感受。".into(),
+            example: "同样年化 20% 收益:一个策略年波动率 30%,下行波动率 18%(跌得少涨得多);另一个 30% 全是下行的。两者夏普一样,但 Sortino 差距明显。\n\n业界共识:Sortino > 1.5 是好策略,> 2 是优秀。\n\nA 股里很多\"长牛\"策略(比如银行股红利)夏普低但 Sortino 高 — 因为它们跌得少。".into(),
+            related: vec![String::from("sharpe"), String::from("calmar"), String::from("max_drawdown")],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#L182-L200".into(),
+            
+            category: "风险-绩效".into(),
+            name: "Sortino 索提诺比率".into(),
+            formula: "(mean(R) - Rf) / downside_deviation × sqrt(periods)".into(),
+            meaning: "只算下行波动率的夏普。".into(),
+            signals: "和 Sharpe 一起用。".into(),
+            pitfalls: "下行偏差的定义有几种,需保持一致。".into(),
+            implementation: "src/metrics.rs::compute_metrics".into(),
+        },
+        KnowledgeEntry {
+            id: "max_drawdown".into(),            summary: "从历史峰值到谷底的最大跌幅。心理上能不能承受这个数字,决定了你能不能坚持到底。".into(),
+            example: "1987 年股灾:道指一天跌 22.6%,但最大回撤是那 1 天。LTCM 长期资本管理公司 1998 年回撤 50% 就破产了 — 数学上还能救,心理上已经崩了。\n\n经验法则:你能承受的最大回撤 = 你的年龄/2 - 5。比如 30 岁,最大能忍 10%;50 岁,最大能忍 20%。超过就睡不好觉。\n\n策略对比:策略 A 收益 50% 但最大回撤 60%;策略 B 收益 40% 但最大回撤 15%。A 长期可能跑赢,但 90% 的人在 A 上面坚持不下来。".into(),
+            related: vec![String::from("calmar"), String::from("sharpe"), String::from("sortino")],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#L8-L90".into(),
+            
+            category: "风险-绩效".into(),
+            name: "最大回撤".into(),
+            formula: "(peak - trough) / peak, 取历史最大".into(),
+            meaning: "从峰值到谷底的最大跌幅。".into(),
+            signals: "< 10% 低风险;10-20% 中等;> 20% 高风险。".into(),
+            pitfalls: "看相对值不看绝对值;心理影响比数字大。".into(),
+            implementation: "src/metrics.rs::compute_metrics".into(),
+        },
+        KnowledgeEntry {
+            id: "calmar".into(),            summary: "年化收益 / 最大回撤。越大越好,>1 合格,>3 顶级。".into(),
+            example: "海龟交易法 1980s 年化 80%,最大回撤 30%,Calmar 约 2.7。\n\n2020-2024 年测试 BTC 上的 20 日突破策略:年化 50%,最大回撤 35%,Calmar 1.4。\n\n相比 Sharpe 的优势:Sharpe 关心的是\"波动\",Calmar 关心的是\"最痛苦的时候\" — 后者更贴近实际投资体验。".into(),
+            related: vec![String::from("sharpe"), String::from("sortino"), String::from("max_drawdown")],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#L194-L210".into(),
+            
+            category: "风险-绩效".into(),
+            name: "Calmar 比率".into(),
+            formula: "CAGR / MaxDrawdown".into(),
+            meaning: "年化收益除以最大回撤。".into(),
+            signals: "> 1 合格;> 3 优秀。".into(),
+            pitfalls: "只看最大回撤,可能忽视频繁的小回撤。".into(),
+            implementation: "src/metrics.rs::compute_metrics".into(),
+        },
+        KnowledgeEntry {
+            id: "var".into(),            summary: "VaR(95%) = \"1 天内 95% 概率不会亏超过 X\"。X 就是 VaR。风险管理最常用的指标。".into(),
+            example: "BTC 24 小时 95% VaR = 4.2%,意味着每天有 5% 的概率会亏超过 4.2%。\n\n但 VaR 不描述尾部 — 那 5% 的\"灾难日\"可能亏 15% 以上(肥尾)。2008 年雷曼倒闭,VaR 模型没预测到 30% 单日跌幅。\n\n更稳的做法:用 CVaR(95%) = 超过 VaR 那 5% 天的平均损失,反映了\"灾难有多大\"。".into(),
+            related: vec![String::from("cvar"), String::from("max_drawdown"), String::from("sharpe")],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#L202-L220".into(),
+            
+            category: "风险-绩效".into(),
+            name: "VaR 风险价值".into(),
+            formula: "在给定置信度下的最大可能损失".into(),
+            meaning: "在 X% 置信度下,最坏情况损失不超过 Y。".into(),
+            signals: "VaR(95%, 1天) = $1000 → 95% 的情况下 1 天损失不超过 $1000。".into(),
+            pitfalls: "不描述尾部(那 5% 的极端情况)。".into(),
+            implementation: "src/metrics.rs::compute_metrics".into(),
+        },
+        KnowledgeEntry {
+            id: "cvar".into(),            summary: "VaR 突破后的平均损失(期望损失)。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#L202-L220".into(),
+            
+            category: "风险-绩效".into(),
+            name: "CVaR 条件风险价值".into(),
+            formula: "VaR 突破后的平均损失".into(),
+            meaning: "极端情况下的“平均”损失(比 VaR 全面)。".into(),
+            signals: "比 VaR 更能反映尾部风险。".into(),
+            pitfalls: "计算需要更多数据(更长的回测期)。".into(),
+            implementation: "src/metrics.rs::compute_metrics".into(),
+        },
+        KnowledgeEntry {
+            id: "beta".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/statistics.rs#L150-L180".into(),
+            
+            category: "风险-绩效".into(),
+            name: "Beta 贝塔".into(),
+            formula: "Cov(R_strategy, R_benchmark) / Var(R_benchmark)".into(),
+            meaning: "策略相对基准的波动幅度。".into(),
+            signals: "Beta = 1 → 与基准同幅;Beta > 1 → 进攻型;< 0 → 反向。".into(),
+            pitfalls: "Beta 随时间变化;只看历史 Beta 可能误导。".into(),
+            implementation: "src/indicators/statistics.rs::beta".into(),
+        },
+        KnowledgeEntry {
+            id: "alpha".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/statistics.rs#L180-L220".into(),
+            
+            category: "风险-绩效".into(),
+            name: "Alpha 阿尔法".into(),
+            formula: "α = R_strategy - (Rf + β × (R_benchmark - Rf))".into(),
+            meaning: "超出 CAPM 模型的超额收益。".into(),
+            signals: "α > 0 → 跑赢基准;α < 0 → 跑输。".into(),
+            pitfalls: "学术概念,实战意义有争议。".into(),
+            implementation: "src/indicators/statistics.rs::alpha".into(),
+        },
+        KnowledgeEntry {
+            id: "skewness".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/statistics.rs#L220-L250".into(),
+            
+            category: "风险-绩效".into(),
+            name: "偏度 Skewness".into(),
+            formula: "E[(R-μ)³] / σ³".into(),
+            meaning: "收益分布的对称性。".into(),
+            signals: "正偏 → 大涨多于大跌;负偏 → 大跌多于大涨。".into(),
+            pitfalls: "需要大量数据才能稳定。".into(),
+            implementation: "src/indicators/statistics.rs::skewness".into(),
+        },
+        KnowledgeEntry {
+            id: "kurtosis".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/statistics.rs#L250-L280".into(),
+            
+            category: "风险-绩效".into(),
+            name: "峰度 Kurtosis".into(),
+            formula: "E[(R-μ)⁴] / σ⁴ - 3 (excess)".into(),
+            meaning: "分布的尾部厚度。".into(),
+            signals: "高峰度 → 极端事件多(肥尾);低峰度 → 接近正态。".into(),
+            pitfalls: "样本不稳定,需大量数据。".into(),
+            implementation: "src/indicators/statistics.rs::kurtosis".into(),
+        },
+    ]
+}
+
+// -----------------------------------------------------------------------------
+// 期权 Greeks
+// -----------------------------------------------------------------------------
+
+fn options_greeks() -> Vec<KnowledgeEntry> {
+    vec![
+        KnowledgeEntry {
+            id: "delta".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "期权".into(),
+            name: "Delta".into(),
+            formula: "∂V/∂S (期权价格对标的价格的偏导)".into(),
+            meaning: "标的价格变动 1 单位,期权价格变动多少。".into(),
+            signals: "Call Delta ∈ [0, 1];Put Delta ∈ [-1, 0];深度实值接近 ±1。".into(),
+            pitfalls: "Delta 本身不包含方向判断。".into(),
+            implementation: "src/indicators/options.rs::delta;N(d1) 或 N(d1)-1".into(),
+        },
+        KnowledgeEntry {
+            id: "gamma".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "期权".into(),
+            name: "Gamma".into(),
+            formula: "∂Delta/∂S (Delta 的变化率)".into(),
+            meaning: "Delta 的敏感度。".into(),
+            signals: "平值期权 Gamma 最大;临到期趋近 0 或无穷。".into(),
+            pitfalls: "Gamma 大 = Delta 变化快,对冲要积极。".into(),
+            implementation: "src/indicators/options.rs::gamma;N(d1)/(S·σ·√t)".into(),
+        },
+        KnowledgeEntry {
+            id: "theta".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "期权".into(),
+            name: "Theta".into(),
+            formula: "∂V/∂t (期权价格对时间的偏导)".into(),
+            meaning: "时间损耗速度。".into(),
+            signals: "Theta 总是负数(买方角度);临近到期加速。".into(),
+            pitfalls: "节假日不计 Theta(实际跨越周末扣 3 倍)。".into(),
+            implementation: "src/indicators/options.rs::theta;每日时间损耗".into(),
+        },
+        KnowledgeEntry {
+            id: "vega".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "期权".into(),
+            name: "Vega".into(),
+            formula: "∂V/∂σ (期权价格对 IV 的偏导)".into(),
+            meaning: "波动率敏感度。".into(),
+            signals: "长期期权 Vega 大;Vega 为正(波动率上升 = 涨)。".into(),
+            pitfalls: "实际波动率不等于隐含波动率。".into(),
+            implementation: "src/indicators/options.rs::vega;每 1% IV 变化".into(),
+        },
+        KnowledgeEntry {
+            id: "iv".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "期权".into(),
+            name: "隐含波动率 IV".into(),
+            formula: "使 BS 模型价格 = 市场价格 的 σ".into(),
+            meaning: "市场对未来波动的预期。".into(),
+            signals: "IV 高 → 期权贵,可能预示大波动;IV 低 → 期权便宜。".into(),
+            pitfalls: "不是未来波动率的预测,是当前期权价格反推。".into(),
+            implementation: "src/indicators/options.rs::bs_price - 完整 Black-Scholes".into(),
+        },
+        KnowledgeEntry {
+            id: "iv_rank".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "期权".into(),
+            name: "IV Rank".into(),
+            formula: "(IV - 52周最低IV) / (52周最高IV - 最低IV) × 100".into(),
+            meaning: "IV 在历史区间中的位置。".into(),
+            signals: "IV Rank > 50 → 高 → 卖出期权;IV Rank < 50 → 低 → 买入期权。".into(),
+            pitfalls: "只看当下,不预测未来。".into(),
+            implementation: "src/indicators/options.rs::iv_rank;需 52 周 IV".into(),
+        },
+    ]
+}
+
+// -----------------------------------------------------------------------------
+// 常见误区(PDF 第二十八节)
+// -----------------------------------------------------------------------------
+
+fn common_pitfalls() -> Vec<KnowledgeEntry> {
+    vec![
+        KnowledgeEntry {
+            id: "pitfall_low_pe".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "误区".into(),
+            name: "低 PE ≠ 便宜".into(),
+            formula: "N/A".into(),
+            meaning: "PE 低可能是因为利润即将下滑(价值陷阱)。".into(),
+            signals: "PE < 行业平均 + 利润稳定 → 可能便宜。PE < 平均 + 利润下滑 → 陷阱。".into(),
+            pitfalls: "周期股的低 PE 往往是周期顶点。".into(),
+            implementation: "src/indicators/fundamental.rs::CompanyFinancials::pe;低 PE 不一定便宜".into(),
+        },
+        KnowledgeEntry {
+            id: "pitfall_high_pe".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "误区".into(),
+            name: "高 PE ≠ 一定贵".into(),
+            formula: "N/A".into(),
+            meaning: "高 PE 可能是高增长的合理反映。".into(),
+            signals: "高 PE + 高增长(PEG < 1) → 合理;高 PE + 低增长 → 真贵。".into(),
+            pitfalls: "看 PE 必须配 PEG 或盈利增长率。".into(),
+            implementation: "src/indicators/fundamental.rs - 高 PE 需配合 PEG".into(),
+        },
+        KnowledgeEntry {
+            id: "pitfall_rsi".into(),            summary: "RSI 超买 ≠ 立刻卖出。强趋势中 RSI 长期 > 70,你会被反复止损。".into(),
+            example: "BTC 2020-2021 牛市,14 周期 RSI 在 70-90 之间横盘 6 个月。如果按\"超买卖出\"操作,你会错过 400% 涨幅。\n\n正确做法:RSI 超买 + 价格形态反转(头肩顶、双顶、跌破趋势线) + 成交量放大 = 卖。单独 RSI 超买什么都不算。\n\nGeorge Lane(RSI 发明者)本人多次强调:RSI 是动量指标,不是反转指标。".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "误区".into(),
+            name: "RSI 超买 ≠ 卖出".into(),
+            formula: "N/A".into(),
+            meaning: "强趋势中 RSI 可长期 > 70。".into(),
+            signals: "RSI > 70 + 趋势向上 → 持有;RSI > 70 + 趋势转弱 → 卖出。".into(),
+            pitfalls: "单独用 RSI 反向交易会被反复止损。".into(),
+            implementation: "src/strategy.rs::RsiStrategy - RSI 超买强趋势中可长期 >70".into(),
+        },
+        KnowledgeEntry {
+            id: "pitfall_golden_cross".into(),            summary: "金叉是滞后信号,不是预测。等它发生时趋势已经走了一段。".into(),
+            example: "50/200 金叉在 2020 年 BTC 上出现时,价格已经从 4K 涨到 9K(已经涨了 125%)。这时\"预测\"的价值已经不大。\n\n更要命的是:50/200 金叉之后还可能出现\"假金叉\"然后\"死叉\"(比如 2021 年 5 月那波假突破)。\n\n金叉最适合作为\"趋势确认\",而不是\"入场信号\" — 确认后再追,而不是等金叉抄底。".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "误区".into(),
+            name: "金叉 ≠ 领先信号".into(),
+            formula: "N/A".into(),
+            meaning: "金叉发生在趋势已确立之后(滞后)。".into(),
+            signals: "金叉在震荡市假信号多;只在明显趋势中可靠。".into(),
+            pitfalls: "用金叉抓顶/底 → 大概率迟到。".into(),
+            implementation: "src/strategy.rs::SmaCrossStrategy - 50/200 金叉滞后".into(),
+        },
+        KnowledgeEntry {
+            id: "pitfall_divergence".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "误区".into(),
+            name: "背离 ≠ 立即反转".into(),
+            formula: "N/A".into(),
+            meaning: "背离是警告信号,但可维持很久。".into(),
+            signals: "背离 + 价格突破 → 反转确认。".into(),
+            pitfalls: "强趋势中多次背离都不反转。".into(),
+            implementation: "src/indicators/momentum.rs - 背离强趋势中不反转".into(),
+        },
+        KnowledgeEntry {
+            id: "pitfall_multi_osc".into(),            summary: "用 RSI、KDJ、Williams %R、Stochastic 一起\"多重确认\" — 没用,它们本质都是动量指标。".into(),
+            example: "RSI 和 KDJ 的相关系数通常 > 0.85,它们几乎说同一件事。当 RSI 超买时,KDJ 的 J 值几乎一定 > 100 — 你没有\"多重确认\",只是看了同一件事三遍。\n\n真正多样化的确认:1 个动量指标(RSI) + 1 个趋势指标(ADX 或 MA) + 1 个成交量指标(OBV 或 CMF)。这三类指标真的提供独立信息。\n\nPDF 第二十八节专门讲了这条误区:同类指标叠加 = 增加假信号,不是增加确定性。".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "误区".into(),
+            name: "多个振荡器 ≠ 多重确认".into(),
+            formula: "N/A".into(),
+            meaning: "RSI/Stochastic/Williams %R 本质都是动量指标。".into(),
+            signals: "用振荡器 + 趋势指标(ADX) 才是真确认。".into(),
+            pitfalls: "同一类指标叠用增加假信号。".into(),
+            implementation: "src/indicators/momentum.rs - 同类指标叠加冗余".into(),
+        },
+        KnowledgeEntry {
+            id: "pitfall_main_flow".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "误区".into(),
+            name: "主力净流入 ≠ 现金真的流入股票".into(),
+            formula: "N/A".into(),
+            meaning: "只是统计主动买入单大于主动卖出单。".into(),
+            signals: "主力净流入 + 股价下跌 → 大单出货的假象。".into(),
+            pitfalls: "主力可拆单、对倒伪装净流入。".into(),
+            implementation: "src/indicators/volume.rs - 主买主卖可伪装".into(),
+        },
+        KnowledgeEntry {
+            id: "pitfall_volume".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "误区".into(),
+            name: "成交量放大 ≠ 自动看多".into(),
+            formula: "N/A".into(),
+            meaning: "放量可以发生在顶部(出货)、底部(吸筹)、趋势中(健康)。".into(),
+            signals: "放量 + 价格上涨 → 健康;放量 + 价格下跌 → 恐慌/出货。".into(),
+            pitfalls: "必须看价格位置判断放量意义。".into(),
+            implementation: "src/indicators/volume.rs - 放量需结合价格位置".into(),
+        },
+        KnowledgeEntry {
+            id: "pitfall_params".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "误区".into(),
+            name: "参数没有神圣数字".into(),
+            formula: "N/A".into(),
+            meaning: "MA(20)、RSI(14) 都不是天经地义的。".into(),
+            signals: "必须做参数敏感性分析。".into(),
+            pitfalls: "过拟合到特定参数 → 实盘失效。".into(),
+            implementation: "src/strategy.rs - 需做参数敏感性分析".into(),
+        },
+        KnowledgeEntry {
+            id: "pitfall_industry".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "误区".into(),
+            name: "不同行业不能直接比较".into(),
+            formula: "N/A".into(),
+            meaning: "科技股 PE 30 vs 银行 PE 5,不能直接说银行便宜。".into(),
+            signals: "PE/PB 必须同行业比较。".into(),
+            pitfalls: "跨行业比较产生大量“伪便宜”信号。".into(),
+            implementation: "src/indicators/fundamental.rs - 跨行业 PE 不可比".into(),
+        },
+    ]
+}
+// -----------------------------------------------------------------------------
+// 第四部分:支撑阻力、形态识别、绘图工具
+// -----------------------------------------------------------------------------
+
+fn support_resistance_and_patterns() -> Vec<KnowledgeEntry> {
+    vec![
+        KnowledgeEntry {
+            id: "support_resistance".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "支撑阻力".into(),
+            name: "支撑位 / 阻力位".into(),
+            formula: "N/A (主观识别)".into(),
+            meaning: "价格多次反弹/受阻的水平位。".into(),
+            signals: "触及支撑可能反弹; 突破阻力可能继续上涨。".into(),
+            pitfalls: "支撑/阻力被突破后会角色互换。".into(),
+            implementation: "需主观识别;PDF 第二十章 1 节".into(),
+        },
+        KnowledgeEntry {
+            id: "trendline".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "形态".into(),
+            name: "趋势线".into(),
+            formula: "连接 N 个明显低点(上升)或高点(下降)的直线".into(),
+            meaning: "最基础的趋势可视化工具。".into(),
+            signals: "价格触及趋势线后反弹 -> 趋势延续; 跌破 -> 趋势可能反转。".into(),
+            pitfalls: "主观性极强,不同人画出的线差别大。".into(),
+            implementation: "需主观画线;PDF 第二十章 2 节".into(),
+        },
+        KnowledgeEntry {
+            id: "pivot_points".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "形态".into(),
+            name: "Pivot Points 枢轴点".into(),
+            formula: "P = (H + L + C) / 3 (经典枢轴点)".into(),
+            meaning: "用前一根 K 线的 HLC 计算当日支撑阻力位。".into(),
+            signals: "价格 > P -> 多头; 跌破 S1 -> 弱势。".into(),
+            pitfalls: "有多种变种(经典/斐波/卡玛利亚/伍迪),不能混用。".into(),
+            implementation: "src/indicators/extra.rs 可加 pivot 函数".into(),
+        },
+        KnowledgeEntry {
+            id: "fibonacci_retracement".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "形态".into(),
+            name: "斐波那契回撤".into(),
+            formula: "回撤位 = 高点 - (高点 - 低点) * 比例 (0.236/0.382/0.5/0.618/0.786)".into(),
+            meaning: "基于黄金分割的支撑阻力位。".into(),
+            signals: "0.382 和 0.618 是最常被测试的回撤位。".into(),
+            pitfalls: "主观选择高低点 -> 不同结果。".into(),
+            implementation: "主观选高低点".into(),
+        },
+        KnowledgeEntry {
+            id: "fibonacci_extension".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "形态".into(),
+            name: "斐波那契扩展".into(),
+            formula: "扩展位 = 高点 + (高点 - 低点) * 比例 (1.272/1.618/2.618)".into(),
+            meaning: "测量趋势延伸的目标位。".into(),
+            signals: "突破后的盈利目标。".into(),
+            pitfalls: "回撤和扩展常被混淆。".into(),
+            implementation: "主观选高低点".into(),
+        },
+        KnowledgeEntry {
+            id: "elliott_wave".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "形态".into(),
+            name: "艾略特波浪".into(),
+            formula: "5 浪推动 + 3 浪调整".into(),
+            meaning: "市场以特定结构重复的循环模式。".into(),
+            signals: "5 浪完成 -> 趋势结束; 第 3 浪通常最长。".into(),
+            pitfalls: "事后解释容易,事前判断难; 主观性强。".into(),
+            implementation: "主观性强;TradingView 工具".into(),
+        },
+        KnowledgeEntry {
+            id: "k_pattern_hammer".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "K线形态".into(),
+            name: "锤子线 / 上吊线".into(),
+            formula: "小实体 + 长下影线(>实体 2 倍), 上影线极短".into(),
+            meaning: "底部反转信号(锤子)或顶部反转信号(上吊)。".into(),
+            signals: "出现在下跌末端 -> 反转向上。".into(),
+            pitfalls: "必须结合趋势位置; 单独的锤子线不可靠。".into(),
+            implementation: "src/indicators/extra.rs::detect_pattern;锤子线".into(),
+        },
+        KnowledgeEntry {
+            id: "k_pattern_doji".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "K线形态".into(),
+            name: "十字星".into(),
+            formula: "开收价几乎相等, 实体极小".into(),
+            meaning: "多空力量均衡的犹豫信号。".into(),
+            signals: "出现在顶部/底部 -> 可能反转; 在趋势中 -> 趋势延续。".into(),
+            pitfalls: "需要确认下一根 K 线。".into(),
+            implementation: "src/indicators/extra.rs::detect_pattern;十字星".into(),
+        },
+        KnowledgeEntry {
+            id: "k_pattern_engulfing".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "K线形态".into(),
+            name: "吞没形态".into(),
+            formula: "后一根实体完全包裹前一根实体".into(),
+            meaning: "强反转信号。".into(),
+            signals: "看涨吞没(底部) / 看跌吞没(顶部)。".into(),
+            pitfalls: "在强趋势中失效。".into(),
+            implementation: "src/indicators/extra.rs::detect_pattern;吞没形态".into(),
+        },
+        KnowledgeEntry {
+            id: "k_pattern_star".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "K线形态".into(),
+            name: "早晨之星 / 黄昏之星".into(),
+            formula: "大阴/阳 + 十字星 + 大阳/阴(反向)".into(),
+            meaning: "三根 K 线的反转组合。".into(),
+            signals: "非常强的反转信号。".into(),
+            pitfalls: "需要严格匹配三根 K 线形态。".into(),
+            implementation: "src/indicators/extra.rs::detect_pattern;早晨/黄昏之星".into(),
+        },
+    ]
+}
+
+// -----------------------------------------------------------------------------
+// 第五部分:更多技术指标 (Bill Williams、Chinese indicators)
+// -----------------------------------------------------------------------------
+
+fn more_indicators() -> Vec<KnowledgeEntry> {
+    vec![
+        KnowledgeEntry {
+            id: "alligator".into(),            summary: "Bill Williams 鳄鱼,三线睡眠=无趋势,张口=有趋势。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#L81-L100".into(),
+            
+            category: "趋势-Bill Williams".into(),
+            name: "Alligator 鳄鱼".into(),
+            formula: "三根 Wilder 平滑均线: 颚(13)、齿(8)、唇(5), 各向前移 8/5/3 根".into(),
+            meaning: "比尔·威廉姆斯的趋势强度指标。".into(),
+            signals: "三线交织 -> 鳄鱼睡着(无趋势); 三线张开 -> 鳄鱼醒来(强趋势)。".into(),
+            pitfalls: "参数固定; 震荡市反复「睡醒」。".into(),
+            implementation: "可由 rma + shift_forward 组合实现".into(),
+        },
+        KnowledgeEntry {
+            id: "fractal".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/trend.rs#L540-L580".into(),
+            
+            category: "趋势-Bill Williams".into(),
+            name: "Fractal 分形".into(),
+            formula: "中间 K 线的高点高于左右各 2 根(顶分形) 或低点低于左右(底分形)".into(),
+            meaning: "识别显著的局部高低点。".into(),
+            signals: "底分形 -> 买入信号; 顶分形 -> 卖出信号 (需配合 Alligator)。".into(),
+            pitfalls: "单独使用假信号多; 通常配合其他指标。".into(),
+            implementation: "src/indicators/ (按概念: 估值/期权/宽度/股东/统计/基础等)".into(),
+        },
+        KnowledgeEntry {
+            id: "elder_ray".into(),            summary: "Dr. Elder 的 Bull/Bear Power,多空力量分离。".into(),
+            example: "".into(),
+            related: vec![String::from("ema"), String::from("macd"), String::from("rsi")],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/trend.rs#L490-L540".into(),
+            
+            category: "动量".into(),
+            name: "Elder Ray Bull/Bear Power".into(),
+            formula: "Bull = High - EMA(13); Bear = Low - EMA(13)".into(),
+            meaning: "衡量多头和空头的相对力量。".into(),
+            signals: "Bull > 0 + Bear < 0 -> 多头占优; 反之亦然。".into(),
+            pitfalls: "震荡市信号混乱。".into(),
+            implementation: "src/indicators/ (按概念: 估值/期权/宽度/股东/统计/基础等)".into(),
+        },
+        KnowledgeEntry {
+            id: "bop".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#L740-L780".into(),
+            
+            category: "动量".into(),
+            name: "Balance of Power".into(),
+            formula: "BOP = (Close - Open) / (High - Low)".into(),
+            meaning: "衡量收盘 vs 开盘的力量对比。".into(),
+            signals: "BOP > 0 -> 多头主导; BOP < 0 -> 空头主导。".into(),
+            pitfalls: "对单根 K 线噪声敏感。".into(),
+            implementation: "src/indicators/ (按概念: 估值/期权/宽度/股东/统计/基础等)".into(),
+        },
+        KnowledgeEntry {
+            id: "fisher_transform".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#L530-L570".into(),
+            
+            category: "动量".into(),
+            name: "Fisher Transform".into(),
+            formula: "Y = 0.5 * ln((1+X)/(1-X)); X = 2*((C-min)/(max-min) - 0.5)".into(),
+            meaning: "把任意分布转换为近似高斯分布, 让转折点更明显。".into(),
+            signals: "Fisher 穿越 0 线 -> 信号; 与触发线交叉 -> 反转。".into(),
+            pitfalls: "对历史极值点敏感, 会有重画问题。".into(),
+            implementation: "src/indicators/ (按概念: 估值/期权/宽度/股东/统计/基础等)".into(),
+        },
+        KnowledgeEntry {
+            id: "rvi".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#L570-L610".into(),
+            
+            category: "动量".into(),
+            name: "RVI Relative Vigor Index".into(),
+            formula: "RVI = SMA(Close-Open, 10) / SMA(|Close-Open|, 10)".into(),
+            meaning: "比较收盘价高于/低于开盘价的力度。".into(),
+            signals: "RVI 上穿信号线 -> 买入; 反之卖出。".into(),
+            pitfalls: "和 RSI、ROC 高度相关。".into(),
+            implementation: "src/indicators/ (按概念: 估值/期权/宽度/股东/统计/基础等)".into(),
+        },
+        KnowledgeEntry {
+            id: "demarker".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#L610-L650".into(),
+            
+            category: "动量".into(),
+            name: "DeMarker".into(),
+            formula: "DeMax = max(High - PrevHigh, 0); DeMin = max(PrevLow - Low, 0); D = SMA(DeMax) / (SMA(DeMax) + SMA(DeMin))".into(),
+            meaning: "类似 RSI 但只看最近价格变动。".into(),
+            signals: "D > 0.7 -> 超买; D < 0.3 -> 超卖。".into(),
+            pitfalls: "对跳空不敏感。".into(),
+            implementation: "src/indicators/ (按概念: 估值/期权/宽度/股东/统计/基础等)".into(),
+        },
+        KnowledgeEntry {
+            id: "kst".into(),            summary: "Know Sure Thing,多周期 ROC 加权和。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#L450-L490".into(),
+            
+            category: "动量".into(),
+            name: "KST Know Sure Thing".into(),
+            formula: "KST = SMA(ROC(10)*1, 10) + SMA(ROC(15)*2, 10) + SMA(ROC(20)*3, 10) + SMA(ROC(30)*4, 10)".into(),
+            meaning: "Martin Pring 的多周期动量合成。".into(),
+            signals: "KST 上穿信号线 -> 买入; 与零线交叉 -> 信号。".into(),
+            pitfalls: "参数较多, 优化时容易过拟合。".into(),
+            implementation: "src/indicators/ (按概念: 估值/期权/宽度/股东/统计/基础等)".into(),
+        },
+        KnowledgeEntry {
+            id: "coppock".into(),            summary: "Coppock Curve,长期买入信号。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#L780-L820".into(),
+            
+            category: "动量".into(),
+            name: "Coppock Curve".into(),
+            formula: "Coppock = WMA(ROC(14) + ROC(11), 10)".into(),
+            meaning: "Edwin Coppock 的长期买入信号(原用于月线)。".into(),
+            signals: "从负转正 -> 长期买入。".into(),
+            pitfalls: "对短期不适用; 滞后性大。".into(),
+            implementation: "src/indicators/ (按概念: 估值/期权/宽度/股东/统计/基础等)".into(),
+        },
+        KnowledgeEntry {
+            id: "psy".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#L820-L860".into(),
+            
+            category: "动量-中国市场".into(),
+            name: "PSY 心理线".into(),
+            formula: "PSY(N) = 上涨天数 / N * 100".into(),
+            meaning: "A 股市场情绪指标。".into(),
+            signals: "PSY > 75 -> 过热; PSY < 25 -> 过冷。".into(),
+            pitfalls: "需结合价格位置判断。".into(),
+            implementation: "src/indicators/ (按概念: 估值/期权/宽度/股东/统计/基础等)".into(),
+        },
+        KnowledgeEntry {
+            id: "arbr".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#L860-L900".into(),
+            
+            category: "动量-中国市场".into(),
+            name: "ARBR 情绪指标".into(),
+            formula: "AR = (H-O)累加 / (O-L)累加 * 100; BR = (H-PrevC)累加 / (PrevC-L)累加 * 100".into(),
+            meaning: "A 股常用的人气/意愿指标。".into(),
+            signals: "AR > 180 超买; BR < 30 超卖。".into(),
+            pitfalls: "AR 和 BR 经常背离。".into(),
+            implementation: "src/indicators/ (按概念: 估值/期权/宽度/股东/统计/基础等)".into(),
+        },
+        KnowledgeEntry {
+            id: "cr".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#L900-L940".into(),
+            
+            category: "动量-中国市场".into(),
+            name: "CR 能量指标".into(),
+            formula: "CR = (H-PrevMid)累加 / (PrevMid-L)累加 * 100".into(),
+            meaning: "A 股市场的多空能量对比。".into(),
+            signals: "CR > 300 过热; CR < 50 过冷。".into(),
+            pitfalls: "参数和窗口影响大。".into(),
+            implementation: "src/indicators/ (按概念: 估值/期权/宽度/股东/统计/基础等)".into(),
+        },
+        KnowledgeEntry {
+            id: "td_sequential".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#L980-L1020".into(),
+            
+            category: "动量-中国市场".into(),
+            name: "神奇九转 / TD 序列".into(),
+            formula: "连续 9 根收盘价高于/低于 4 根前的收盘".into(),
+            meaning: "Tom DeMark 的反转信号系统。".into(),
+            signals: "完成 9 计数 -> 反转概率高; 13 计数是强反转。".into(),
+            pitfalls: "在强趋势中反复出现但不反转。".into(),
+            implementation: "src/indicators/ (按概念: 估值/期权/宽度/股东/统计/基础等)".into(),
+        },
+    ]
+}
+
+// -----------------------------------------------------------------------------
+// 更多波动率 / 成交量
+// -----------------------------------------------------------------------------
+
+fn more_volatility_volume() -> Vec<KnowledgeEntry> {
+    vec![
+        KnowledgeEntry {
+            id: "anchored_vwap".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#L220-L260".into(),
+            
+            category: "成交量".into(),
+            name: "Anchored VWAP 锚定 VWAP".into(),
+            formula: "VWAP = sum(TP*V from anchor) / sum(V from anchor)".into(),
+            meaning: "从特定事件(财报/突破)开始的 VWAP。".into(),
+            signals: "机构成本线; 价格 > AVWAP -> 强势。".into(),
+            pitfalls: "锚点选择主观。".into(),
+            implementation: "src/indicators/ (按概念: 估值/期权/宽度/股东/统计/基础等)".into(),
+        },
+        KnowledgeEntry {
+            id: "cvd".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#L900-L940".into(),
+            
+            category: "成交量".into(),
+            name: "CVD 累计成交量差".into(),
+            formula: "CVD += 主动买入量 - 主动卖出量".into(),
+            meaning: "真实的资金流向(基于逐笔成交)。".into(),
+            signals: "CVD 涨 + 价 涨 -> 健康上涨; CVD 跌 + 价 涨 -> 虚假上涨。".into(),
+            pitfalls: "需要 Level 2 逐笔数据。".into(),
+            implementation: "CVD = 主买量 - 主卖量;需逐笔数据".into(),
+        },
+        KnowledgeEntry {
+            id: "volume_profile".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#L700-L740".into(),
+            
+            category: "成交量分布".into(),
+            name: "Volume Profile 成交量分布".into(),
+            formula: "横轴 = 价格, 纵轴 = 该价位的成交量".into(),
+            meaning: "揭示价格在哪里成交最多。".into(),
+            signals: "高成交量节点 = 强支撑/阻力(Value Area)。".into(),
+            pitfalls: "日内 vs 多日 Profile 含义不同。".into(),
+            implementation: "需逐笔成交数据;PDF 第十九章 1 节".into(),
+        },
+        KnowledgeEntry {
+            id: "tpo".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#L740-L780".into(),
+            
+            category: "成交量分布".into(),
+            name: "TPO / Market Profile".into(),
+            formula: "把时间划分成 30 分钟段, 标记每段的价格区间".into(),
+            meaning: "CME 期货市场发明的成交量分析工具。".into(),
+            signals: "价值区(70% 时间停留区)是支撑阻力。".into(),
+            pitfalls: "需要分笔数据; 需要专业软件。".into(),
+            implementation: "同 volume_profile;PDF 第十九章 2 节".into(),
+        },
+        KnowledgeEntry {
+            id: "footprint".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#L780-L820".into(),
+            
+            category: "成交量分布".into(),
+            name: "Footprint 足迹图".into(),
+            formula: "每个价位显示 主动买入量/主动卖出量".into(),
+            meaning: "最详细的订单流可视化。".into(),
+            signals: "可看到订单簿不平衡, 识别机构行为。".into(),
+            pitfalls: "数据量大; 需要专业终端(如 Sierra/ATAS)。".into(),
+            implementation: "需 Level 2 盘口数据;PDF 第十九章 5 节".into(),
+        },
+        KnowledgeEntry {
+            id: "chip_distribution".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#L820-L860".into(),
+            
+            category: "成交量分布".into(),
+            name: "筹码分布 / 持仓成本".into(),
+            formula: "统计不同价位的持仓数量".into(),
+            meaning: "A 股特色指标, 反映持仓人的成本。".into(),
+            signals: "90% 集中度 < 10% -> 高度集中, 有拉升可能。".into(),
+            pitfalls: "不同口径差异大。".into(),
+            implementation: "需逐笔持仓数据;A 股特色;不在本项目".into(),
+        },
+        KnowledgeEntry {
+            id: "ddx_ddy_ddz".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#L860-L900".into(),
+            
+            category: "成交量分布".into(),
+            name: "DDX/DDY/DDZ".into(),
+            formula: "DDX = 大单买入量; DDY = 买入单数差; DDZ = 大单强度".into(),
+            meaning: "同花顺/通达信的订单流指标。".into(),
+            signals: "DDX 持续 > 0 -> 主力流入。".into(),
+            pitfalls: "大单可被伪装。".into(),
+            implementation: "需 Level 2 逐笔数据;同花顺/通达信特色".into(),
+        },
+        KnowledgeEntry {
+            id: "klinger".into(),            summary: "Klinger 成交量振荡器。".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#L420-L460".into(),
+            
+            category: "成交量".into(),
+            name: "Klinger Oscillator".into(),
+            formula: "KO = EMA(Volume*sign(C-Cp), 34) - EMA(Volume*sign(C-Cp), 55)".into(),
+            meaning: "Stephen Klinger 的成交量振荡器。".into(),
+            signals: "穿越 0 线 + 价格确认 -> 信号。".into(),
+            pitfalls: "必须配合价格行为。".into(),
+            implementation: "src/indicators/ (按概念: 估值/期权/宽度/股东/统计/基础等)".into(),
+        },
+    ]
+}
+
+// -----------------------------------------------------------------------------
+// 市场宽度 扩展
+// -----------------------------------------------------------------------------
+
+fn more_breadth() -> Vec<KnowledgeEntry> {
+    vec![
+        KnowledgeEntry {
+            id: "new_high_low".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "市场宽度".into(),
+            name: "新高 / 新低".into(),
+            formula: "NH = 创 N 日新高的股票数; NL = 创 N 日新低的股票数".into(),
+            meaning: "市场广度的极端信号。".into(),
+            signals: "NH > NL 持续 -> 强势; 反向 -> 弱势。".into(),
+            pitfalls: "需要成分股数据。".into(),
+            implementation: "需市场全样本;PDF 第二十一章 5 节".into(),
+        },
+        KnowledgeEntry {
+            id: "tick".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "市场宽度".into(),
+            name: "TICK 腾落指数".into(),
+            formula: "TICK = 上涨股票数 - 下跌股票数".into(),
+            meaning: "NYSE 实时市场情绪指标。".into(),
+            signals: "TICK > +1000 极端超买; < -1000 极端超卖。".into(),
+            pitfalls: "需 NYSE TAQ 数据。".into(),
+            implementation: "需 NYSE TAQ 数据;PDF 第二十一章 11 节".into(),
+        },
+        KnowledgeEntry {
+            id: "breadth_thrust".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "市场宽度".into(),
+            name: "Breadth Thrust 广度冲量".into(),
+            formula: "10 日内 NYSE AD 净值从 -0.2 跳到 +0.6".into(),
+            meaning: "极度看涨信号, 常预示大牛市。".into(),
+            signals: "历史上一旦发生, 后市 1 年几乎都上涨。".into(),
+            pitfalls: "信号稀少, 需耐心等待。".into(),
+            implementation: "src/indicators/breadth.rs::breadth_thrust;10 日 AD 跳变".into(),
+        },
+        KnowledgeEntry {
+            id: "bullish_percent".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "市场宽度".into(),
+            name: "Bullish Percent Index 牛市百分比".into(),
+            formula: "BPI = 用点数图(P&F)看 N 个股票中看涨信号的比例".into(),
+            meaning: "Abe Cohen 提出的市场宽度指标。".into(),
+            signals: "BPI > 70 -> 过热; < 30 -> 过冷。".into(),
+            pitfalls: "P&F 信号定义有差异。".into(),
+            implementation: "需市场全样本;PDF 第二十一章 10 节".into(),
+        },
+        KnowledgeEntry {
+            id: "up_down_volume".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "市场宽度".into(),
+            name: "上涨量 / 下跌量".into(),
+            formula: "上涨股票的总成交量 vs 下跌股票的总成交量".into(),
+            meaning: "市场宽度的成交量层面。".into(),
+            signals: "上涨量持续 > 下跌量 -> 健康。".into(),
+            pitfalls: "需 NYSE TAQ 数据。".into(),
+            implementation: "需市场全样本;PDF 第二十一章 4 节".into(),
+        },
+    ]
+}
+
+// -----------------------------------------------------------------------------
+// 股东 / 股本指标
+// -----------------------------------------------------------------------------
+
+fn shareholder_metrics() -> Vec<KnowledgeEntry> {
+    vec![
+        KnowledgeEntry {
+            id: "institution_holding".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "股东".into(),
+            name: "机构持股比例".into(),
+            formula: "机构持股 / 总股本 * 100%".into(),
+            meaning: "机构投资者(基金、保险)的持仓占比。".into(),
+            signals: "机构持股 涨 -> 长期看好; 过高反而警惕(踩踏风险)。".into(),
+            pitfalls: "13F 报告有 45 天延迟。".into(),
+            implementation: "src/indicators/shareholder.rs;需 13F 数据".into(),
+        },
+        KnowledgeEntry {
+            id: "insider_trading".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "股东".into(),
+            name: "内部人交易".into(),
+            formula: "内部人买卖股票的方向和规模".into(),
+            meaning: "高管/董事的增减持记录。".into(),
+            signals: "持续增持 -> 高管看好; 持续减持 -> 警惕(尤其无合理解释)。".into(),
+            pitfalls: "内部人卖股有各种理由(买房/离婚), 不一定是坏事。".into(),
+            implementation: "SEC Form 4 数据;扩展".into(),
+        },
+        KnowledgeEntry {
+            id: "holder_concentration".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "股东".into(),
+            name: "股东户数 / 集中度".into(),
+            formula: "户均持股 = 总股本 / 股东户数".into(),
+            meaning: "反映筹码集中程度。".into(),
+            signals: "户均持股 涨 + 户数 跌 -> 主力吸筹; 反向 -> 派发。".into(),
+            pitfalls: "户均数据滞后(季报)。".into(),
+            implementation: "src/indicators/shareholder.rs::shares_per_holder".into(),
+        },
+        KnowledgeEntry {
+            id: "share_pledge".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "股东".into(),
+            name: "股权质押比例".into(),
+            formula: "质押股数 / 总股本 * 100%".into(),
+            meaning: "大股东的质押率(尤其 A 股重要)。".into(),
+            signals: "质押率 > 50% -> 平仓风险高; 控股股东高质押 -> 警惕。".into(),
+            pitfalls: "比例高不等于立即爆仓, 看质押率和平仓线。".into(),
+            implementation: "A 股特色;需中登数据".into(),
+        },
+        KnowledgeEntry {
+            id: "restricted_shares".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "股东".into(),
+            name: "解禁数量 / 解禁市值".into(),
+            formula: "N 日后解禁股数 * 当前价 = 解禁市值".into(),
+            meaning: "限售股解禁的供给压力。".into(),
+            signals: "巨额解禁前股价往往承压。".into(),
+            pitfalls: "实际减持 不等于 解禁; 股东可能不卖。".into(),
+            implementation: "src/indicators/shareholder.rs::unlock_market_value".into(),
+        },
+        KnowledgeEntry {
+            id: "buyback_rate".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "股东".into(),
+            name: "回购率 / 注销率".into(),
+            formula: "回购股数 / 总股本 * 100%".into(),
+            meaning: "公司回购股票的比例。".into(),
+            signals: "回购 + 注销 = 真实利好; 只是库存股则效果弱。".into(),
+            pitfalls: "回购计划 不等于 实际执行。".into(),
+            implementation: "src/indicators/shareholder.rs::buyback_ratio".into(),
+        },
+        KnowledgeEntry {
+            id: "short_interest".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "股东".into(),
+            name: "做空比例 Short Interest".into(),
+            formula: "Short Interest = 卖空股数 / 总流通股数 * 100%".into(),
+            meaning: "美股特有的看空力度指标。".into(),
+            signals: "SI > 20% -> 高度做空(可能轧空)。".into(),
+            pitfalls: "高 SI 不等于价格必涨; 轧空需要催化剂。".into(),
+            implementation: "美股特色;需 FINRA 报告".into(),
+        },
+        KnowledgeEntry {
+            id: "goodwill_ratio".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "财务质量".into(),
+            name: "商誉 / 无形资产占比".into(),
+            formula: "(商誉 + 无形资产) / 净资产 * 100%".into(),
+            meaning: "资产负债表中「虚」的部分。".into(),
+            signals: "占比 > 30% -> 警惕商誉减值风险。".into(),
+            pitfalls: "科技/医药公司无形资产天然高, 需行业对比。".into(),
+            implementation: "src/indicators/shareholder.rs::goodwill_to_equity".into(),
+        },
+        KnowledgeEntry {
+            id: "accrual_ratio".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "财务质量".into(),
+            name: "应计比率 Accrual Ratio".into(),
+            formula: "(净利润 - 经营性现金流) / 总资产".into(),
+            meaning: "Sloan 提出的盈利质量指标。".into(),
+            signals: "比率高 -> 利润是「算」出来的, 不是「赚」出来的。".into(),
+            pitfalls: "周期性行业需调整。".into(),
+            implementation: "src/indicators/fundamental.rs::accrual_ratio;Sloan 模型".into(),
+        },
+        KnowledgeEntry {
+            id: "beneish_m".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "财务质量".into(),
+            name: "Beneish M-Score".into(),
+            formula: "8 个财务比率的多元模型, > -1.78 警示".into(),
+            meaning: "财务造假识别模型。".into(),
+            signals: "M > -1.78 -> 高概率存在财务操纵。".into(),
+            pitfalls: "误报率约 25%; 仅作预警工具。".into(),
+            implementation: "src/indicators/shareholder.rs::beneish_m_score;8 因子".into(),
+        },
+    ]
+}
+
+// -----------------------------------------------------------------------------
+// 分析师 / 情绪指标
+// -----------------------------------------------------------------------------
+
+fn analyst_sentiment() -> Vec<KnowledgeEntry> {
+    vec![
+        KnowledgeEntry {
+            id: "consensus".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "分析师".into(),
+            name: "一致预期 Consensus".into(),
+            formula: "分析师对 EPS 的预测中位数".into(),
+            meaning: "市场对公司的平均预期。".into(),
+            signals: "实际 > 预期 -> 超预期 -> 通常上涨。".into(),
+            pitfalls: "分析师群体容易过度乐观/悲观。".into(),
+            implementation: "需分析师数据;PDF 第二十五章 1 节".into(),
+        },
+        KnowledgeEntry {
+            id: "target_upside".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "分析师".into(),
+            name: "目标价上涨空间".into(),
+            formula: "(目标价 - 现价) / 现价 * 100%".into(),
+            meaning: "分析师目标价隐含的上涨空间。".into(),
+            signals: "上涨空间 > 20% -> 普遍看好。".into(),
+            pitfalls: "目标价经常被下调; 滞后于基本面。".into(),
+            implementation: "需分析师目标价;PDF 第二十五章 2 节".into(),
+        },
+        KnowledgeEntry {
+            id: "forecast_dispersion".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "分析师".into(),
+            name: "预测分歧".into(),
+            formula: "EPS 预测的标准差 / 预测均值".into(),
+            meaning: "分析师意见的分散程度。".into(),
+            signals: "分歧大 -> 不确定; 分歧小 -> 共识。".into(),
+            pitfalls: "共识可能是错的(事前往往如此)。".into(),
+            implementation: "需分析师数据;PDF 第二十五章 3 节".into(),
+        },
+        KnowledgeEntry {
+            id: "earnings_surprise".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "分析师".into(),
+            name: "业绩超预期 Earnings Surprise".into(),
+            formula: "(实际 - 预期) / |预期|".into(),
+            meaning: "实际 vs 分析师预期的差异。".into(),
+            signals: "正 surprise > 5% -> 利好; 负 surprise > 5% -> 利空。".into(),
+            pitfalls: "已被股价消化(预期被下调时)。".into(),
+            implementation: "需公司财报;PDF 第二十章 4 节".into(),
+        },
+        KnowledgeEntry {
+            id: "revision".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "分析师".into(),
+            name: "预测上调/下调 Revision".into(),
+            formula: "上调分析师数 - 下调分析师数".into(),
+            meaning: "分析师群体的修正方向。".into(),
+            signals: "持续净上调 -> 看多; 持续净下调 -> 看空。".into(),
+            pitfalls: "滞后于管理层指引。".into(),
+            implementation: "需分析师预测修正;PDF 第二十五章 5 节".into(),
+        },
+    ]
+}
+
+// -----------------------------------------------------------------------------
+// 期权进阶
+// -----------------------------------------------------------------------------
+
+fn more_options() -> Vec<KnowledgeEntry> {
+    vec![
+        KnowledgeEntry {
+            id: "iv_term_structure".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "期权".into(),
+            name: "IV Term Structure 隐含波动率期限结构".into(),
+            formula: "不同到期日 IV 的曲线".into(),
+            meaning: "市场对未来不同时间波动的预期。".into(),
+            signals: "Contango(远月 IV 高) -> 预期事件发生; Backwardation -> 预期事件已发生。".into(),
+            pitfalls: "需同一 strike 不同到期日。".into(),
+            implementation: "src/indicators/options.rs::bs_price 对多到期日".into(),
+        },
+        KnowledgeEntry {
+            id: "skew".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "期权".into(),
+            name: "Volatility Skew 波动率偏斜".into(),
+            formula: "相同到期日, 不同 strike 的 IV 差异".into(),
+            meaning: "市场对下跌的保护需求。".into(),
+            signals: "Put 侧 IV 远高于 Call -> 尾部风险定价高。".into(),
+            pitfalls: "负 skew 不是「必跌」, 只是保险贵。".into(),
+            implementation: "src/indicators/options.rs::bs_price 对多 strike".into(),
+        },
+        KnowledgeEntry {
+            id: "put_call_ratio".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "期权".into(),
+            name: "Put/Call Ratio".into(),
+            formula: "PCR = Put 成交量 / Call 成交量".into(),
+            meaning: "市场情绪指标。".into(),
+            signals: "PCR > 1.2 -> 极度悲观(反向看多); < 0.7 -> 极度乐观(反向看空)。".into(),
+            pitfalls: "反向指标, 不能用作直接信号。".into(),
+            implementation: "src/indicators/options.rs::put_call_ratio;>1.2 极度悲观".into(),
+        },
+        KnowledgeEntry {
+            id: "max_pain".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "期权".into(),
+            name: "Max Pain 最大痛点".into(),
+            formula: "让期权卖方总亏损最小的到期日行权价".into(),
+            meaning: "期权卖方(做市商)希望价格收盘在这里。".into(),
+            signals: "到期日股价倾向于靠近 Max Pain。".into(),
+            pitfalls: "对散户短期无效, 只对到期日有意义。".into(),
+            implementation: "需多 strike OI;扩展".into(),
+        },
+        KnowledgeEntry {
+            id: "gex_dex".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
+            
+            category: "期权".into(),
+            name: "GEX / DEX Gamma/Delta Exposure".into(),
+            formula: "所有期权 Gamma * OI * 100 * spot 的总和".into(),
+            meaning: "做市商的对冲压力。".into(),
+            signals: "GEX > 0 -> 做市商抑制波动; GEX < 0 -> 放大波动。".into(),
+            pitfalls: "计算复杂, 数据要求高。".into(),
+            implementation: "需全市场 OI;扩展".into(),
+        },
+    ]
+}
+
+// -----------------------------------------------------------------------------
+// 行业专属(节选)
+// -----------------------------------------------------------------------------
+
+fn industry_metrics() -> Vec<KnowledgeEntry> {
+    vec![
+        KnowledgeEntry {
+            id: "industry_pe_compare".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/statistics.rs#L340-L380".into(),
+            
+            category: "行业".into(),
+            name: "行业 PE 分位数".into(),
+            formula: "(当前 PE - 行业历史最低 PE) / (行业历史最高 PE - 最低 PE)".into(),
+            meaning: "PE 在行业历史中的相对位置。".into(),
+            signals: "< 20% -> 历史低位(可能便宜); > 80% -> 高估。".into(),
+            pitfalls: "不同行业不能比较。".into(),
+            implementation: "需多公司财务数据;PDF 第十一章 1 节".into(),
+        },
+        KnowledgeEntry {
+            id: "bank_nim".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/statistics.rs#L420-L460".into(),
+            
+            category: "行业".into(),
+            name: "银行净息差 NIM".into(),
+            formula: "NIM = 利息净收入 / 生息资产".into(),
+            meaning: "银行业的核心盈利指标。".into(),
+            signals: "NIM 涨 -> 银行盈利改善。".into(),
+            pitfalls: "受利率周期影响大。".into(),
+            implementation: "银行行业;PDF 第十一章 3 节".into(),
+        },
+    ]
+}
+
+// -----------------------------------------------------------------------------
+// 风险-绩效 进阶
+// -----------------------------------------------------------------------------
+
+fn more_risk_metrics() -> Vec<KnowledgeEntry> {
+    vec![
+        KnowledgeEntry {
+            id: "information_ratio".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#L220-L250".into(),
+            
+            category: "风险-绩效".into(),
+            name: "Information Ratio 信息比率".into(),
+            formula: "IR = (策略收益 - 基准收益) / Tracking Error".into(),
+            meaning: "主动管理能力的核心指标。".into(),
+            signals: "IR > 0.5 优秀; > 1 顶级。".into(),
+            pitfalls: "必须先有明确基准。".into(),
+            implementation: "src/metrics.rs::compute_metrics 包含".into(),
+        },
+        KnowledgeEntry {
+            id: "treynor".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#L250-L280".into(),
+            
+            category: "风险-绩效".into(),
+            name: "Treynor Ratio 特雷诺比率".into(),
+            formula: "Treynor = (策略收益 - 无风险) / Beta".into(),
+            meaning: "用 Beta 衡量系统风险的夏普变种。".into(),
+            signals: "和 Sharpe 一起用。".into(),
+            pitfalls: "Beta 本身不稳定。".into(),
+            implementation: "src/metrics.rs::compute_metrics 包含".into(),
+        },
+        KnowledgeEntry {
+            id: "tracking_error".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#L280-L310".into(),
+            
+            category: "风险-绩效".into(),
+            name: "Tracking Error 跟踪误差".into(),
+            formula: "TE = std(策略收益 - 基准收益)".into(),
+            meaning: "策略偏离基准的波动。".into(),
+            signals: "TE 低 -> 指数化策略; TE 高 -> 主动策略。".into(),
+            pitfalls: "TE 高不等于差, 要看 IR。".into(),
+            implementation: "src/metrics.rs::compute_metrics 包含".into(),
+        },
+        KnowledgeEntry {
+            id: "capture_ratio".into(),            summary: "".into(),
+            example: "".into(),
+            related: vec![],
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#L310-L340".into(),
+            
+            category: "风险-绩效".into(),
+            name: "上行/下行捕获率".into(),
+            formula: "上行 = 基准上涨时策略涨幅 / 基准涨幅; 下行 = 基准下跌时策略跌幅 / 基准跌幅".into(),
+            meaning: "策略在不同市场环境下的表现。".into(),
+            signals: "上行 > 100% + 下行 < 100% -> 完美策略(极罕见)。".into(),
+            pitfalls: "过于完美的捕获率常常是过拟合。".into(),
+            implementation: "src/metrics.rs::compute_metrics 包含".into(),
+        },
+    ]
+}

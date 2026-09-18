@@ -1,0 +1,857 @@
+/* AXIOM 样式 —— 简洁、克制、专业 */
+
+/* ============================================================
+   设计 token
+   ============================================================ */
+:root {
+    --bg:           #0d1117;
+    --bg-elev:      #161b22;
+    --bg-card:      #1c2128;
+    --bg-input:     #0d1117;
+    --border:       #30363d;
+    --border-soft:  #21262d;
+    --text:         #e6edf3;
+    --text-dim:     #7d8590;
+    --text-faint:   #484f58;
+    --accent:       #d29922;       /* 暗金,克制 */
+    --accent-2:     #58a6ff;
+    --green:        #3fb950;
+    --red:          #f85149;
+    --border-accent:#d29922;
+    --shadow:       0 4px 24px rgba(0,0,0,0.4);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.55;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+/* ============================================================
+   顶部
+   ============================================================ */
+header {
+    background: var(--bg-elev);
+    padding: 1.25rem 2rem;
+    border-bottom: 1px solid var(--border);
+}
+header h1 {
+    font-family: var(--serif);
+    font-size: 1.4rem;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: 0.05em;
+}
+header .subtitle { display: none; }
+
+/* ============================================================
+   标签栏
+   ============================================================ */
+nav.tabs {
+    background: var(--bg-elev);
+    padding: 0 2rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 0;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+button.tab {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    padding: 0.85rem 1.25rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+}
+button.tab:hover { color: var(--text); }
+button.tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+
+/* ============================================================
+   主体
+   ============================================================ */
+main {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+/* ============================================================
+   自定义下拉框 (关键! 永远不溢出)
+   ============================================================ */
+.dropdown {
+    position: relative;
+    display: inline-block;
+    min-width: 110px;
+}
+.dropdown-trigger {
+    padding: 0.4rem 1.8rem 0.4rem 0.7rem;
+    background: var(--bg-input);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    min-width: 110px;
+    text-align: left;
+    font-size: 0.875rem;
+    font-family: inherit;
+    position: relative;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 240px;
+}
+.dropdown-trigger:hover { border-color: var(--accent); }
+.dropdown-trigger::after {
+    content: '';
+    position: absolute;
+    right: 0.65rem;
+    top: 50%;
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid var(--text-dim);
+    transform: translateY(-50%);
+}
+.dropdown.open .dropdown-trigger {
+    border-color: var(--accent);
+}
+.dropdown.open .dropdown-trigger::after {
+    border-top: 0;
+    border-bottom: 5px solid var(--accent);
+}
+
+.dropdown-menu {
+    position: absolute;
+    top: calc(100% + 3px);
+    left: 0;
+    min-width: 100%;
+    max-height: 360px;
+    background: var(--bg-card);
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    z-index: 9999;     /* 高于一切,不会被任何父元素遮挡 */
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.dropdown:not(.open) .dropdown-menu { display: none; }
+
+.dropdown-search {
+    width: 100%;
+    padding: 0.5rem 0.7rem;
+    background: var(--bg-elev);
+    color: var(--text);
+    border: none;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+    outline: none;
+    font-family: inherit;
+}
+.dropdown-search:focus { border-bottom-color: var(--accent); }
+
+.dropdown-options {
+    overflow-y: auto;
+    max-height: 320px;
+}
+
+.dropdown-option {
+    padding: 0.5rem 0.7rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+    border-left: 2px solid transparent;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.dropdown-option:hover {
+    background: var(--bg-elev);
+    color: var(--accent);
+    border-left-color: var(--accent);
+}
+.dropdown-option.selected {
+    background: var(--bg-elev);
+    color: var(--accent);
+    border-left-color: var(--accent);
+    font-weight: 500;
+}
+.dropdown-empty {
+    padding: 0.7rem;
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    text-align: center;
+}
+.dropdown-meta {
+    padding: 0.3rem 0.7rem;
+    color: var(--text-faint);
+    font-size: 0.75rem;
+    background: var(--bg-elev);
+    border-top: 1px solid var(--border-soft);
+}
+
+/* ============================================================
+   控件区 (页面内的表单)
+   ============================================================ */
+.controls {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.85rem 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem 1rem;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    position: relative;       /* 让内部 dropdown 的 menu 能浮在上面 */
+    z-index: 1;
+}
+.controls > label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 500;
+}
+.controls input[type="text"],
+.controls input[type="number"] {
+    background: var(--bg-input);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.875rem;
+    font-family: inherit;
+    min-width: 100px;
+}
+.controls input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+.controls button {
+    background: var(--accent);
+    color: #0d1117;
+    border: none;
+    padding: 0.45rem 1.1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.85rem;
+    letter-spacing: 0.02em;
+    align-self: flex-end;
+}
+.controls button:hover { background: #e0b030; }
+.controls button:not(.primary) {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    font-weight: 400;
+}
+.controls button:not(.primary):hover {
+    color: var(--text);
+    border-color: var(--accent);
+}
+
+/* ============================================================
+   标签页内容
+   ============================================================ */
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ============================================================
+   标题 / 段落
+   ============================================================ */
+h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 1.35rem;
+    color: var(--text);
+    margin-bottom: 0.5rem;
+    letter-spacing: 0.01em;
+}
+h3 {
+    font-weight: 500;
+    font-size: 1rem;
+    color: var(--text);
+    margin: 1.25rem 0 0.6rem;
+    letter-spacing: 0.01em;
+}
+h4 {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--accent);
+    margin-bottom: 0.3rem;
+}
+p.lead {
+    color: var(--text-dim);
+    font-size: 0.875rem;
+    margin-bottom: 1.5rem;
+    max-width: 720px;
+    line-height: 1.7;
+}
+code {
+    background: var(--bg-input);
+    padding: 0.1em 0.4em;
+    border-radius: 3px;
+    font-family: var(--mono);
+    font-size: 0.85em;
+    color: var(--accent);
+    border: 1px solid var(--border-soft);
+}
+pre {
+    background: var(--bg-input);
+    padding: 0.9rem 1rem;
+    border-radius: 6px;
+    border: 1px solid var(--border-soft);
+    overflow-x: auto;
+    margin: 0.7rem 0;
+    font-size: 0.8rem;
+    line-height: 1.55;
+}
+pre code { background: none; padding: 0; border: none; color: var(--text); }
+
+/* ============================================================
+   图表
+   ============================================================ */
+.chart {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.7rem;
+    margin-bottom: 1.5rem;
+    min-height: 320px;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
+    position: relative;
+}
+.chart .plot-container,
+.chart .svg-container {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+/* ============================================================
+   数据摘要表格
+   ============================================================ */
+.summary {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0;
+    font-size: 0.875rem;
+}
+.summary table { width: 100%; border-collapse: collapse; }
+.summary th, .summary td { padding: 0.4rem 0.6rem; text-align: left; }
+.summary th {
+    color: var(--text-dim);
+    font-weight: 500;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+/* ============================================================
+   指标卡 (回测结果)
+   ============================================================ */
+.metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 0.6rem;
+    margin-bottom: 1.5rem;
+}
+.metric {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.7rem 0.9rem;
+}
+.metric .label {
+    color: var(--text-dim);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.3rem;
+}
+.metric .value {
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 1.1rem;
+    font-weight: 500;
+}
+.metric .value.positive { color: var(--green); }
+.metric .value.negative { color: var(--red); }
+
+/* ============================================================
+   模拟盘统计
+   ============================================================ */
+.paper-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 0.6rem;
+    margin-bottom: 1.5rem;
+}
+.stat {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.7rem 0.9rem;
+}
+.stat .label {
+    color: var(--text-dim);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+.stat .value {
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 1rem;
+    margin-top: 0.3rem;
+    font-weight: 500;
+}
+
+.status {
+    padding: 0.3rem 0.8rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+}
+
+/* ============================================================
+   交易列表 / 日志
+   ============================================================ */
+.trades-list {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin-top: 1rem;
+}
+.trades-list summary {
+    cursor: pointer;
+    color: var(--accent);
+    font-weight: 500;
+    font-size: 0.9rem;
+    user-select: none;
+}
+.trades-list table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.7rem;
+    font-size: 0.85rem;
+}
+.trades-list th, .trades-list td {
+    padding: 0.4rem 0.6rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-soft);
+}
+.trades-list th {
+    color: var(--text-dim);
+    font-weight: 500;
+    background: var(--bg-elev);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+.trades-list .pos { color: var(--green); }
+.trades-list .neg { color: var(--red); }
+
+.log {
+    max-height: 320px;
+    overflow-y: auto;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.5rem 0.6rem;
+    margin-top: 0.7rem;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    line-height: 1.6;
+}
+.log .entry {
+    padding: 0.15rem 0.3rem;
+    display: flex;
+    gap: 0.5rem;
+    border-bottom: 1px solid var(--border-soft);
+}
+.log .entry .ts { color: var(--text-dim); white-space: nowrap; }
+.log .entry .lvl { font-weight: 600; min-width: 50px; }
+.log .entry .lvl.INFO { color: var(--accent-2); }
+.log .entry .lvl.WARN { color: var(--accent); }
+.log .entry .lvl.ERROR { color: var(--red); }
+.log .entry .lvl.FILL { color: var(--green); }
+.log .entry .msg { color: var(--text); }
+
+/* ============================================================
+   学习中心子导航
+   ============================================================ */
+.learn-subnav {
+    display: flex;
+    gap: 0.5rem;
+    margin: 1rem 0 1.5rem 0;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+.learn-sub {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    padding: 0.45rem 0.9rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-family: inherit;
+}
+.learn-sub:hover { color: var(--text); border-color: var(--accent); }
+.learn-sub.active {
+    background: var(--accent);
+    color: #0d1117;
+    border-color: var(--accent);
+    font-weight: 500;
+}
+.learn-pane { display: none; }
+.learn-pane.active { display: block; }
+
+/* ============================================================
+   知识库
+   ============================================================ */
+.kb-cat {
+    background: var(--bg-elev);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    padding: 0.35rem 0.75rem;
+    border-radius: 14px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-family: inherit;
+}
+.kb-cat:hover { color: var(--text); border-color: var(--accent); }
+.kb-cat.active {
+    background: var(--accent);
+    color: #0d1117;
+    border-color: var(--accent);
+}
+.kb-entry {
+    background: var(--bg-card);
+    border: 1px solid var(--border-soft);
+    border-radius: 4px;
+    padding: 0.6rem 0.9rem;
+    margin-bottom: 0.4rem;
+}
+.kb-entry summary {
+    cursor: pointer;
+    color: var(--text);
+    user-select: none;
+    font-size: 0.9rem;
+}
+.kb-entry summary:hover { color: var(--accent); }
+.kb-body {
+    margin-top: 0.6rem;
+    padding-top: 0.6rem;
+    border-top: 1px solid var(--border-soft);
+    font-size: 0.85rem;
+    line-height: 1.75;
+    color: var(--text);
+}
+.kb-body div { margin-bottom: 0.35rem; }
+.kb-body code { font-size: 0.78rem; }
+.kb-section {
+    margin: 0.7rem 0;
+    padding-left: 0.85rem;
+    border-left: 2px solid var(--border);
+}
+.kb-label {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.2rem;
+    font-weight: 600;
+}
+.kb-formula code {
+    font-size: 0.82rem;
+    background: var(--bg-elev);
+    padding: 0.3rem 0.5rem;
+    display: inline-block;
+    border: 1px solid var(--border-soft);
+}
+.kb-code-link {
+    display: inline-block;
+    color: var(--accent);
+    text-decoration: none;
+    padding: 0.3rem 0.6rem;
+    background: var(--bg-elev);
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+}
+.kb-code-link:hover {
+    background: var(--accent);
+    color: var(--bg);
+}
+
+/* ============================================================
+   卡片网格
+   ============================================================ */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 0.8rem;
+    margin-top: 1rem;
+}
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.2rem;
+}
+.card:hover { border-color: var(--border); }
+.card h3 {
+    font-size: 0.95rem;
+    margin-bottom: 0.4rem;
+    color: var(--accent);
+}
+.card p {
+    color: var(--text-dim);
+    font-size: 0.82rem;
+    line-height: 1.6;
+}
+.card code {
+    display: block;
+    margin-top: 0.4rem;
+    font-size: 0.72rem;
+    word-break: break-all;
+    color: var(--text-dim);
+}
+
+/* ============================================================
+   学习路径
+   ============================================================ */
+.learn-path {
+    list-style: none;
+    counter-reset: step;
+    padding: 0;
+}
+.learn-path > li {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem 1rem 3.5rem;
+    margin-bottom: 0.7rem;
+    position: relative;
+}
+.learn-path > li::before {
+    counter-increment: step;
+    content: counter(step);
+    position: absolute;
+    left: 1rem;
+    top: 1rem;
+    width: 1.7rem;
+    height: 1.7rem;
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+.learn-path > li p { color: var(--text-dim); margin-top: 0.3rem; line-height: 1.7; }
+
+/* 嵌套列表不编号,不画圈 */
+.learn-path ul { counter-reset: substep; list-style: none; padding-left: 0; margin-top: 0.4rem; }
+.learn-path ul li,
+.learn-path ol li {
+    background: transparent;
+    border: none;
+    padding: 0.25rem 0 0.25rem 1rem;
+    margin: 0;
+    position: static;
+    color: var(--text-dim);
+    line-height: 1.7;
+}
+.learn-path ul li::before,
+.learn-path ol li::before { display: none; }
+
+/* ============================================================
+   策略对比表
+   ============================================================ */
+#cmp-table {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+    overflow-x: auto;
+}
+#cmp-table table { width: 100%; border-collapse: collapse; }
+#cmp-table th, #cmp-table td {
+    padding: 0.55rem 0.7rem;
+    text-align: right;
+    border-bottom: 1px solid var(--border-soft);
+    font-family: var(--mono);
+    font-size: 0.85rem;
+}
+#cmp-table th:first-child, #cmp-table td:first-child {
+    text-align: left;
+    font-family: inherit;
+}
+#cmp-table th {
+    color: var(--text-dim);
+    font-weight: 500;
+    background: var(--bg-elev);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+#cmp-table tr:hover { background: var(--bg-elev); }
+
+/* ============================================================
+   策略选择网格 (compare 页)
+   ============================================================ */
+.strategy-pool {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+}
+.strategy-pool h4 { margin-bottom: 0.6rem; }
+.strategy-checks {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0.4rem;
+}
+.strategy-check {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.55rem;
+    border: 1px solid var(--border-soft);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    user-select: none;
+}
+.strategy-check:hover { border-color: var(--accent); }
+.strategy-check input { accent-color: var(--accent); }
+.strategy-check.checked {
+    background: var(--bg-elev);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+.strategy-check.custom {
+    border-style: dashed;
+    color: var(--text-dim);
+}
+.strategy-pool-actions {
+    margin-top: 0.6rem;
+    display: flex;
+    gap: 0.5rem;
+}
+.strategy-pool-actions button {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    padding: 0.3rem 0.7rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-family: inherit;
+}
+.strategy-pool-actions button:hover { color: var(--text); border-color: var(--accent); }
+
+/* 自定义策略表单 */
+.custom-strategy-form {
+    background: var(--bg-elev);
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    padding: 0.85rem 1rem;
+    margin-top: 0.6rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+}
+.custom-strategy-form label {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+.custom-strategy-form input,
+.custom-strategy-form select {
+    background: var(--bg-input);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.85rem;
+    font-family: inherit;
+    margin-top: 0.2rem;
+}
+.custom-strategy-form .form-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+.custom-strategy-form .form-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.4rem;
+}
+.custom-strategy-form button {
+    background: var(--accent);
+    color: #0d1117;
+    border: none;
+    padding: 0.4rem 0.9rem;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+/* ============================================================
+   底部
+   ============================================================ */
+footer {
+    text-align: center;
+    padding: 1.5rem;
+    color: var(--text-faint);
+    font-size: 0.78rem;
+    border-top: 1px solid var(--border-soft);
+    margin-top: 3rem;
+}
