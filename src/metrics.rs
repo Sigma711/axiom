@@ -13,10 +13,13 @@ pub fn compute_metrics(result: &BacktestResult) -> Value {
 
     let initial = eq[0].cash + eq[0].position_value;
     let final_equity = eq.last().unwrap().equity;
-    let total_return = if initial > 0.0 { final_equity / initial - 1.0 } else { 0.0 };
+    let total_return = if initial > 0.0 {
+        final_equity / initial - 1.0
+    } else {
+        0.0
+    };
 
-    let days = ((eq.last().unwrap().timestamp - eq[0].timestamp).num_seconds() as f64
-        / 86_400.0)
+    let days = ((eq.last().unwrap().timestamp - eq[0].timestamp).num_seconds() as f64 / 86_400.0)
         .max(1e-9);
     let annualized = if initial > 0.0 {
         (final_equity / initial).powf(365.0 / days) - 1.0
@@ -33,17 +36,37 @@ pub fn compute_metrics(result: &BacktestResult) -> Value {
     let n_trades = closed.len();
 
     let (win_rate, avg_win, avg_loss, profit_factor, avg_pnl_pct) = if n_trades > 0 {
-        let wins: Vec<f64> = closed.iter().map(|t| t.pnl()).filter(|p| *p > 0.0).collect();
-        let losses: Vec<f64> = closed.iter().map(|t| t.pnl()).filter(|p| *p <= 0.0).collect();
-        let win_rate = if n_trades > 0 { wins.len() as f64 / n_trades as f64 } else { 0.0 };
-        let avg_win = if !wins.is_empty() { wins.iter().sum::<f64>() / wins.len() as f64 } else { 0.0 };
+        let wins: Vec<f64> = closed
+            .iter()
+            .map(|t| t.pnl())
+            .filter(|p| *p > 0.0)
+            .collect();
+        let losses: Vec<f64> = closed
+            .iter()
+            .map(|t| t.pnl())
+            .filter(|p| *p <= 0.0)
+            .collect();
+        let win_rate = if n_trades > 0 {
+            wins.len() as f64 / n_trades as f64
+        } else {
+            0.0
+        };
+        let avg_win = if !wins.is_empty() {
+            wins.iter().sum::<f64>() / wins.len() as f64
+        } else {
+            0.0
+        };
         let avg_loss = if !losses.is_empty() {
             losses.iter().sum::<f64>() / losses.len() as f64
         } else {
             0.0
         };
         let profit_factor = if losses.is_empty() {
-            if wins.is_empty() { 0.0 } else { f64::INFINITY }
+            if wins.is_empty() {
+                0.0
+            } else {
+                f64::INFINITY
+            }
         } else {
             let loss_sum = losses.iter().sum::<f64>();
             if loss_sum == 0.0 {
@@ -129,8 +152,12 @@ fn max_drawdown(eq: &[EquityPoint]) -> (f64, f64) {
         if peak > 0.0 {
             let dd = peak - p.equity;
             let dd_pct = dd / peak;
-            if dd > max_dd { max_dd = dd; }
-            if dd_pct > max_dd_pct { max_dd_pct = dd_pct; }
+            if dd > max_dd {
+                max_dd = dd;
+            }
+            if dd_pct > max_dd_pct {
+                max_dd_pct = dd_pct;
+            }
         }
     }
     (max_dd, max_dd_pct)
@@ -153,23 +180,17 @@ fn annualized_volatility(eq: &[EquityPoint], periods_per_year: f64) -> f64 {
         return 0.0;
     }
     let mean = rets.iter().sum::<f64>() / rets.len() as f64;
-    let var = rets.iter().map(|r| (r - mean).powi(2)).sum::<f64>()
-        / (rets.len() - 1) as f64;
+    let var = rets.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / (rets.len() - 1) as f64;
     var.sqrt() * periods_per_year.sqrt()
 }
 
-fn sharpe_ratio(
-    eq: &[EquityPoint],
-    periods_per_year: f64,
-    risk_free: f64,
-) -> f64 {
+fn sharpe_ratio(eq: &[EquityPoint], periods_per_year: f64, risk_free: f64) -> f64 {
     let rets = returns(eq);
     if rets.len() < 2 {
         return 0.0;
     }
     let mean = rets.iter().sum::<f64>() / rets.len() as f64;
-    let var = rets.iter().map(|r| (r - mean).powi(2)).sum::<f64>()
-        / (rets.len() - 1) as f64;
+    let var = rets.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / (rets.len() - 1) as f64;
     let std = var.sqrt();
     if std == 0.0 {
         return 0.0;
@@ -180,19 +201,27 @@ fn sharpe_ratio(
 
 /// Sortino Ratio —— 只用下行波动率的分母
 pub fn sortino_ratio(rets: &[f64], periods_per_year: f64) -> f64 {
-    if rets.len() < 2 { return 0.0; }
+    if rets.len() < 2 {
+        return 0.0;
+    }
     let mean = rets.iter().sum::<f64>() / rets.len() as f64;
     let downside: Vec<f64> = rets.iter().filter(|&&r| r < 0.0).copied().collect();
-    if downside.is_empty() { return f64::INFINITY; }
+    if downside.is_empty() {
+        return f64::INFINITY;
+    }
     let down_var = downside.iter().map(|r| r.powi(2)).sum::<f64>() / downside.len() as f64;
     let down_std = down_var.sqrt();
-    if down_std == 0.0 { return 0.0; }
+    if down_std == 0.0 {
+        return 0.0;
+    }
     mean / down_std * periods_per_year.sqrt()
 }
 
 /// Calmar Ratio = CAGR / MaxDD
 pub fn calmar_ratio(cagr: f64, max_dd_pct: f64) -> f64 {
-    if max_dd_pct == 0.0 { return 0.0; }
+    if max_dd_pct == 0.0 {
+        return 0.0;
+    }
     cagr / max_dd_pct
 }
 
@@ -200,11 +229,13 @@ pub fn calmar_ratio(cagr: f64, max_dd_pct: f64) -> f64 {
 /// rets 是收益率序列,confidence 是置信度(如 0.95)
 /// 返回 (VaR, CVaR) 都是正数(表示损失金额占初始的比例)
 pub fn var_cvar(rets: &[f64], confidence: f64) -> (f64, f64) {
-    if rets.is_empty() { return (0.0, 0.0); }
+    if rets.is_empty() {
+        return (0.0, 0.0);
+    }
     let mut sorted: Vec<f64> = rets.iter().copied().collect();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     let idx = ((1.0 - confidence) * sorted.len() as f64).floor() as usize;
-    let var = -sorted[idx.min(sorted.len() - 1)];  // 负的负数 = 正数损失
+    let var = -sorted[idx.min(sorted.len() - 1)]; // 负的负数 = 正数损失
     let tail: Vec<f64> = sorted.iter().take(idx.max(1)).copied().collect();
     let cvar = if !tail.is_empty() {
         -tail.iter().sum::<f64>() / tail.len() as f64

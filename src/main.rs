@@ -13,17 +13,15 @@ use tracing_subscriber::EnvFilter;
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("info")),
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
         )
         .init();
 
     // 加载配置(config.yaml 不存在就用默认)
-    let config = load_config(&PathBuf::from("config.yaml"))
-        .unwrap_or_else(|_| {
-            tracing::warn!("未找到 config.yaml,使用默认配置");
-            default_config()
-        });
+    let config = load_config(&PathBuf::from("config.yaml")).unwrap_or_else(|_| {
+        tracing::warn!("未找到 config.yaml,使用默认配置");
+        default_config()
+    });
 
     let data_cache_dir = PathBuf::from("data");
     std::fs::create_dir_all(&data_cache_dir).ok();

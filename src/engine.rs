@@ -54,15 +54,14 @@ pub struct BacktestEngine {
 
 impl BacktestEngine {
     pub fn new(config: EngineConfig, risk_config: RiskConfig) -> Self {
-        Self { config, risk_config }
+        Self {
+            config,
+            risk_config,
+        }
     }
 
     /// 在给定的 K 线序列上跑策略,产出 BacktestResult。
-    pub fn run(
-        &self,
-        strategy: &mut dyn Strategy,
-        bars: &[Bar],
-    ) -> BacktestResult {
+    pub fn run(&self, strategy: &mut dyn Strategy, bars: &[Bar]) -> BacktestResult {
         strategy.reset();
 
         let broker = SimulatedBroker::new(
@@ -92,7 +91,9 @@ impl BacktestEngine {
 
         for (i, bar) in bars.iter().enumerate() {
             // 1. 更新市场价
-            portfolio.broker.set_market_price(&self.config.symbol, bar.close);
+            portfolio
+                .broker
+                .set_market_price(&self.config.symbol, bar.close);
 
             // 2. 策略产生信号
             let signal = strategy.on_bar(bar);
@@ -118,12 +119,7 @@ impl BacktestEngine {
                 }
             } else if signal.side != Side::Hold {
                 // 3b. 按策略信号决定
-                order = portfolio.on_signal(
-                    signal.side,
-                    bar.close,
-                    bar.timestamp,
-                    signal.strength,
-                );
+                order = portfolio.on_signal(signal.side, bar.close, bar.timestamp, signal.strength);
             }
 
             // 4. 风控检查
@@ -144,7 +140,9 @@ impl BacktestEngine {
             }
 
             // 6. 快照净值
-            let price = portfolio.broker.get_market_price(&self.config.symbol)
+            let price = portfolio
+                .broker
+                .get_market_price(&self.config.symbol)
                 .unwrap_or(bar.close);
             let pos = portfolio.position();
             equity_curve.push(EquityPoint {
@@ -188,7 +186,9 @@ impl MultiStrategyResult {
     pub fn best_by(&self, metric: &str) -> Option<(String, &BacktestResult)> {
         let mut best: Option<(String, f64, &BacktestResult)> = None;
         for (name, result) in &self.results {
-            let v = result.metrics.get(metric)
+            let v = result
+                .metrics
+                .get(metric)
                 .and_then(|v| v.as_f64())
                 .unwrap_or(f64::NEG_INFINITY);
             match &best {

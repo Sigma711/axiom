@@ -78,8 +78,8 @@ impl SimulatedBroker {
             OrderType::Market => {
                 let slip = mid * self.config.slippage_rate;
                 Some(match order.side {
-                    Side::Buy => mid + slip,   // 买得更贵一点
-                    Side::Sell => mid - slip,  // 卖得更便宜一点
+                    Side::Buy => mid + slip,  // 买得更贵一点
+                    Side::Sell => mid - slip, // 卖得更便宜一点
                     Side::Hold => return None,
                 })
             }
@@ -95,10 +95,14 @@ impl SimulatedBroker {
     }
 
     /// 把成交应用到账户上(更新现金和持仓)
-    fn apply_fill(&mut self, symbol: &str, side: Side, size: f64,
-                  price: f64, commission: f64) {
-        let pos = self.positions.entry(symbol.to_string())
-            .or_insert_with(|| Position { symbol: symbol.to_string(), ..Default::default() });
+    fn apply_fill(&mut self, symbol: &str, side: Side, size: f64, price: f64, commission: f64) {
+        let pos = self
+            .positions
+            .entry(symbol.to_string())
+            .or_insert_with(|| Position {
+                symbol: symbol.to_string(),
+                ..Default::default()
+            });
         match side {
             Side::Buy => {
                 self.cash -= price * size + commission;
@@ -159,8 +163,7 @@ impl Broker for SimulatedBroker {
             Side::Buy => {
                 let cost = fill_price * order.size * (1.0 + self.config.commission_rate);
                 if cost > self.cash + 1e-9 {
-                    self.log(order.timestamp,
-                             format!("资金不足,订单 {} 失败", order.id));
+                    self.log(order.timestamp, format!("资金不足,订单 {} 失败", order.id));
                     return Fill {
                         order_id: order.id,
                         timestamp: order.timestamp,
@@ -175,10 +178,13 @@ impl Broker for SimulatedBroker {
             Side::Sell => {
                 let pos = self.get_position(&order.symbol);
                 if pos.size < order.size && !self.config.allow_short {
-                    self.log(order.timestamp, format!(
-                        "持仓不足,订单 {} 失败(想要卖 {},只有 {})",
-                        order.id, order.size, pos.size
-                    ));
+                    self.log(
+                        order.timestamp,
+                        format!(
+                            "持仓不足,订单 {} 失败(想要卖 {},只有 {})",
+                            order.id, order.size, pos.size
+                        ),
+                    );
                     return Fill {
                         order_id: order.id,
                         timestamp: order.timestamp,
@@ -204,7 +210,13 @@ impl Broker for SimulatedBroker {
         }
 
         let commission = fill_price * order.size * self.config.commission_rate;
-        self.apply_fill(&order.symbol, order.side, order.size, fill_price, commission);
+        self.apply_fill(
+            &order.symbol,
+            order.side,
+            order.size,
+            fill_price,
+            commission,
+        );
 
         Fill {
             order_id: order.id,
@@ -218,12 +230,15 @@ impl Broker for SimulatedBroker {
     }
 
     fn get_position(&self, symbol: &str) -> Position {
-        self.positions.get(symbol).cloned().unwrap_or_else(|| Position {
-            symbol: symbol.to_string(),
-            size: 0.0,
-            avg_entry_price: 0.0,
-            realized_pnl: 0.0,
-        })
+        self.positions
+            .get(symbol)
+            .cloned()
+            .unwrap_or_else(|| Position {
+                symbol: symbol.to_string(),
+                size: 0.0,
+                avg_entry_price: 0.0,
+                realized_pnl: 0.0,
+            })
     }
 
     fn get_cash(&self) -> f64 {

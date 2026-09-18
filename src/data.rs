@@ -118,9 +118,12 @@ impl DataFeed for SyntheticFeed {
 
     fn stream_live(&self, symbol: &str) -> Result<Vec<Bar>> {
         let now = Utc::now()
-            .with_minute(0).unwrap()
-            .with_second(0).unwrap()
-            .with_nanosecond(0).unwrap();
+            .with_minute(0)
+            .unwrap()
+            .with_second(0)
+            .unwrap()
+            .with_nanosecond(0)
+            .unwrap();
         self.fetch_historical(symbol, now, 1)
     }
 }
@@ -147,15 +150,18 @@ impl CsvFeed {
 
     pub fn save(&self, symbol: &str, timeframe: &str, bars: &[Bar]) -> Result<PathBuf> {
         let path = self.path(symbol, timeframe);
-        let mut f = File::create(&path)
-            .with_context(|| format!("创建文件失败: {:?}", path))?;
+        let mut f = File::create(&path).with_context(|| format!("创建文件失败: {:?}", path))?;
         writeln!(f, "timestamp,open,high,low,close,volume")?;
         for b in bars {
             writeln!(
                 f,
                 "{},{},{},{},{},{}",
                 b.timestamp.to_rfc3339(),
-                b.open, b.high, b.low, b.close, b.volume
+                b.open,
+                b.high,
+                b.low,
+                b.close,
+                b.volume
             )?;
         }
         Ok(path)
@@ -163,8 +169,7 @@ impl CsvFeed {
 
     pub fn load(&self, symbol: &str, timeframe: &str) -> Result<Vec<Bar>> {
         let path = self.path(symbol, timeframe);
-        let f = File::open(&path)
-            .with_context(|| format!("打开文件失败: {:?}", path))?;
+        let f = File::open(&path).with_context(|| format!("打开文件失败: {:?}", path))?;
         let reader = BufReader::new(f);
         let mut rdr = csv::ReaderBuilder::new()
             .has_headers(true)
@@ -172,8 +177,7 @@ impl CsvFeed {
         let mut bars = Vec::new();
         for result in rdr.records() {
             let record = result?;
-            let ts = DateTime::parse_from_rfc3339(&record[0])?
-                .with_timezone(&Utc);
+            let ts = DateTime::parse_from_rfc3339(&record[0])?.with_timezone(&Utc);
             bars.push(Bar {
                 timestamp: ts,
                 open: record[1].parse()?,
@@ -224,8 +228,15 @@ fn parse_binance_kline(v: &serde_json::Value) -> Option<Bar> {
     let close: f64 = arr.get(4)?.as_str()?.parse().ok()?;
     let volume: f64 = arr.get(5)?.as_str()?.parse().ok()?;
     Some(Bar {
-        timestamp: Utc.timestamp_millis_opt(ts).single().unwrap_or_else(Utc::now),
-        open, high, low, close, volume,
+        timestamp: Utc
+            .timestamp_millis_opt(ts)
+            .single()
+            .unwrap_or_else(Utc::now),
+        open,
+        high,
+        low,
+        close,
+        volume,
     })
 }
 
@@ -262,7 +273,8 @@ impl HttpFeed {
             limit.min(1000)
         );
 
-        let body = self.client
+        let body = self
+            .client
             .get(&url)
             .send()
             .await
