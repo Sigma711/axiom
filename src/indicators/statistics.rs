@@ -3,7 +3,9 @@
 /// 简单线性回归 —— 返回 (slope, intercept)
 pub fn linear_regression(y: &[f64]) -> Option<(f64, f64)> {
     let n = y.len();
-    if n < 2 { return None; }
+    if n < 2 {
+        return None;
+    }
     let xs: Vec<f64> = (0..n).map(|i| i as f64).collect();
     let x_mean = xs.iter().sum::<f64>() / n as f64;
     let y_mean = y.iter().sum::<f64>() / n as f64;
@@ -14,7 +16,9 @@ pub fn linear_regression(y: &[f64]) -> Option<(f64, f64)> {
         num += dx * (y[i] - y_mean);
         den += dx * dx;
     }
-    if den == 0.0 { return None; }
+    if den == 0.0 {
+        return None;
+    }
     let slope = num / den;
     let intercept = y_mean - slope * x_mean;
     Some((slope, intercept))
@@ -23,7 +27,9 @@ pub fn linear_regression(y: &[f64]) -> Option<(f64, f64)> {
 /// 皮尔逊相关系数
 pub fn correlation(x: &[f64], y: &[f64]) -> Option<f64> {
     let n = x.len().min(y.len());
-    if n < 2 { return None; }
+    if n < 2 {
+        return None;
+    }
     let x_mean = x.iter().take(n).sum::<f64>() / n as f64;
     let y_mean = y.iter().take(n).sum::<f64>() / n as f64;
     let mut num = 0.0;
@@ -36,7 +42,9 @@ pub fn correlation(x: &[f64], y: &[f64]) -> Option<f64> {
         dx2 += a * a;
         dy2 += b * b;
     }
-    if dx2 == 0.0 || dy2 == 0.0 { return None; }
+    if dx2 == 0.0 || dy2 == 0.0 {
+        return None;
+    }
     Some(num / (dx2 * dy2).sqrt())
 }
 
@@ -71,7 +79,9 @@ pub fn zscore(series: &[f64], period: usize) -> Vec<Option<f64>> {
 /// Beta = Cov(策略, 基准) / Var(基准)
 pub fn beta(strategy_returns: &[f64], benchmark_returns: &[f64]) -> Option<f64> {
     let n = strategy_returns.len().min(benchmark_returns.len());
-    if n < 2 { return None; }
+    if n < 2 {
+        return None;
+    }
     let s_mean = strategy_returns.iter().take(n).sum::<f64>() / n as f64;
     let b_mean = benchmark_returns.iter().take(n).sum::<f64>() / n as f64;
     let mut cov = 0.0;
@@ -80,12 +90,15 @@ pub fn beta(strategy_returns: &[f64], benchmark_returns: &[f64]) -> Option<f64> 
         cov += (strategy_returns[i] - s_mean) * (benchmark_returns[i] - b_mean);
         var += (benchmark_returns[i] - b_mean).powi(2);
     }
-    if var == 0.0 { None } else { Some(cov / var) }
+    if var == 0.0 {
+        None
+    } else {
+        Some(cov / var)
+    }
 }
 
 /// Alpha = 策略收益 - (无风险 + Beta × (基准收益 - 无风险))
-pub fn alpha(strategy_returns: &[f64], benchmark_returns: &[f64],
-             risk_free: f64) -> Option<f64> {
+pub fn alpha(strategy_returns: &[f64], benchmark_returns: &[f64], risk_free: f64) -> Option<f64> {
     let b = beta(strategy_returns, benchmark_returns)?;
     let n = strategy_returns.len().min(benchmark_returns.len());
     let s_mean = strategy_returns.iter().take(n).sum::<f64>() / n as f64;
@@ -110,7 +123,9 @@ pub fn percentile_rank(series: &[f64], period: usize) -> Vec<Option<f64>> {
 /// 偏度 Skewness
 pub fn skewness(returns: &[f64]) -> Option<f64> {
     let n = returns.len();
-    if n < 3 { return None; }
+    if n < 3 {
+        return None;
+    }
     let mean = returns.iter().sum::<f64>() / n as f64;
     let mut m2 = 0.0;
     let mut m3 = 0.0;
@@ -121,14 +136,18 @@ pub fn skewness(returns: &[f64]) -> Option<f64> {
     }
     m2 /= n as f64;
     m3 /= n as f64;
-    if m2 == 0.0 { return None; }
+    if m2 == 0.0 {
+        return None;
+    }
     Some(m3 / m2.powf(1.5))
 }
 
 /// 峰度 Kurtosis (excess)
 pub fn kurtosis(returns: &[f64]) -> Option<f64> {
     let n = returns.len();
-    if n < 4 { return None; }
+    if n < 4 {
+        return None;
+    }
     let mean = returns.iter().sum::<f64>() / n as f64;
     let mut m2 = 0.0;
     let mut m4 = 0.0;
@@ -139,7 +158,9 @@ pub fn kurtosis(returns: &[f64]) -> Option<f64> {
     }
     m2 /= n as f64;
     m4 /= n as f64;
-    if m2 == 0.0 { return None; }
+    if m2 == 0.0 {
+        return None;
+    }
     Some(m4 / (m2 * m2) - 3.0) // excess kurtosis
 }
 

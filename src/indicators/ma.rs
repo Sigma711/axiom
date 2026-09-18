@@ -129,10 +129,13 @@ pub fn dema(prices: &[f64], period: usize) -> Vec<Option<f64>> {
     let e1 = ema(prices, period);
     let e2_in: Vec<f64> = e1.iter().map(|x| x.unwrap_or(0.0)).collect();
     let e2 = ema(&e2_in, period);
-    e1.iter().zip(e2.iter()).map(|(a, b)| match (a, b) {
-        (Some(x), Some(y)) => Some(2.0 * x - y),
-        _ => None,
-    }).collect()
+    e1.iter()
+        .zip(e2.iter())
+        .map(|(a, b)| match (a, b) {
+            (Some(x), Some(y)) => Some(2.0 * x - y),
+            _ => None,
+        })
+        .collect()
 }
 
 /// TEMA
@@ -142,10 +145,14 @@ pub fn tema(prices: &[f64], period: usize) -> Vec<Option<f64>> {
     let e2 = ema(&e2_in, period);
     let e3_in: Vec<f64> = e2.iter().map(|x| x.unwrap_or(0.0)).collect();
     let e3 = ema(&e3_in, period);
-    e1.iter().zip(e2.iter()).zip(e3.iter()).map(|((a, b), c)| match (a, b, c) {
-        (Some(x), Some(y), Some(z)) => Some(3.0 * x - 3.0 * y + z),
-        _ => None,
-    }).collect()
+    e1.iter()
+        .zip(e2.iter())
+        .zip(e3.iter())
+        .map(|((a, b), c)| match (a, b, c) {
+            (Some(x), Some(y), Some(z)) => Some(3.0 * x - 3.0 * y + z),
+            _ => None,
+        })
+        .collect()
 }
 
 /// VWMA 成交量加权均线
@@ -181,21 +188,28 @@ pub fn bbi(bars: &[Bar]) -> Vec<Option<f64>> {
     let m6 = sma(&closes, 6);
     let m12 = sma(&closes, 12);
     let m24 = sma(&closes, 24);
-    m3.iter().zip(m6.iter()).zip(m12.iter()).zip(m24.iter()).map(|(((a, b), c), d)| {
-        match (a, b, c, d) {
+    m3.iter()
+        .zip(m6.iter())
+        .zip(m12.iter())
+        .zip(m24.iter())
+        .map(|(((a, b), c), d)| match (a, b, c, d) {
             (Some(x1), Some(x2), Some(x3), Some(x4)) => Some((x1 + x2 + x3 + x4) / 4.0),
             _ => None,
-        }
-    }).collect()
+        })
+        .collect()
 }
 
 /// BIAS 乖离率
 pub fn bias(prices: &[f64], period: usize) -> Vec<Option<f64>> {
     let ma = sma(prices, period);
-    prices.iter().zip(ma.iter()).map(|(p, m)| match m {
-        Some(ma_val) if *ma_val != 0.0 => Some((p - ma_val) / ma_val * 100.0),
-        _ => None,
-    }).collect()
+    prices
+        .iter()
+        .zip(ma.iter())
+        .map(|(p, m)| match m {
+            Some(ma_val) if *ma_val != 0.0 => Some((p - ma_val) / ma_val * 100.0),
+            _ => None,
+        })
+        .collect()
 }
 
 #[cfg(test)]

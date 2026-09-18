@@ -9,7 +9,8 @@ pub fn rsi_diagram() -> String {
    ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
    超卖区(买)    中性区间     超买区(卖)
    30 阈值       50 中轴       70 阈值
-"#.to_string()
+"#
+    .to_string()
 }
 
 /// MACD 图示 - 柱状图在零轴上下翻转
@@ -25,7 +26,8 @@ pub fn macd_diagram() -> String {
    金叉:    死叉:   顶背离:
    MACD 柱   MACD 柱   价格↑而
    由负转正  由正转负  MACD 柱↓
-"#.to_string()
+"#
+    .to_string()
 }
 
 /// Bollinger Bands 图示 - 三个轨道包络价格
@@ -41,7 +43,8 @@ pub fn bollinger_diagram() -> String {
    下轨(均价-2σ)
    Squeeze: 上下轨极度收窄 → 即将大幅波动
    触上轨: 超买;触下轨: 超卖
-"#.to_string()
+"#
+    .to_string()
 }
 
 /// Ichimoku 云图 - 五条线+云带
@@ -54,7 +57,8 @@ pub fn ichimoku_diagram() -> String {
    ════════════ 转换线
    ════════════ 基准线
    ╲╲ 云: 绿(多)/红(空) ╱╱
-"#.to_string()
+"#
+    .to_string()
 }
 
 /// Sharpe Ratio 图示 - 收益 vs 波动
@@ -63,7 +67,8 @@ pub fn sharpe_diagram() -> String {
    0.0  0.5  1.0  1.5  2.0  2.5  3.0
    ├────┼────┼────┼────┼────┼────┤
    差   凑合  合格  良好  优秀  顶尖
-"#.to_string()
+"#
+    .to_string()
 }
 
 /// 最大回撤 图示 - 峰值跌到谷底
@@ -80,7 +85,8 @@ pub fn drawdown_diagram() -> String {
    ↑
    峰值
    回撤% = (峰值 - 谷底) / 峰值
-"#.to_string()
+"#
+    .to_string()
 }
 
 /// KDJ 图示 - 三线在 0-100 区间震荡
@@ -94,7 +100,8 @@ pub fn kdj_diagram() -> String {
       ╲   ╱  ╲ ╱
        ╲ ╱    ╲
    0   ──── 超卖区(金叉)
-"#.to_string()
+"#
+    .to_string()
 }
 
 /// OBV 图示 - 能量潮累积
@@ -107,7 +114,8 @@ pub fn obv_diagram() -> String {
    ↓ ╱
      ╲ 持续新低 = 资金流出
    OBV 创新高 + 价格未创新高 = 潜在买入信号
-"#.to_string()
+"#
+    .to_string()
 }
 
 /// 通用 fallback - ASCII

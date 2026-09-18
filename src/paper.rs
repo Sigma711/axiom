@@ -78,10 +78,7 @@ pub struct PaperState {
 }
 
 impl PaperState {
-    pub fn new(
-        config: PaperConfigP,
-        strategy: Box<dyn Strategy>,
-    ) -> Self {
+    pub fn new(config: PaperConfigP, strategy: Box<dyn Strategy>) -> Self {
         let broker = SimulatedBroker::new(
             BrokerConfig {
                 commission_rate: config.commission_rate,
@@ -125,17 +122,24 @@ impl PaperState {
     /// 处理一根新的 K 线:更新价格 → 策略判断 → 风控 → 下单 → 快照
     pub fn process_bar(&mut self, bar: Bar) -> anyhow::Result<()> {
         self.current_bar = Some(bar);
-        self.portfolio.broker.set_market_price(&self.config.symbol, bar.close);
+        self.portfolio
+            .broker
+            .set_market_price(&self.config.symbol, bar.close);
         self.broker.set_market_price(&self.config.symbol, bar.close);
 
         let signal = self.strategy.on_bar(&bar);
         self.last_signal = Some(signal.clone());
-        self.log(PaperLogLevel::Info,
-                 format!("信号: {} ({})", signal.side, signal.reason));
+        self.log(
+            PaperLogLevel::Info,
+            format!("信号: {} ({})", signal.side, signal.reason),
+        );
 
         let mut order = None;
 
-        if let Some(reason) = self.risk.force_close_reason(&self.portfolio, &*self.portfolio.broker) {
+        if let Some(reason) = self
+            .risk
+            .force_close_reason(&self.portfolio, &*self.portfolio.broker)
+        {
             if !self.portfolio.is_flat() {
                 order = self.portfolio.on_signal(
                     crate::types::Side::Sell,
@@ -146,16 +150,15 @@ impl PaperState {
             }
             self.log(PaperLogLevel::Warn, format!("[风控] {}", reason));
         } else if signal.side != crate::types::Side::Hold {
-            order = self.portfolio.on_signal(
-                signal.side,
-                bar.close,
-                bar.timestamp,
-                signal.strength,
-            );
+            order =
+                self.portfolio
+                    .on_signal(signal.side, bar.close, bar.timestamp, signal.strength);
         }
 
         if let Some(ref o) = order {
-            let (allowed, why) = self.risk.allow_order(o, &self.portfolio, &*self.portfolio.broker);
+            let (allowed, why) = self
+                .risk
+                .allow_order(o, &self.portfolio, &*self.portfolio.broker);
             if !allowed {
                 self.log(PaperLogLevel::Warn, format!("风控拒绝: {}", why));
                 order = None;
@@ -167,14 +170,20 @@ impl PaperState {
             if fill.size > 0.0 {
                 self.last_fill = Some(fill.clone());
                 self.portfolio.on_fill(&fill);
-                self.log(PaperLogLevel::Fill, format!(
-                    "成交: {} {} @ {:.2} (手续费 {:.2})",
-                    fill.side, fill.size, fill.price, fill.commission
-                ));
+                self.log(
+                    PaperLogLevel::Fill,
+                    format!(
+                        "成交: {} {} @ {:.2} (手续费 {:.2})",
+                        fill.side, fill.size, fill.price, fill.commission
+                    ),
+                );
             }
         }
 
-        let price = self.portfolio.broker.get_market_price(&self.config.symbol)
+        let price = self
+            .portfolio
+            .broker
+            .get_market_price(&self.config.symbol)
             .unwrap_or(bar.close);
         let pos = self.portfolio.position();
         self.equity_curve.push(EquityPoint {
@@ -189,7 +198,10 @@ impl PaperState {
 
     pub fn snapshot(&self) -> PaperSnapshot {
         let pos = self.portfolio.position();
-        let price = self.portfolio.broker.get_market_price(&self.config.symbol)
+        let price = self
+            .portfolio
+            .broker
+            .get_market_price(&self.config.symbol)
             .or_else(|| self.current_bar.map(|b| b.close))
             .unwrap_or(0.0);
         PaperSnapshot {
@@ -240,14 +252,15 @@ impl PaperLogLevel {
 }
 
 /// 后台任务:定时拉数据 + 调用 process_bar
-pub async fn run_paper_loop<F: AsyncDataFeed>(
-    feed: Arc<F>,
-    state: Arc<RwLock<PaperState>>,
-) {
+pub async fn run_paper_loop<F: AsyncDataFeed>(feed: Arc<F>, state: Arc<RwLock<PaperState>>) {
     loop {
         let (is_running, symbol, poll_secs) = {
             let s = state.read().await;
-            (s.is_running, s.config.symbol.clone(), s.config.poll_interval_seconds)
+            (
+                s.is_running,
+                s.config.symbol.clone(),
+                s.config.poll_interval_seconds,
+            )
         };
 
         if !is_running {

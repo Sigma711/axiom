@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RiskConfig {
-    pub stop_loss_pct: f64,   // 0 = 不启用
+    pub stop_loss_pct: f64, // 0 = 不启用
     pub take_profit_pct: f64,
     pub max_position_pct: f64,
 }
@@ -38,11 +38,7 @@ impl RiskManager {
     }
 
     /// 如果当前持仓触及止损/止盈,返回原因;否则返回 None。
-    pub fn force_close_reason(
-        &self,
-        portfolio: &Portfolio,
-        broker: &dyn Broker,
-    ) -> Option<String> {
+    pub fn force_close_reason(&self, portfolio: &Portfolio, broker: &dyn Broker) -> Option<String> {
         let pos = portfolio.position();
         if pos.is_flat() {
             return None;
@@ -52,18 +48,14 @@ impl RiskManager {
             return None;
         }
         let pnl_pct = (price - pos.avg_entry_price) / pos.avg_entry_price;
-        if self.config.stop_loss_pct > 0.0
-            && pnl_pct <= -self.config.stop_loss_pct
-        {
+        if self.config.stop_loss_pct > 0.0 && pnl_pct <= -self.config.stop_loss_pct {
             return Some(format!(
                 "止损 ({:.2}% <= -{:.2}%)",
                 pnl_pct * 100.0,
                 self.config.stop_loss_pct * 100.0
             ));
         }
-        if self.config.take_profit_pct > 0.0
-            && pnl_pct >= self.config.take_profit_pct
-        {
+        if self.config.take_profit_pct > 0.0 && pnl_pct >= self.config.take_profit_pct {
             return Some(format!(
                 "止盈 ({:.2}% >= {:.2}%)",
                 pnl_pct * 100.0,
@@ -95,11 +87,14 @@ impl RiskManager {
         let pos_value = pos.market_value(price);
         let new_pct = (pos_value + order.size * price) / equity;
         if new_pct > self.config.max_position_pct + 1e-9 {
-            return (false, format!(
-                "超仓位上限 ({:.2}% > {:.2}%)",
-                new_pct * 100.0,
-                self.config.max_position_pct * 100.0
-            ));
+            return (
+                false,
+                format!(
+                    "超仓位上限 ({:.2}% > {:.2}%)",
+                    new_pct * 100.0,
+                    self.config.max_position_pct * 100.0
+                ),
+            );
         }
         (true, "通过".to_string())
     }

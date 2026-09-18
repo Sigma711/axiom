@@ -39,11 +39,11 @@ pub fn heikin_ashi(bars: &[Bar]) -> Vec<Bar> {
 /// PDF 第二十二章 K 线形态部分
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CandlePattern {
-    Doji,           // 十字星:开收几乎相等
-    Hammer,         // 锤子线:下影线 > 实体 × 2
-    ShootingStar,   // 流星:上影线 > 实体 × 2
-    Marubozu,       // 光头光脚:实体几乎占满整根 K 线
-    Engulfing,      // 吞没:后一根实体完全包裹前一根(且方向相反)
+    Doji,         // 十字星:开收几乎相等
+    Hammer,       // 锤子线:下影线 > 实体 × 2
+    ShootingStar, // 流星:上影线 > 实体 × 2
+    Marubozu,     // 光头光脚:实体几乎占满整根 K 线
+    Engulfing,    // 吞没:后一根实体完全包裹前一根(且方向相反)
     None,
 }
 
@@ -112,10 +112,25 @@ pub fn zscore(series: &[f64], period: usize) -> Vec<Option<f64>> {
 /// 简单的 K 线摘要(用于数据探索面板)
 pub fn bar_summary(bar: &Bar) -> String {
     let body = bar.close - bar.open;
-    let pct = if bar.open != 0.0 { body / bar.open * 100.0 } else { 0.0 };
-    let direction = if body > 0.0 { "↑ 阳线" } else if body < 0.0 { "↓ 阴线" } else { "─ 平" };
+    let pct = if bar.open != 0.0 {
+        body / bar.open * 100.0
+    } else {
+        0.0
+    };
+    let direction = if body > 0.0 {
+        "↑ 阳线"
+    } else if body < 0.0 {
+        "↓ 阴线"
+    } else {
+        "─ 平"
+    };
     format!(
         "{} 开盘 {:.2} 收盘 {:.2} 涨跌 {:+.2}% (幅度 {:.2}) 成交量 {:.0}",
-        direction, bar.open, bar.close, pct, bar.high - bar.low, bar.volume
+        direction,
+        bar.open,
+        bar.close,
+        pct,
+        bar.high - bar.low,
+        bar.volume
     )
 }
