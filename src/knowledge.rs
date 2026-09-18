@@ -15,15 +15,15 @@ use serde::Serialize;
 #[derive(Debug, Clone, Serialize)]
 pub struct KnowledgeEntry {
     pub id: String,
-    pub summary: String,        // 一句话简介
-    pub example: String,        // 实用例子
-    pub related: Vec<String>,   // 关联概念
-    pub code_url: String,      // GitHub 深链接
-    pub code_ref: String,      // 路径::函数 (稳定引用)
+    pub summary: String,      // 一句话简介
+    pub example: String,      // 实用例子
+    pub related: Vec<String>, // 关联概念
+    pub code_url: String,     // GitHub 深链接
+    pub code_ref: String,     // 路径::函数 (稳定引用)
     pub category: String,
     pub name: String,
     pub formula: String,
-    pub meaning: String,        // 详细解释(可多段)
+    pub meaning: String, // 详细解释(可多段)
     pub signals: String,
     pub pitfalls: String,
     pub implementation: String,
@@ -102,7 +102,9 @@ fn code_url(id: &str) -> String {
         "bollinger_bands" => format!("{}/indicators/volatility.rs#L120-L160", base),
         "squeeze" => format!("{}/indicators/volatility.rs#L160-L200", base),
         "adr" => format!("{}/indicators/volatility.rs#L200-L240", base),
-        "chaikin_vol" | "chaikin_volatility" => format!("{}/indicators/volatility.rs#L240-L280", base),
+        "chaikin_vol" | "chaikin_volatility" => {
+            format!("{}/indicators/volatility.rs#L240-L280", base)
+        }
         "mass_index" => format!("{}/indicators/volatility.rs#L280-L320", base),
         "ulcer_index" => format!("{}/indicators/volatility.rs#L320-L360", base),
         "parkinson" => format!("{}/indicators/volatility.rs#L360-L400", base),
@@ -166,7 +168,9 @@ fn code_url(id: &str) -> String {
         "backtestengine" => format!("{}/engine.rs#L50-L120", base),
         "portfolio" => format!("{}/portfolio.rs#L36-L130", base),
         "riskmanager" => format!("{}/risk.rs#L1-L100", base),
-        "stop_loss" | "take_profit" | "stop_loss_pct" | "take_profit_pct" => format!("{}/risk.rs#L40-L80", base),
+        "stop_loss" | "take_profit" | "stop_loss_pct" | "take_profit_pct" => {
+            format!("{}/risk.rs#L40-L80", base)
+        }
         "max_position_pct" | "position_sizing" => format!("{}/portfolio.rs#L80-L130", base),
         // 财务质量/股东/期权/财务基础/行情/形态/宽度/误区 默认走 knowledge.rs
         _ => format!("{}/knowledge.rs", base),
@@ -336,8 +340,8 @@ fn market_microstructure() -> Vec<KnowledgeEntry> {
             id: "inside_outside".into(),            summary: "".into(),
             example: "".into(),
             related: vec![],
-            code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
-            code_ref: "src/indicators/extra.rs::detect_pattern - inside/outside bar".into(),
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/extra.rs#symbol-detect_inside_outside".into(),
+            code_ref: "src/indicators/extra.rs::detect_inside_outside".into(),
 
             category: "盘口".into(),
             name: "内盘 / 外盘".into(),
@@ -2026,7 +2030,7 @@ fn support_resistance_and_patterns() -> Vec<KnowledgeEntry> {
             example: "".into(),
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
-            code_ref: "src/indicators/extra.rs - 主观识别".into(),
+            code_ref: "TradingView 工具".into(),
 
             category: "支撑阻力".into(),
             name: "支撑位 / 阻力位".into(),
@@ -2042,7 +2046,7 @@ fn support_resistance_and_patterns() -> Vec<KnowledgeEntry> {
             example: "".into(),
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
-            code_ref: "src/indicators/extra.rs - 主观画线,代码辅助".into(),
+            code_ref: "主观画线;TradingView".into(),
 
             category: "形态".into(),
             name: "趋势线".into(),
@@ -2074,7 +2078,7 @@ fn support_resistance_and_patterns() -> Vec<KnowledgeEntry> {
             example: "".into(),
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
-            code_ref: "src/indicators/extra.rs::fibonacci - 工具函数".into(),
+            code_ref: "TradingView 工具".into(),
 
             category: "形态".into(),
             name: "斐波那契回撤".into(),
@@ -2090,7 +2094,7 @@ fn support_resistance_and_patterns() -> Vec<KnowledgeEntry> {
             example: "".into(),
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
-            code_ref: "src/indicators/extra.rs::fibonacci - 工具函数".into(),
+            code_ref: "TradingView 工具".into(),
 
             category: "形态".into(),
             name: "斐波那契扩展".into(),
@@ -2106,7 +2110,7 @@ fn support_resistance_and_patterns() -> Vec<KnowledgeEntry> {
             example: "".into(),
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
-            code_ref: "src/indicators/extra.rs::zigzag - 波浪理论辅助".into(),
+            code_ref: "TradingView 工具".into(),
 
             category: "形态".into(),
             name: "艾略特波浪".into(),
@@ -2153,8 +2157,8 @@ fn support_resistance_and_patterns() -> Vec<KnowledgeEntry> {
             id: "k_pattern_engulfing".into(),            summary: "".into(),
             example: "".into(),
             related: vec![],
-            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/extra.rs#symbol-detect_pattern".into(),
-            code_ref: "src/indicators/extra.rs::detect_pattern".into(),
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/extra.rs#symbol-detect_engulfing".into(),
+            code_ref: "src/indicators/extra.rs::detect_engulfing".into(),
 
             category: "K线形态".into(),
             name: "吞没形态".into(),
@@ -2492,7 +2496,7 @@ fn more_volatility_volume() -> Vec<KnowledgeEntry> {
             example: "".into(),
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs".into(),
-            code_ref: "src/indicators/shareholder.rs::chip_distribution".into(),
+            code_ref: "A 股特色".into(),
 
             category: "成交量分布".into(),
             name: "筹码分布 / 持仓成本".into(),
@@ -3022,10 +3026,13 @@ fn industry_metrics() -> Vec<KnowledgeEntry> {
 fn more_risk_metrics() -> Vec<KnowledgeEntry> {
     vec![
         KnowledgeEntry {
-            id: "information_ratio".into(),            summary: "".into(),
+            id: "information_ratio".into(),
+            summary: "".into(),
             example: "".into(),
             related: vec![],
-            code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#symbol-compute_metrics".into(),
+            code_url:
+                "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#symbol-compute_metrics"
+                    .into(),
             code_ref: "src/metrics.rs::compute_metrics".into(),
 
             category: "风险-绩效".into(),
@@ -3038,10 +3045,13 @@ fn more_risk_metrics() -> Vec<KnowledgeEntry> {
             diagram: None,
         },
         KnowledgeEntry {
-            id: "treynor".into(),            summary: "".into(),
+            id: "treynor".into(),
+            summary: "".into(),
             example: "".into(),
             related: vec![],
-            code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#symbol-compute_metrics".into(),
+            code_url:
+                "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#symbol-compute_metrics"
+                    .into(),
             code_ref: "src/metrics.rs::compute_metrics".into(),
 
             category: "风险-绩效".into(),
@@ -3054,10 +3064,13 @@ fn more_risk_metrics() -> Vec<KnowledgeEntry> {
             diagram: None,
         },
         KnowledgeEntry {
-            id: "tracking_error".into(),            summary: "".into(),
+            id: "tracking_error".into(),
+            summary: "".into(),
             example: "".into(),
             related: vec![],
-            code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#symbol-compute_metrics".into(),
+            code_url:
+                "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#symbol-compute_metrics"
+                    .into(),
             code_ref: "src/metrics.rs::compute_metrics".into(),
 
             category: "风险-绩效".into(),
@@ -3070,15 +3083,19 @@ fn more_risk_metrics() -> Vec<KnowledgeEntry> {
             diagram: None,
         },
         KnowledgeEntry {
-            id: "capture_ratio".into(),            summary: "".into(),
+            id: "capture_ratio".into(),
+            summary: "".into(),
             example: "".into(),
             related: vec![],
-            code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#symbol-compute_metrics".into(),
+            code_url:
+                "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#symbol-compute_metrics"
+                    .into(),
             code_ref: "src/metrics.rs::compute_metrics".into(),
 
             category: "风险-绩效".into(),
             name: "上行/下行捕获率".into(),
-            formula: "上行 = 基准上涨时策略涨幅 / 基准涨幅; 下行 = 基准下跌时策略跌幅 / 基准跌幅".into(),
+            formula: "上行 = 基准上涨时策略涨幅 / 基准涨幅; 下行 = 基准下跌时策略跌幅 / 基准跌幅"
+                .into(),
             meaning: "策略在不同市场环境下的表现。".into(),
             signals: "上行 > 100% + 下行 < 100% -> 完美策略(极罕见)。".into(),
             pitfalls: "过于完美的捕获率常常是过拟合。".into(),

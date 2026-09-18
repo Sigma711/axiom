@@ -1,4 +1,9 @@
+use axiom::indicators::extra::{
+    detect_engulfing, detect_inside_outside, detect_pattern, CandlePattern,
+};
 use axiom::knowledge;
+use axiom::types::Bar;
+use chrono::{TimeZone, Utc};
 use std::path::Path;
 
 #[test]
@@ -70,4 +75,73 @@ fn test_diagram_present_for_key_concepts() {
         .collect();
     assert!(missing.is_empty(), "缺少 diagram: {:?}", missing);
     println!("OK: 关键概念都有 diagram");
+}
+
+#[test]
+fn test_k_pattern_hammer_function_works() {
+    // body=1, range=12, lower_shadow=10, upper_shadow=1 -> Hammer
+    let bar = Bar {
+        timestamp: Utc.timestamp_opt(1, 0).unwrap(),
+        open: 100.0,
+        high: 101.2,
+        low: 95.0,
+        close: 101.0,
+        volume: 1000.0,
+    };
+    assert_eq!(
+        detect_pattern(&bar),
+        CandlePattern::Hammer,
+        "k_pattern_hammer 指向的 detect_pattern 必须能识别锤子线"
+    );
+}
+
+#[test]
+fn test_k_pattern_engulfing_function_works() {
+    // 前阴后阳, 后阳实体完全包裹前阴 -> Engulfing
+    let prev = Bar {
+        timestamp: Utc.timestamp_opt(1, 0).unwrap(),
+        open: 102.0,
+        high: 103.0,
+        low: 99.0,
+        close: 99.0,
+        volume: 1000.0,
+    };
+    let curr = Bar {
+        timestamp: Utc.timestamp_opt(2, 0).unwrap(),
+        open: 98.0,
+        high: 105.0,
+        low: 97.0,
+        close: 104.0,
+        volume: 1200.0,
+    };
+    assert_eq!(
+        detect_engulfing(&prev, &curr),
+        CandlePattern::Engulfing,
+        "k_pattern_engulfing 指向的 detect_engulfing 必须能识别吞没形态"
+    );
+}
+
+#[test]
+fn test_inside_outside_function_works() {
+    let prev = Bar {
+        timestamp: Utc.timestamp_opt(1, 0).unwrap(),
+        open: 100.0,
+        high: 110.0,
+        low: 95.0,
+        close: 105.0,
+        volume: 1000.0,
+    };
+    let inside = Bar {
+        timestamp: Utc.timestamp_opt(2, 0).unwrap(),
+        open: 102.0,
+        high: 108.0,
+        low: 98.0,
+        close: 104.0,
+        volume: 800.0,
+    };
+    assert_eq!(
+        detect_inside_outside(&prev, &inside),
+        CandlePattern::Inside,
+        "inside_outside 指向的 detect_inside_outside 必须能识别内包线"
+    );
 }

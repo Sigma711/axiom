@@ -145,7 +145,7 @@ pub fn get_code_refs() -> HashMap<String, String> {
     m.insert("implied_volatility".to_string(), "src/indicators/options.rs::bs_price - 反推".to_string());
     m.insert("industry_pe_compare".to_string(), "src/indicators/fundamental.rs::CompanyFinancials::pe - 扩展".to_string());
     m.insert("information_ratio".to_string(), "src/metrics.rs::compute_metrics".to_string());
-    m.insert("inside_outside".to_string(), "Binance aggTrades".to_string());
+    m.insert("inside_outside".to_string(), "src/indicators/extra.rs::detect_inside_outside".to_string());
     m.insert("insider_trading".to_string(), "src/indicators/shareholder.rs - SEC Form 4".to_string());
     m.insert("institution_holding".to_string(), "src/indicators/shareholder.rs - 需 13F".to_string());
     m.insert("institution_holdings".to_string(), "src/indicators/shareholder.rs".to_string());
@@ -156,7 +156,7 @@ pub fn get_code_refs() -> HashMap<String, String> {
     m.insert("iv_rank".to_string(), "src/indicators/options.rs::iv_rank".to_string());
     m.insert("iv_term_structure".to_string(), "src/indicators/options.rs::bs_price - 多到期日".to_string());
     m.insert("k_pattern_doji".to_string(), "src/indicators/extra.rs::detect_pattern".to_string());
-    m.insert("k_pattern_engulfing".to_string(), "src/indicators/extra.rs::detect_pattern".to_string());
+    m.insert("k_pattern_engulfing".to_string(), "src/indicators/extra.rs::detect_engulfing".to_string());
     m.insert("k_pattern_hammer".to_string(), "src/indicators/extra.rs::detect_pattern".to_string());
     m.insert("k_pattern_star".to_string(), "src/indicators/extra.rs::detect_pattern".to_string());
     m.insert("k_pattern_three".to_string(), "src/indicators/extra.rs::detect_pattern".to_string());
