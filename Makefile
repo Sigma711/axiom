@@ -24,6 +24,10 @@ setup:
 	cd web && $(NPM) exec -- playwright install chromium
 browser-deps:
 	cd web && $(NPM) exec -- playwright install-deps chromium
+	@if [ "$$(id -u)" = 0 ]; then apt-get install -y fonts-dejavu-core fonts-droid-fallback; else sudo apt-get install -y fonts-dejavu-core fonts-droid-fallback; fi
+	fc-match sans-serif
+	fc-match "sans-serif:charset=4e00"
+	fc-match monospace
 
 build: build-web build-rust
 build-web:
