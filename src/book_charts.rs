@@ -217,8 +217,7 @@ pub fn evaluate(id: &str, _: &[Bar], inputs: &Value) -> Result<Value, String> {
         v[k] = x.clone();
     }
     let mut out = Output::default();
-    let chart: Value;
-    match id {
+    let chart: Value = match id {
         "book_chart_heikin_ashi" => {
             let (o, h, l, c) = (
                 ordered(&v, "open")?,
@@ -265,7 +264,7 @@ pub fn evaluate(id: &str, _: &[Bar], inputs: &Value) -> Result<Value, String> {
             series(&mut out, "ha_close", closes, "currency");
             series(&mut out, "ha_high", highs, "currency");
             series(&mut out, "ha_low", lows, "currency");
-            chart = json!({"kind":"heikin_ashi","bars":bars,"input":"explicit_ohlc"});
+            json!({"kind":"heikin_ashi","bars":bars,"input":"explicit_ohlc"})
         }
         "book_chart_renko" => {
             let p = ordered(&v, "prices")?;
@@ -298,7 +297,7 @@ pub fn evaluate(id: &str, _: &[Bar], inputs: &Value) -> Result<Value, String> {
                 }
             }
             series(&mut out, "renko_close", x, "currency");
-            chart = json!({"kind":"renko","bars":bars,"input":"explicit_close_only","note":"砖是由阈值合成的图形价格，不是逐笔成交；每块固定一砖宽。"});
+            json!({"kind":"renko","bars":bars,"input":"explicit_close_only","note":"砖是由阈值合成的图形价格，不是逐笔成交；每块固定一砖宽。"})
         }
         "book_chart_point_figure" => {
             let p = ordered(&v, "prices")?;
@@ -325,7 +324,7 @@ pub fn evaluate(id: &str, _: &[Bar], inputs: &Value) -> Result<Value, String> {
                 }
             }
             series(&mut out, "point_figure_box", x, "currency");
-            chart = json!({"kind":"point_figure","bars":bars,"input":"explicit_close_only","reversal_boxes":r});
+            json!({"kind":"point_figure","bars":bars,"input":"explicit_close_only","reversal_boxes":r})
         }
         "book_chart_kagi" => {
             let p = ordered(&v, "prices")?;
@@ -358,8 +357,7 @@ pub fn evaluate(id: &str, _: &[Bar], inputs: &Value) -> Result<Value, String> {
             }
             series(&mut out, "kagi_turn", x, "currency");
             decorate_kagi(&mut bars);
-            chart =
-                json!({"kind":"kagi","bars":bars,"input":"explicit_close_only","reversal_size":r});
+            json!({"kind":"kagi","bars":bars,"input":"explicit_close_only","reversal_size":r})
         }
         "book_chart_three_line_break" => {
             let p = ordered(&v, "prices")?;
@@ -398,7 +396,7 @@ pub fn evaluate(id: &str, _: &[Bar], inputs: &Value) -> Result<Value, String> {
                 }
             }
             series(&mut out, "three_line_close", x, "currency");
-            chart = json!({"kind":"three_line_break","bars":bars,"input":"explicit_close_only","line_count":n});
+            json!({"kind":"three_line_break","bars":bars,"input":"explicit_close_only","line_count":n})
         }
         "book_chart_range_bars" => {
             let p = ordered(&v, "ticks")?;
@@ -418,7 +416,7 @@ pub fn evaluate(id: &str, _: &[Bar], inputs: &Value) -> Result<Value, String> {
                 }
             }
             series(&mut out, "range_close", x, "currency");
-            chart = json!({"kind":"range_bars","bars":bars,"input":"explicit_ordered_ticks","range_size":r,"note":"仅在已提供成交使范围达到阈值时完成；跳空不会虚构中间成交。"});
+            json!({"kind":"range_bars","bars":bars,"input":"explicit_ordered_ticks","range_size":r,"note":"仅在已提供成交使范围达到阈值时完成；跳空不会虚构中间成交。"})
         }
         "book_chart_tick_bars" => {
             let p = ordered(&v, "ticks")?;
@@ -440,7 +438,7 @@ pub fn evaluate(id: &str, _: &[Bar], inputs: &Value) -> Result<Value, String> {
                     )
                 })
                 .collect::<Vec<_>>();
-            chart = json!({"kind":"tick_bars","bars":bars,"input":"explicit_ordered_ticks","ticks_per_bar":n});
+            json!({"kind":"tick_bars","bars":bars,"input":"explicit_ordered_ticks","ticks_per_bar":n})
         }
         _ => return Err(format!("未知图表概念: {id}")),
     };
