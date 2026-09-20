@@ -6,7 +6,13 @@ SHELL := /bin/bash
 ifneq ($(wildcard $(HOME)/.cargo/bin/cargo),)
 export PATH := $(HOME)/.cargo/bin:$(PATH)
 endif
+# WSL noninteractive shells do not source nvm; prefer an installed Node 24.
+AXIOM_NODE_DIR := $(shell printf '%s\n' $(HOME)/.nvm/versions/node/v24.* | sort -V | tail -n 1)
+ifneq ($(wildcard $(AXIOM_NODE_DIR)/bin/node),)
+export PATH := $(AXIOM_NODE_DIR)/bin:$(PATH)
+endif
 NPM ?= npm
+PLAYWRIGHT_ARGS ?=
 AXIOM_PORT ?= 8080
 
 .PHONY: help setup browser-deps build build-web build-rust build-debug run-debug dev serve serve-test test test-rust test-one test-web test-e2e test-e2e-real test-visual lint lint-rust lint-web check-format fmt check ci coverage tools verify-published
@@ -15,9 +21,9 @@ help:
 
 setup:
 	cd web && $(NPM) ci
-	cd web && $(NPM) exec playwright install chromium
+	cd web && $(NPM) exec -- playwright install chromium
 browser-deps:
-	cd web && $(NPM) exec playwright install-deps chromium
+	cd web && $(NPM) exec -- playwright install-deps chromium
 
 build: build-web build-rust
 build-web:
@@ -26,7 +32,7 @@ build-rust:
 	cargo build --release --locked
 build-debug:
 	cargo build --locked
-run-debug:
+run-debug: build-debug build-web
 	AXIOM_PORT=$(AXIOM_PORT) ./target/debug/axiom
 
 serve: build
@@ -46,9 +52,9 @@ test-web:
 	cd web && $(NPM) run typecheck
 	cd web && $(NPM) run test:unit
 test-e2e: build-web
-	cd web && $(NPM) run test:e2e
+	cd web && $(NPM) run test:e2e -- $(PLAYWRIGHT_ARGS)
 test-e2e-real: build-web
-	cd web && AXIOM_REAL=1 $(NPM) exec playwright test
+	cd web && AXIOM_REAL=1 $(NPM) exec -- playwright test $(PLAYWRIGHT_ARGS)
 test-visual: test-e2e test-e2e-real
 
 lint: check-format lint-rust lint-web
@@ -74,4 +80,6 @@ coverage:
 # Run after committing and pushing; rebuilds the AST map against that revision.
 verify-published:
 	@test -z "$$(git status --porcelain)" || (printf '%s\n' 'Commit all source changes before verifying published GitHub links'; exit 2)
+	git fetch --quiet origin main
+	git merge-base --is-ancestor HEAD FETCH_HEAD || (printf '%s\n' 'Current commit is not published on origin/main; push before verification'; exit 2)
 	AXIOM_REQUIRE_GITHUB_LINKS=1 cargo test --locked --test code_links_test

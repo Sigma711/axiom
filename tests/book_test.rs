@@ -182,3 +182,27 @@ fn insurance_new_business_value_discounts_the_future_profit_cash_flows() {
     assert!((r["values"]["book_insurance_nbv"].as_f64().unwrap() - 200.0).abs() < 1e-10);
     assert!(book::evaluate("book_insurance_nbv", &[], &json!({"discount_rate":-1.0})).is_err());
 }
+
+#[test]
+fn all_foundation_lessons_have_specific_examples_and_matching_catalog_entries() {
+    let lessons: serde_json::Value =
+        serde_json::from_str(include_str!("../docs/book/foundation-lessons.json")).unwrap();
+    let entries = book::entries();
+    for (id, lesson) in lessons.as_object().unwrap() {
+        let entry = entries.iter().find(|e| &e.id == id).unwrap();
+        assert_eq!(entry.meaning, lesson["meaning"].as_str().unwrap());
+        assert_eq!(entry.example, lesson["example"].as_str().unwrap());
+        assert_eq!(entry.pitfalls, lesson["pitfalls"].as_str().unwrap());
+        assert!(
+            entry.example.chars().any(|c| c.is_ascii_digit()),
+            "{id} needs a concrete example"
+        );
+    }
+    for entry in entries.iter().filter(|e| e.category != "原书行业专属指标") {
+        assert!(
+            lessons.get(&entry.id).is_some(),
+            "missing prose: {}",
+            entry.id
+        );
+    }
+}

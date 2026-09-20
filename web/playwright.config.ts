@@ -4,6 +4,7 @@ const realService = process.env.AXIOM_REAL === '1';
 
 export default defineConfig({
   testDir: './e2e',
+  reporter: [['list'], ['html', { open: 'never' }]],
   preserveOutput: 'always',
   testMatch: realService ? /real\.spec\.ts/ : /app\.spec\.ts/,
   timeout: 30_000,

@@ -11,7 +11,7 @@ async function mockApi(page: Page) {
     const url = new URL(route.request().url());
     const path = url.pathname;
     const json = (body: unknown) => route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
-    if (path === '/api/knowledge') return json({ total: 2, categories: { 动量: [{ ...concepts[0], summary: '衡量动量', formula: 'RS = avg(gain) / avg(loss)', meaning: '强弱', example: '70 偏高', signals: '观察趋势', pitfalls: '不是单独买卖信号', related: [], code_url: 'https://example.test/rsi', implementation: 'rsi()' }, { id: 'earnings_per_share', name: '每股收益（EPS）', category: '财务', input_kind: 'independent_inputs', inputs: [{ key: 'net_income', label: '净利润', default: 3000000 }, { key: 'preferred_dividends', label: '优先股股息', default: 0 }, { key: 'shares', label: '普通股股数', default: 1000000 }], notes: '每股收益采用可编辑教学数据。', summary: '把归属于普通股股东的利润平摊到每一股。', formula: '(净利润 − 优先股股息) ÷ 普通股股数', meaning: '每股盈利能力', example: '3 元/股', signals: '用于比较盈利能力', pitfalls: '需结合股本变化', related: [], code_url: 'https://example.test/eps', implementation: 'earnings_per_share()' }] } });
+    if (path === '/api/knowledge') return json({ total: 2, categories: { 动量: [{ ...concepts[0], summary: '衡量动量', formula: 'RS = avg(gain) / avg(loss)', meaning: '强弱', example: '70 偏高', signals: '观察趋势', pitfalls: '不是单独买卖信号', related: [], code_url: 'https://example.test/repo/src/indicator.rs#L42', implementation: 'rsi()' }, { id: 'earnings_per_share', name: '每股收益（EPS）', category: '财务', input_kind: 'independent_inputs', inputs: [{ key: 'net_income', label: '净利润', default: 3000000 }, { key: 'preferred_dividends', label: '优先股股息', default: 0 }, { key: 'shares', label: '普通股股数', default: 1000000 }], notes: '每股收益采用可编辑教学数据。', summary: '把归属于普通股股东的利润平摊到每一股。', formula: '(净利润 − 优先股股息) ÷ 普通股股数', meaning: '每股盈利能力', example: '3 元/股', signals: '用于比较盈利能力', pitfalls: '需结合股本变化', related: [], code_url: 'https://example.test/repo/src/indicator.rs#L42', implementation: 'earnings_per_share()' }] } });
     if (path === '/api/symbols') return json({ symbols: ['BTCUSDT'], count: 1, source: 'fixture' });
     if (path === '/api/strategies') return json({ strategies });
     if (path === '/api/indicators') return json({ symbol: 'BTCUSDT', source: 'synthetic', bars, indicators: { sma_20: bars.map((bar, index) => index < 19 ? null : { x: bar.timestamp, y: bar.close - 3 }), rsi_14: bars.map((bar, index) => index < 14 ? null : { x: bar.timestamp, y: 40 + index % 30 }), macd: bars.map((bar, index) => ({ x: bar.timestamp, y: index - 30 })), atr_14: bars.map((bar, index) => ({ x: bar.timestamp, y: 2 + index / 50 })) } });
@@ -40,7 +40,20 @@ test('data exploration separates price, oscillator, momentum, and volatility axe
   expect(layout.yaxis2.title.text).toBe('振荡器');
   expect(layout.yaxis3.title.text).toBe('动量');
   expect(layout.yaxis5.title.text).toBe('波动率');
+  expect(await page.locator('.ax-chart').evaluate(node => node.querySelector('svg.main-svg')!.getBoundingClientRect().height <= node.getBoundingClientRect().height)).toBe(true);
   await expect(page.locator('.ax-chart')).toHaveScreenshot('data-exploration.png', { maxDiffPixelRatio: 0.02 });
+});
+
+test('price-only overlays use the full chart and dates sit below all panels', async ({ page }) => {
+  await page.route('**/api/indicators**', route => route.fulfill({ json: { symbol: 'BTCUSDT', source: 'synthetic', bars, indicators: { sma_20: bars.map(bar => ({x:bar.timestamp,y:bar.close - 3})) } } }));
+  await page.goto('/');
+  await page.getByRole('button', { name: '数据探索', exact: true }).click();
+  const chart = page.locator('.ax-chart');
+  await expect(chart.locator('svg.main-svg').first()).toBeVisible();
+  const layout = await chart.evaluate((node:any) => node.layout);
+  expect(layout.yaxis.domain).toEqual([0, 1]);
+  expect(layout.xaxis.anchor).toBe('free');
+  expect(layout.xaxis.position).toBe(0);
 });
 
 test('knowledge card leads to an in-context practice result', async ({ page }) => {
@@ -71,14 +84,45 @@ test('knowledge detail state is visually distinct in both themes', async ({ page
   const darkClosed = await summary.evaluate(node => getComputedStyle(node).color);
   await summary.click();
   await expect(summary).toHaveClass(/is-open/);
+  await expect(summary).toContainText('收起详情');
   const darkOpen = await summary.evaluate(node => getComputedStyle(node).color);
   expect(darkOpen).not.toBe(darkClosed);
   await page.getByLabel('切换到浅色模式').click();
   const lightOpen = await summary.evaluate(node => getComputedStyle(node).color);
   expect(lightOpen).not.toBe(darkOpen);
   await summary.click();
+  await expect(summary).not.toHaveClass(/is-open/);
+  await expect(summary).toContainText('展开详情');
   const lightClosed = await summary.evaluate(node => getComputedStyle(node).color);
   expect(lightClosed).not.toBe(lightOpen);
+});
+
+test('book chart visuals keep P&F boxes in columns and Kagi as orthogonal segments', async ({ page }) => {
+  const bookConcepts = [{ id: 'book_chart_pnf', name: '点数图', category: '非标准图', input_kind: 'independent_inputs', inputs: [], notes: '' }, { id: 'book_chart_kagi', name: '卡吉线', category: '非标准图', input_kind: 'independent_inputs', inputs: [], notes: '' }];
+  await page.route('**/api/knowledge', async route => {
+    const body = { total: bookConcepts.length, categories: { 非标准图: bookConcepts.map(entry => ({ ...entry, summary: '', formula: '', meaning: '', example: '', signals: '', pitfalls: '', related: [], code_url: '', implementation: '' })) } };
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  await page.route('**/api/practice', route => {
+    if (route.request().method() === 'GET') return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ concepts: bookConcepts, modules: ['data'], total: bookConcepts.length }) });
+    const id = JSON.parse(route.request().postData() || '{}').concept_id;
+    const chart = id === 'book_chart_pnf' ? { kind: 'point_figure', bars: [{ open: 10, high: 12, low: 10, close: 10, direction: 1 }, { open: 10, high: 12, low: 10, close: 12, direction: 1 }, { open: 12, high: 12, low: 9, close: 9, direction: -1 }] } : { kind: 'kagi', bars: [{ open: 10, high: 12, low: 10, close: 12, direction: 1, line_style: 'yin' }, { open: 12, high: 14, low: 12, close: 14, direction: 1, line_style: 'yang', switch_price: 13 }, { open: 14, high: 14, low: 9, close: 9, direction: -1, line_style: 'yin' }] };
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ concept_id: id, status: 'computed', reason: null, input_kind: 'independent_inputs', provenance: 'editable_teaching_inputs', values: {}, series: [], notes: [], module: 'data', source: 'synthetic', symbol: 'BTCUSDT', bars: [], chart }) });
+  });
+  await page.goto('/');
+  const cards = page.locator('.ax-kb-card');
+  await cards.nth(0).locator('.ax-kb-details').click();
+  const pnf = cards.nth(0).locator('[data-chart-kind="point_figure"]');
+  await expect(pnf).toBeVisible();
+  const pnfXs = await pnf.locator('[data-pnf-column="0"]').evaluateAll(nodes => nodes.map(node => node.getAttribute('x')));
+  expect(new Set(pnfXs).size).toBe(1);
+  await cards.nth(1).locator('.ax-kb-details').click();
+  const kagi = cards.nth(1).locator('[data-chart-kind="kagi"]');
+  await expect(kagi.locator('[data-kagi-horizontal="true"]')).toHaveCount(1);
+  await expect(kagi.locator('[data-kagi-vertical="true"]')).toHaveCount(3);
+  await expect(kagi.locator('[data-kagi-switch="true"]')).toHaveCount(1);
+  const sameColumnXs = await kagi.locator('[data-kagi-vertical="true"]').evaluateAll(nodes => nodes.slice(0, 2).map(node => node.getAttribute('x1')));
+  expect(new Set(sameColumnXs).size).toBe(1);
 });
 
 test('backtest and comparison show the returned metrics', async ({ page }) => {
@@ -178,6 +222,38 @@ test('mobile controls remain reachable without viewport overflow', async ({ page
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
+test('selecting a dropdown option closes it and Escape dismisses it', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '数据探索', exact: true }).click();
+  const trigger = page.getByRole('button', { name: '数据源', exact: true });
+  await trigger.click();
+  await page.getByText('合成 (随机)', { exact: true }).click();
+  await expect(page.locator('.ax-dd-menu')).toHaveCount(0);
+  await expect(trigger).toContainText('合成 (随机)');
+  await trigger.click();
+  await trigger.press('Escape');
+  await expect(page.locator('.ax-dd-menu')).toHaveCount(0);
+});
+
+test('primary controls retain readable contrast on hover in both themes', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', {name:'数据探索', exact:true}).click();
+  for (const theme of ['dark', 'light']) {
+    if (theme === 'light') await page.getByLabel('切换到浅色模式').click();
+    const button = page.getByRole('button', {name:'加载数据'});
+    await button.hover();
+    const contrast = await button.evaluate(node => {
+      const luminance = (color:string) => {
+        const channels = color.match(/[\d.]+/g)!.slice(0,3).map(Number).map(value => value / 255).map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
+        return .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2];
+      };
+      const style = getComputedStyle(node), foreground = luminance(style.color), background = luminance(style.backgroundColor);
+      return (Math.max(foreground, background) + .05) / (Math.min(foreground, background) + .05);
+    });
+    expect(contrast).toBeGreaterThanOrEqual(4.5);
+  }
+});
+
 test('source links resolve precise anchors and theme selection persists', async ({ page }) => {
   await page.goto('/');
   const source = page.locator('.ax-gh-btn[href]').first();
@@ -199,4 +275,83 @@ test('source links resolve precise anchors and theme selection persists', async 
     return (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
   });
   expect(contrast).toBeGreaterThanOrEqual(4.5);
+});
+
+
+test('knowledge navigation does not lock subsequent concept selection', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '在数据探索中实践' }).first().click();
+  const panel = page.getByLabel('概念实践');
+  await panel.locator('.ax-dd-trigger').click();
+  await page.getByText('每股收益（EPS） · 财务', { exact: true }).click();
+  await expect(panel.getByLabel('净利润', { exact: true })).toBeVisible();
+  const request = page.waitForRequest(r => r.url().includes('/api/practice') && r.method() === 'POST');
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  expect((await request).postDataJSON().concept_id).toBe('earnings_per_share');
+});
+
+test('performance context is visible and manual edits reach the request', async ({ page }) => {
+  const inputs = [{key:'returns',label:'收益率序列',default:[0.01,0.02]}, {key:'periods_per_year',label:'年化周期数',default:252}, {key:'risk_free_annual',label:'年化无风险利率',default:0.02}];
+  await page.route('**/api/practice', async route => {
+    if (route.request().method() === 'GET') return route.fulfill({json:{concepts:[{id:'sharpe',name:'夏普',category:'绩效',input_kind:'independent_inputs',inputs,notes:'绩效教学'}]}});
+    return route.fulfill({json:{status:'computed',provenance:'editable_teaching_inputs',values:{sharpe:1},units:{sharpe:'ratio'},series:[],notes:[]}});
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: '回测', exact: true }).click();
+  await page.getByRole('button', { name: '运行回测' }).click();
+  await expect(page.locator('.ax-metrics')).toBeVisible();
+  const panel = page.getByLabel('概念实践');
+  await panel.getByRole('button', {name:'使用本页上下文',exact:true}).click();
+  await expect(panel.getByLabel('年化周期数', {exact:true})).toHaveValue('8760');
+  await expect(panel.getByLabel('收益率序列', {exact:true})).toBeDisabled();
+  await panel.getByRole('button', {name:'改用手动输入',exact:true}).click();
+  await panel.getByLabel('收益率序列', {exact:true}).fill('[0.1,-0.1]');
+  const request = page.waitForRequest(r => r.url().includes('/api/practice') && r.method() === 'POST');
+  await panel.getByRole('button', {name:'运行实践'}).click();
+  expect((await request).postDataJSON().inputs.returns).toEqual([0.1,-0.1]);
+});
+
+
+test('leaving a fully rendered data chart preserves the application', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/');
+  await page.getByRole('button', {name:'数据探索',exact:true}).click();
+  await expect(page.locator('.ax-chart svg.main-svg').first()).toBeVisible();
+  await page.getByRole('button', {name:'回测',exact:true}).click();
+  await expect(page.getByRole('button', {name:'运行回测'})).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('charts and concept diagrams remain readable across themes and widths', async ({ page }) => {
+  test.setTimeout(120_000);
+  for (const theme of ['dark', 'light']) {
+    await page.goto('/');
+    if (theme === 'light') await page.getByLabel('切换到浅色模式').click();
+    for (const [module, label] of [['data', '数据探索'], ['backtest', '回测'], ['compare', '策略对比']]) {
+      await page.getByRole('button', {name: label, exact:true}).click();
+      if (module === 'backtest') await page.getByRole('button', {name:'运行回测'}).click();
+      if (module === 'compare') await page.getByRole('button', {name:'跑对比'}).click();
+      const chart = page.locator('.ax-chart');
+      await expect(chart.locator('svg.main-svg').first()).toBeVisible();
+      for (const width of [1440, 390]) {
+        await page.setViewportSize({width, height:1000});
+        await expect.poll(() => chart.evaluate(node => {
+          const svg = node.querySelector('svg.main-svg')!.getBoundingClientRect();
+          return svg.width >= node.clientWidth * .85 && svg.width <= node.getBoundingClientRect().width && svg.height <= node.getBoundingClientRect().height;
+        })).toBe(true);
+        if (module === 'data') expect(await chart.evaluate(node => node.clientHeight)).toBeGreaterThanOrEqual(698);
+        await expect(chart).toHaveScreenshot(`${theme}-${module}-${width}.png`, {maxDiffPixelRatio:0.01});
+      }
+    }
+    await page.getByRole('button', {name:'学习中心', exact:true}).click();
+    await page.getByPlaceholder('搜索 概念 / 公式 / 关键词').fill('EPS');
+    const card = page.locator('.ax-kb-card');
+    await card.locator('.ax-kb-details').click();
+    await expect(card.locator('.ax-practice-reading')).toContainText('单次计算');
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({width, height:1000});
+      await expect(card).toHaveScreenshot(`${theme}-eps-${width}.png`, {maxDiffPixelRatio:0.01});
+    }
+  }
 });

@@ -4,6 +4,7 @@ import { indicatorPanel, validSeries } from './chart';
 describe('indicatorPanel', () => {
   it('keeps price overlays separate from non-price indicator panels', () => {
     expect(indicatorPanel('bbands_20_upper')).toBe('price');
+    expect(indicatorPanel('vwap')).toBe('price');
     expect(indicatorPanel('rsi_14')).toBe('oscillator');
     expect(indicatorPanel('macd_histogram')).toBe('momentum');
     expect(indicatorPanel('obv')).toBe('volume');

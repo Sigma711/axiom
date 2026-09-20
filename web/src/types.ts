@@ -80,6 +80,8 @@ export interface BacktestResult {
 }
 
 export interface PaperSnapshot {
+  strategy?: string;
+  completed_trades_count?: number;
   symbol?: string;
   source?: SourceType;
   initial_capital?: number;
@@ -125,6 +127,7 @@ export interface PracticeResult {
   values: Record<string, number | null>;
   units?: Record<string, string>;
   series: Array<{ name: string; values: Array<number | null> }>;
+  chart?: { kind: string; source?: string; bars: Array<{ open: number; high: number; low: number; close: number; direction?: number; column?: number; line_style?: 'neutral' | 'yin' | 'yang'; switch_price?: number | null }> };
   notes: string[];
   module: string;
   source: string;

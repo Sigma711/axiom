@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Plotly from 'plotly.js-dist-min';
 import { api, fmtPct, fmtNum, fmtMoney } from './api';
+import { performanceInputs } from './performance';
+import { KnowledgeSeriesVisual } from './KnowledgeSeriesVisual';
 import { indicatorPanel, validSeries, type IndicatorPanel } from './chart';
 import type {
   TabId, SourceType, Bar, BacktestResult, StrategyMeta,
@@ -16,11 +18,11 @@ const CHINESE_FIELDS: Record<string, string> = {
   beta: '贝塔系数', alpha: '阿尔法', sharpe: '夏普比率', max_drawdown: '最大回撤',
   eps: '每股收益', net_income: '净利润', preferred_dividends: '优先股股息', shares: '普通股股数', weighted_shares: '加权平均普通股股数', weighted_average_shares: '加权平均普通股股数',
 };
-const CHINESE_UNITS: Record<string, string> = { currency: '元', share: '股', shares: '股', 'currency/share': '元/股', '元/股': '元/股', percent: '%', ratio: '比率', days: '天', bars: '根 K 线' };
+const CHINESE_UNITS: Record<string, string> = { fraction: '比例（小数）', annualized_ratio: '年化比率', price: '价格', currency: '元', share: '股', shares: '股', 'currency/share': '元/股', '元/股': '元/股', percent: '%', ratio: '比率', days: '天', bars: '根 K 线' };
 function chineseUnit(unit?: string) { return unit ? (CHINESE_UNITS[unit] || unit) : ''; }
 function chineseField(key: string, label?: string) {
-  if (CHINESE_FIELDS[key]) return CHINESE_FIELDS[key];
   if (label && !/^[a-z_]+$/i.test(label)) return label;
+  if (CHINESE_FIELDS[key]) return CHINESE_FIELDS[key];
   return key.replace(/_/g, ' · ');
 }
 function resultSentence(name: string, values: Record<string, number | null>, units?: Record<string, string>, hasSeries = false) {
@@ -29,15 +31,7 @@ function resultSentence(name: string, values: Record<string, number | null>, uni
   const [key, value] = first;
   const prefix = hasSeries ? '基于这段教学行情' : '给定图中的教学输入';
   const reading = hasSeries ? '曲线展示该数值随样本变化；留意水平、拐点和空白预热区。' : Object.keys(values).length > 1 ? '请结合各结果之间的关系解读。' : '这是单次计算结果，应结合它的定义和背景解读。';
-  return `${prefix}，${name} 的${chineseField(key)}为 ${fmtNum(value, 6)}${chineseUnit(units?.[key]) ? ` ${chineseUnit(units?.[key])}` : ''}；${reading}`;
-}
-function performanceInputs(points: EquityPoint[] | undefined, initialCapital?: number): Record<string, unknown> {
-  const equity = points?.map(point => point.equity).filter(Number.isFinite) ?? [];
-  const returns = equity.slice(1).map((value, index) => equity[index] ? value / equity[index] - 1 : 0).filter(Number.isFinite);
-  const first = points?.[0]?.timestamp;
-  const last = points?.[points.length - 1]?.timestamp;
-  const elapsedDays = first && last ? Math.max(1, (Date.parse(last) - Date.parse(first)) / 86_400_000) : undefined;
-  return { equity, returns, initial_capital: initialCapital ?? equity[0], elapsed_days: elapsedDays };
+  return `${prefix}，${name} 的${CHINESE_FIELDS[key] || '计算结果'}为 ${fmtNum(value, 6)}${chineseUnit(units?.[key]) ? ` ${chineseUnit(units?.[key])}` : ''}；${reading}`;
 }
 function plotTheme() {
   const style = getComputedStyle(document.documentElement);
@@ -46,6 +40,8 @@ function plotTheme() {
     text: style.getPropertyValue('--text').trim(), grid: style.getPropertyValue('--border-soft').trim(),
     accent: style.getPropertyValue('--accent').trim(), blue: style.getPropertyValue('--accent-2').trim(),
     fill: style.getPropertyValue('--chart-fill').trim(),
+    green: style.getPropertyValue('--green').trim(), red: style.getPropertyValue('--red').trim(),
+    palette: ['--accent', '--accent-2', '--chart-purple', '--red', '--chart-cyan', '--green'].map(key => style.getPropertyValue(key).trim()),
   };
 }
 
@@ -101,12 +97,13 @@ function TabBar({ active, onChange }: { active: TabId; onChange: (t: TabId) => v
 // 通用:下拉选择器
 // ===================================================================
 interface DropdownProps<T> {
+  label: string;
   options: { v: T; l: string }[];
   value: T;
   onChange: (v: T) => void;
   minWidth?: number;
 }
-function Dropdown<T extends string | number>({ options, value, onChange, minWidth = 100 }: DropdownProps<T>) {
+function Dropdown<T extends string | number>({ label, options, value, onChange, minWidth = 100 }: DropdownProps<T>) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -122,12 +119,14 @@ function Dropdown<T extends string | number>({ options, value, onChange, minWidt
   const current = options.find(o => o.v === value) || options[0];
 
   return (
-    <div className={'ax-dropdown' + (open ? ' open' : '')} ref={ref} style={{ minWidth }}>
-      <button className="ax-dd-trigger" onClick={() => setOpen(o => !o)}>
+    <div className={'ax-dropdown' + (open ? ' open' : '')} ref={ref} style={{ minWidth }} onKeyDown={event => {
+      if (event.key === 'Escape') { setOpen(false); ref.current?.querySelector('button')?.focus(); }
+    }}>
+      <button type="button" className="ax-dd-trigger" aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(o => !o)}>
         <span>{current?.l || '选择...'}</span>
       </button>
       {open && (
-        <div className="ax-dd-menu">
+        <div className="ax-dd-menu" role="listbox" aria-label={label}>
           {options.length > 5 && (
             <input className="ax-dd-search" placeholder="搜索..." autoFocus
               onChange={e => {
@@ -142,13 +141,16 @@ function Dropdown<T extends string | number>({ options, value, onChange, minWidt
             />
           )}
           {options.map(o => (
-            <div
+            <button
+              type="button"
+              role="option"
+              aria-selected={o.v === value}
               key={String(o.v)}
               className={'ax-dd-item' + (o.v === value ? ' selected' : '')}
               onClick={() => { onChange(o.v); setOpen(false); }}
             >
               {o.l}
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -284,7 +286,7 @@ function Section({ label, children, danger, highlight }: { label: string; childr
 }
 
 function CodeLink({ entry, detailed = false }: { entry: KnowledgeEntry; detailed?: boolean }) {
-  const [url, setUrl] = useState('');
+  const [url, setUrl] = useState(entry.code_url || '');
   const [loading, setLoading] = useState(false);
   const resolve = async () => {
     if (url || loading) return;
@@ -305,12 +307,32 @@ function practiceCatalog() {
   practiceCatalogPromise ??= api.listPractice().then(response => response.concepts);
   return practiceCatalogPromise;
 }
-const FORMULA_FALLBACK: Record<string, string> = { earnings_per_share: '(净利润 − 优先股股息) ÷ 加权平均普通股股数' };
+const FORMULA_FALLBACK: Record<string, string> = { eps: '(净利润 − 优先股股息) ÷ 加权平均普通股股数', earnings_per_share: '(净利润 − 优先股股息) ÷ 加权平均普通股股数' };
 function ScalarKnowledgeDiagram({ concept, inputs, scalar, unit, loading }: { concept: KnowledgeEntry; inputs: PracticeConcept['inputs']; scalar?: [string, number | null]; unit?: string; loading?: boolean }) {
   const formula = concept.formula || FORMULA_FALLBACK[concept.id] || `${concept.name} 的定义公式`;
-  const height = Math.max(142, 74 + inputs.length * 19);
   const shownInputs = inputs.length ? inputs : [{ key: 'market_bars', label: '教学行情样本', default: '已传入 K 线' }];
-  return <figure className="ax-knowledge-chart ax-scalar-chart"><svg viewBox={`0 0 620 ${height}`} role="img" aria-label={`${concept.name} 输入、公式和结果图解`}><rect x="8" y="18" width="190" height={height - 34} rx="6" /><text x="20" y="40">输入</text>{shownInputs.map((input, index) => <text key={input.key} x="20" y={62 + index * 19}>{`${chineseField(input.key, input.label)}${input.label && input.label !== chineseField(input.key, input.label) ? `（${input.key}）` : ''}：${JSON.stringify(input.default)}`}</text>)}<path d="M208 60 H234" /><rect x="244" y="18" width="176" height={height - 34} rx="6" /><text x="256" y="40">公式</text><text x="256" y="66">{formula}</text><path d="M430 60 H456" /><rect x="466" y="18" width="146" height={height - 34} rx="6" /><text x="478" y="40">结果</text><text x="478" y="68">{loading ? '计算中…' : scalar && scalar[1] != null ? `${chineseField(scalar[0])}：${fmtNum(scalar[1], 6)}` : '当前无定义'}</text><text x="478" y="90">{loading ? '教学示例' : scalar ? chineseUnit(unit) : '数据不足'}</text></svg><figcaption>{shownInputs.length ? '完整教学输入' : '教学行情'} → {formula} → 可解释的结果</figcaption></figure>;
+  const resultLabel = scalar ? (CHINESE_FIELDS[scalar[0]] || concept.name) : concept.name;
+  const compact = scalar?.[1] != null ? fmtNum(scalar[1], 4).slice(0, 12) : '当前无定义';
+  return <><figure className="ax-knowledge-chart ax-scalar-chart"><svg viewBox="0 0 420 116" role="img" aria-label={`${concept.name} 输入、公式和结果图解`}><rect x="10" y="25" width="112" height="66" rx="6" /><text x="22" y="50">输入</text><text x="22" y="72">{shownInputs.length} 项教学数据</text><path d="M132 58 H148" /><rect x="158" y="25" width="104" height="66" rx="6" /><text x="170" y="50">概念</text><text x="170" y="72">按公式计算</text><path d="M272 58 H288" /><rect x="298" y="25" width="112" height="66" rx="6" /><text x="310" y="50">结果</text><text x="310" y="72">{loading ? '计算中…' : compact}</text></svg><figcaption>教学输入 → 定义公式 → 可解释的数值结果</figcaption></figure><dl className="ax-knowledge-values">{shownInputs.map(input => <div key={input.key}><dt>{chineseField(input.key, input.label)} <small>({input.key})</small></dt><dd>{JSON.stringify(input.default)}</dd></div>)}<div className="ax-knowledge-formula"><dt>公式</dt><dd>{formula}</dd></div><div><dt>结果含义</dt><dd>{resultLabel}{unit ? ` · ${chineseUnit(unit)}` : ''}</dd></div></dl></>;
+}
+function BookChartVisual({ chart, name }: { chart: NonNullable<PracticeResult['chart']>; name: string }) {
+  const bars = chart.bars.filter(bar => [bar.open, bar.high, bar.low, bar.close].every(Number.isFinite));
+  if (!bars.length) return <ScalarKnowledgeDiagram concept={{ id: name, name, formula: '', category: '', summary: '', meaning: '', example: '', signals: '', pitfalls: '', related: [], code_url: '', implementation: '' }} inputs={[]} />;
+  const lo = Math.min(...bars.map(bar => bar.low)), hi = Math.max(...bars.map(bar => bar.high));
+  const scale = (value: number) => 90 - ((value - lo) / (hi - lo || 1)) * 74;
+  const width = 396 / Math.max(bars.length, 1);
+  const candleKinds = ['heikin_ashi', 'range_bars', 'tick_bars'];
+  const isCandle = candleKinds.includes(chart.kind);
+  const isKagi = chart.kind === 'kagi';
+  const isPnf = chart.kind === 'point_figure' || chart.kind === 'point_and_figure';
+  const label = ({ heikin_ashi: '平均K线', range_bars: '范围K线', tick_bars: 'Tick K线', renko: '砖形图', point_figure: '点数图', kagi: '卡吉线', three_line_break: '三线突破' } as Record<string, string>)[chart.kind] || name;
+  const columns = bars.reduce<number[]>((all, bar, index) => {
+    if (index === 0) return [bar.column ?? 0];
+    const previous = bars[index - 1];
+    return [...all, bar.column ?? (bar.direction === previous.direction ? all[index - 1] : all[index - 1] + 1)];
+  }, []), minColumn = Math.min(...columns), maxColumn = Math.max(...columns);
+  const columnX = (column: number) => 12 + ((column - minColumn) / (maxColumn - minColumn || 1)) * 396;
+  return <figure className="ax-knowledge-chart ax-book-chart"><svg data-chart-kind={chart.kind} viewBox="0 0 420 116" role="img" aria-label={`${label}图解`}><line x1="12" y1="92" x2="408" y2="92" />{isCandle ? bars.map((bar, index) => { const x = 12 + index * width + width / 2, rise = bar.close >= bar.open; return <g key={index} className={rise ? 'up' : 'down'}><line x1={x} y1={scale(bar.high)} x2={x} y2={scale(bar.low)} /><rect x={x - Math.max(1, width * .28)} y={Math.min(scale(bar.open), scale(bar.close))} width={Math.max(2, width * .56)} height={Math.max(1, Math.abs(scale(bar.open) - scale(bar.close)))} /></g>; }) : isPnf ? bars.map((bar, index) => <text key={index} data-pnf-column={columns[index]} className={bar.direction && bar.direction < 0 ? 'down' : 'up'} x={columnX(columns[index])} y={scale(bar.close)} textAnchor="middle">{bar.direction && bar.direction < 0 ? 'O' : 'X'}</text>) : chart.kind === 'renko' || chart.kind === 'three_line_break' ? bars.map((bar, index) => { const rise = (bar.direction ?? (bar.close >= bar.open ? 1 : -1)) > 0, x = 12 + index * width; return <rect key={index} className={rise ? 'up' : 'down'} x={x} y={Math.min(scale(bar.open), scale(bar.close))} width={Math.max(2, width - 1)} height={Math.max(3, Math.abs(scale(bar.open) - scale(bar.close)))} />; }) : isKagi ? bars.map((bar, index) => { const x = columnX(columns[index]), previous = bars[index - 1], beforeStyle = previous?.line_style || 'neutral', style = bar.line_style || 'neutral', switched = bar.switch_price != null && Math.min(bar.open, bar.close) <= bar.switch_price && bar.switch_price <= Math.max(bar.open, bar.close); return <g key={index}>{index > 0 && columns[index] !== columns[index - 1] && <line data-kagi-horizontal="true" className={beforeStyle} x1={columnX(columns[index - 1])} y1={scale(previous.close)} x2={x} y2={scale(previous.close)} />}{switched ? <><line data-kagi-vertical="true" className={beforeStyle} x1={x} y1={scale(bar.open)} x2={x} y2={scale(bar.switch_price!)} /><line data-kagi-switch="true" className={style} x1={x} y1={scale(bar.switch_price!)} x2={x} y2={scale(bar.close)} /></> : <line data-kagi-vertical="true" className={style} x1={x} y1={scale(bar.open)} x2={x} y2={scale(bar.close)} />}</g>; }) : null}</svg><figcaption>{label} · {isCandle ? '每根显示开高低收' : isPnf ? 'X 为上涨列，O 为下跌列' : isKagi ? '同向段共列；横线连接转向，阴阳切换点分段显示' : chart.kind === 'renko' ? '每砖代表固定价格移动' : '按突破方向形成的实体'}</figcaption></figure>;
 }
 
 function KnowledgeVisual({ concept }: { concept: KnowledgeEntry }) {
@@ -328,13 +350,11 @@ function KnowledgeVisual({ concept }: { concept: KnowledgeEntry }) {
   if (!result) return <Section label="可计算示例" highlight><ScalarKnowledgeDiagram concept={concept} inputs={concept.inputs || []} loading /><p className="ax-practice-note">正在生成与 {concept.name} 对应的示例…</p></Section>;
   const series = result.series.find(item => item.values.some(value => value != null));
   const values = series?.values.filter((value): value is number => value != null) ?? [];
-  const min = Math.min(...values, 0), max = Math.max(...values, 1), span = max - min || 1;
-  const points = series?.values.map((value, index) => value == null ? '' : `${12 + index * (276 / Math.max(series.values.length - 1, 1))},${88 - ((value - min) / span) * 72}`).filter(Boolean).join(' ') ?? '';
   const scalar = Object.entries(result.values).find(([, value]) => value != null);
   const inputs = practiceConcept?.inputs || concept.inputs || [];
   return <Section label="可计算示例" highlight>
     <p className="ax-practice-note">{result.provenance === 'provided_market_bars' ? '基于合成教学行情计算，用来观察数值变化，不代表当前币种行情。' : '基于可编辑教学输入计算，不代表当前币种行情。'}</p>
-    {series && values.length > 1 ? <figure className="ax-knowledge-chart"><svg viewBox="0 0 300 100" role="img" aria-label={`${concept.name} 示例数值图`}><line x1="12" y1="88" x2="288" y2="88" /><line x1="12" y1="12" x2="12" y2="88" /><polyline points={points} /></svg><figcaption>{chineseField(series.name)}：范围 {fmtNum(min, 4)} 到 {fmtNum(max, 4)}</figcaption></figure> : <ScalarKnowledgeDiagram concept={concept} inputs={inputs} scalar={scalar} unit={scalar ? result.units?.[scalar[0]] : undefined} />}
+    {result.chart ? <BookChartVisual chart={result.chart} name={concept.name} /> : series && values.length > 1 ? <KnowledgeSeriesVisual name={concept.name} result={result} /> : <ScalarKnowledgeDiagram concept={concept} inputs={inputs} scalar={scalar} unit={scalar ? result.units?.[scalar[0]] : undefined} />}
     <p className="ax-practice-reading">{resultSentence(concept.name, result.values, result.units, Boolean(series && values.length > 1))}</p>
     {result.notes.slice(0, 1).map(note => <p className="ax-practice-note" key={note}>{note}</p>)}
   </Section>;
@@ -349,12 +369,15 @@ function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}
   const [result, setResult] = useState<PracticeResult | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [usePageContext, setUsePageContext] = useState(true);
+  const appliedTarget = useRef<string | undefined>();
 
   const selectConcept = (id: string, catalog = concepts) => {
     const concept = catalog.find(item => item.id === id);
     setConceptId(id);
     setInputs(Object.fromEntries((concept?.inputs ?? []).map(input => [input.key,
       JSON.stringify(contextInputs[input.key] ?? input.default)])));
+    setUsePageContext((concept?.inputs ?? []).some(input => Object.prototype.hasOwnProperty.call(contextInputs, input.key)));
     setResult(null);
     setError('');
   };
@@ -367,8 +390,11 @@ function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}
   }, []);
 
   useEffect(() => {
-    if (targetConcept && concepts.some(item => item.id === targetConcept) && targetConcept !== conceptId) selectConcept(targetConcept);
-  }, [targetConcept, concepts, conceptId]);
+    if (targetConcept && targetConcept !== appliedTarget.current && concepts.some(item => item.id === targetConcept)) {
+      appliedTarget.current = targetConcept;
+      selectConcept(targetConcept);
+    }
+  }, [targetConcept, concepts]);
 
   const concept = concepts.find(item => item.id === conceptId);
   const run = async () => {
@@ -379,7 +405,7 @@ function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}
     }
     const parsed: Record<string, unknown> = {};
     try {
-      for (const input of concept.inputs) parsed[input.key] = contextInputs[input.key] ?? JSON.parse(inputs[input.key] ?? 'null');
+      for (const input of concept.inputs) parsed[input.key] = usePageContext && Object.prototype.hasOwnProperty.call(contextInputs, input.key) ? contextInputs[input.key] : JSON.parse(inputs[input.key] ?? 'null');
     } catch {
       setError('输入必须是有效的 JSON 数值、数组或字符串。');
       return;
@@ -400,13 +426,14 @@ function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}
       {error && <div className="ax-error">{error}</div>}
       {concepts.length > 0 && <>
         <label>概念
-          <Dropdown options={concepts.map(item => ({ v: item.id, l: `${item.name} · ${item.category}` }))} value={conceptId} onChange={selectConcept} minWidth={260} />
+          <Dropdown label="概念" options={concepts.map(item => ({ v: item.id, l: `${item.name} · ${item.category}` }))} value={conceptId} onChange={selectConcept} minWidth={260} />
         </label>
         {concept && <>
           <p className="ax-practice-note">{concept.notes}</p>
           {concept.input_kind !== 'market_bars' && <p className="ax-practice-provenance">教学示例：这些可编辑输入不是 {symbol || '当前交易对'} 的实时或历史行情。</p>}
+          {concept.inputs.some(input => Object.prototype.hasOwnProperty.call(contextInputs, input.key)) && <p className="ax-practice-provenance">{usePageContext ? '本页上下文已预填并用于计算。' : '已改用手动输入，运行时将覆盖本页上下文。'} <button type="button" className="ax-inline-action" onClick={() => setUsePageContext(value => !value)}>{usePageContext ? '改用手动输入' : '使用本页上下文'}</button></p>}
           {concept.inputs.length > 0 && <div className="ax-practice-inputs">{concept.inputs.map(input => <label key={input.key}>{chineseField(input.key, input.label)}
-            <input value={inputs[input.key] ?? ''} onChange={event => setInputs(current => ({ ...current, [input.key]: event.target.value }))} aria-label={chineseField(input.key, input.label)} />
+            <input value={usePageContext && Object.prototype.hasOwnProperty.call(contextInputs, input.key) ? JSON.stringify(contextInputs[input.key]) : inputs[input.key] ?? ''} disabled={usePageContext && Object.prototype.hasOwnProperty.call(contextInputs, input.key)} onChange={event => setInputs(current => ({ ...current, [input.key]: event.target.value }))} aria-label={chineseField(input.key, input.label)} />
           </label>)}</div>}
           <button className="ax-btn primary" onClick={run} disabled={loading}>{loading ? '计算中…' : '运行实践'}</button>
         </>}
@@ -414,7 +441,7 @@ function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}
       {result && <div className="ax-practice-result">
         <p className={result.status === 'computed' ? 'positive' : 'negative'}>{result.status === 'computed' ? '已计算' : '无法计算'} · {result.provenance === 'provided_market_bars' ? '使用当前模块行情上下文' : '使用可编辑教学输入'}</p>
         {result.reason && <p>{result.reason}</p>}
-        {Object.keys(result.values).length > 0 && <dl>{Object.entries(result.values).map(([key, value]) => <div key={key}><dt>{chineseField(key)}{result.units?.[key] ? `（${result.units[key]}）` : ''}</dt><dd>{value == null ? '—' : fmtNum(value, 6)}</dd></div>)}</dl>}
+        {Object.keys(result.values).length > 0 && <dl>{Object.entries(result.values).map(([key, value]) => <div key={key}><dt>{chineseField(key, key === conceptId ? concept?.name : undefined)}{result.units?.[key] ? `（${chineseUnit(result.units[key])}）` : ''}</dt><dd>{value == null ? '—' : fmtNum(value, 6)}</dd></div>)}</dl>}
         <p className="ax-practice-reading">{resultSentence(concept?.name || '该概念', result.values, result.units)}</p>
         {result.notes.map((note, index) => <p className="ax-practice-note" key={index}>{note}</p>)}
       </div>}
@@ -610,13 +637,14 @@ function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 
   // 画图
   useEffect(() => {
     if (!chartData) return;
-    if (!chartRef.current) return;
+    const chart = chartRef.current;
+    if (!chart) return;
     if (chartData.bars.length === 0) {
-      Plotly.purge(chartRef.current);
-      chartRef.current.replaceChildren(Object.assign(document.createElement('p'), { className: 'ax-chart-empty', textContent: '没有可用的 K 线数据。请调整交易对、数据源或数量后重试。' }));
+      Plotly.purge(chart);
+      chart.replaceChildren(Object.assign(document.createElement('p'), { className: 'ax-chart-empty', textContent: '没有可用的 K 线数据。请调整交易对、数据源或数量后重试。' }));
       return;
     }
-    chartRef.current.querySelector('.ax-chart-empty')?.remove();
+    chart.querySelector('.ax-chart-empty')?.remove();
     const colors = plotTheme();
     const traces: any[] = [{
       x: chartData.bars.map(b => new Date(b.timestamp)),
@@ -625,15 +653,15 @@ function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 
       low: chartData.bars.map(b => b.low),
       close: chartData.bars.map(b => b.close),
       type: 'candlestick', name: chartData.symbol,
-      increasing: { line: { color: '#3fb950' } },
-      decreasing: { line: { color: '#f85149' } },
+      increasing: { line: { color: colors.green } },
+      decreasing: { line: { color: colors.red } },
     }];
     if (chartType === 'heikin_ashi') {
       traces[0].name = chartData.symbol + ' (HA)';
     }
     const usedPanels = new Set<IndicatorPanel>();
     if (chartData.indicators) {
-      const colors = ['#d29922', '#58a6ff', '#a371f7', '#ff7b72', '#56d4dd', '#7ee787'];
+      const palette = colors.palette;
       let ci = 0;
       for (const [name, vals] of Object.entries(chartData.indicators)) {
         const series = validSeries(vals);
@@ -644,35 +672,40 @@ function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 
           x: series.map(v => v ? new Date(v.x) : null),
           y: series.map(v => v ? v.y : null),
           type: 'scatter', mode: 'lines', name,
-          line: { color: colors[ci++ % colors.length], width: 1.5 },
+          line: { color: palette[ci++ % palette.length], width: 1.5 },
           connectgaps: false,
           yaxis: panel === 'price' ? 'y' : `y${['oscillator', 'momentum', 'volume', 'volatility'].indexOf(panel) + 2}`,
         });
       }
     }
-    const panelLayout: Record<Exclude<IndicatorPanel, 'price'>, { key: string; title: string; domain: [number, number]; range?: [number, number] }> = {
-      oscillator: { key: 'yaxis2', title: '振荡器', domain: [0.38, 0.5] },
-      momentum: { key: 'yaxis3', title: '动量', domain: [0.25, 0.35] },
-      volume: { key: 'yaxis4', title: '量能', domain: [0.13, 0.22] },
-      volatility: { key: 'yaxis5', title: '波动率', domain: [0.02, 0.1] },
+    const panelLayout: Record<Exclude<IndicatorPanel, 'price'>, { key: string; title: string }> = {
+      oscillator: { key: 'yaxis2', title: '振荡器' },
+      momentum: { key: 'yaxis3', title: '动量' },
+      volume: { key: 'yaxis4', title: '量能' },
+      volatility: { key: 'yaxis5', title: '波动率' },
     };
+    const subPanels = (Object.keys(panelLayout) as Exclude<IndicatorPanel, 'price'>[]).filter(panel => usedPanels.has(panel));
+    const height = 460 + subPanels.length * 80;
+    chart.style.height = `${height}px`;
     const layout: any = {
+      height,
+      autosize: true,
       paper_bgcolor: colors.paper, plot_bgcolor: colors.plot,
       font: { color: colors.text, family: 'system-ui', size: 11 },
-      margin: { t: 30, b: 55, l: 55, r: 55 },
-      xaxis: { gridcolor: colors.grid, type: 'date', rangeslider: { visible: false } },
-      yaxis: { gridcolor: colors.grid, title: '价格', domain: usedPanels.size ? [0.54, 1] : [0, 1], fixedrange: false },
-      legend: { orientation: 'h', y: -0.2 },
+      margin: { t: 30, b: 90, l: 55, r: 30 },
+      xaxis: { gridcolor: colors.grid, type: 'date', anchor: 'free', position: 0, rangeslider: { visible: false } },
+      yaxis: { gridcolor: colors.grid, title: '价格', domain: [subPanels.length * 0.17, 1], fixedrange: false },
+      legend: { orientation: 'h', y: -0.13 },
       hovermode: 'x unified',
       hoverlabel: { bgcolor: colors.paper, bordercolor: colors.grid, font: { color: colors.text } },
     };
-    for (const panel of usedPanels) {
-      if (panel === 'price') continue;
+    for (const [index, panel] of subPanels.entries()) {
       const spec = panelLayout[panel];
-      layout[spec.key] = { gridcolor: colors.grid, title: spec.title, domain: spec.domain, anchor: 'x', range: spec.range, fixedrange: false };
+      const bottom = (subPanels.length - index - 1) * 0.17;
+      layout[spec.key] = { gridcolor: colors.grid, title: spec.title, domain: [bottom, bottom + 0.13], anchor: 'x', fixedrange: false };
     }
-    Plotly.react(chartRef.current, traces, layout, { responsive: true, displayModeBar: false });
-    return () => Plotly.purge(chartRef.current);
+    Plotly.react(chart, traces, layout, { responsive: true, displayModeBar: false });
+    return () => Plotly.purge(chart);
   }, [chartData, chartType, theme]);
 
   return (
@@ -681,7 +714,7 @@ function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 
       <p className="ax-lead">真实 Binance 数据 + 指标叠加 + 形态识别。</p>
       <div className="ax-controls">
         <label>交易对
-          <Dropdown options={symbols.map(s => ({ v: s, l: s }))} value={symbol} onChange={setSymbol} minWidth={120} />
+          <Dropdown label="交易对" options={symbols.map(s => ({ v: s, l: s }))} value={symbol} onChange={setSymbol} minWidth={120} />
         </label>
         <label>自定义
           <input type="text" value={customSymbol} onChange={e => setCustomSymbol(e.target.value)}
@@ -692,11 +725,11 @@ function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 
             min={50} max={2000} step={50} />
         </label>
         <label>数据源
-          <Dropdown options={[{v:'real',l:'真实 (Binance)'},{v:'synthetic',l:'合成 (随机)'}]}
+          <Dropdown label="数据源" options={[{v:'real',l:'真实 (Binance)'},{v:'synthetic',l:'合成 (随机)'}]}
             value={source} onChange={(v: SourceType) => setSource(v)} minWidth={140} />
         </label>
         <label>图表类型
-          <Dropdown options={[{v:'candle',l:'标准 K 线'},{v:'heikin_ashi',l:'Heikin Ashi'}]}
+          <Dropdown label="图表类型" options={[{v:'candle',l:'标准 K 线'},{v:'heikin_ashi',l:'Heikin Ashi'}]}
             value={chartType} onChange={(v: ChartType) => setChartType(v)} minWidth={140} />
         </label>
         <label>指标叠加
@@ -805,8 +838,9 @@ function Backtest({ targetConcept, theme }: { targetConcept?: string; theme: 'li
 
   useEffect(() => {
     if (!result || !chartRef.current) return;
+    const chart = chartRef.current;
     const colors = plotTheme();
-    Plotly.react(chartRef.current, [{
+    Plotly.react(chart, [{
       x: result.equity_curve.map(p => new Date(p.timestamp)),
       y: result.equity_curve.map(p => p.equity),
       type: 'scatter', mode: 'lines', name: '净值',
@@ -820,6 +854,7 @@ function Backtest({ targetConcept, theme }: { targetConcept?: string; theme: 'li
       yaxis: { gridcolor: colors.grid, zerolinecolor: colors.grid, title: '净值 ($)' },
       hoverlabel: { bgcolor: colors.paper, bordercolor: colors.grid, font: { color: colors.text } },
     }, { responsive: true, displayModeBar: false });
+    return () => Plotly.purge(chart);
   }, [result, theme]);
 
   const currentMeta = strategies.find(s => s.name === strategy);
@@ -830,15 +865,15 @@ function Backtest({ targetConcept, theme }: { targetConcept?: string; theme: 'li
       <p className="ax-lead">在真实 Binance 数据上跑策略,看业绩指标。</p>
       <div className="ax-controls">
         <label>策略
-          <Dropdown options={strategies.map(s => ({ v: s.name, l: s.display_name }))}
+          <Dropdown label="策略" options={strategies.map(s => ({ v: s.name, l: s.display_name }))}
             value={strategy} onChange={setStrategy} minWidth={200} />
         </label>
         <label>交易对
-          <Dropdown options={symbols.map(s => ({ v: s, l: s }))}
+          <Dropdown label="交易对" options={symbols.map(s => ({ v: s, l: s }))}
             value={symbol} onChange={setSymbol} minWidth={120} />
         </label>
         <label>数据源
-          <Dropdown options={[{v:'real',l:'真实 (Binance)'},{v:'synthetic',l:'合成 (随机)'}]}
+          <Dropdown label="数据源" options={[{v:'real',l:'真实 (Binance)'},{v:'synthetic',l:'合成 (随机)'}]}
             value={source} onChange={(v: SourceType) => setSource(v)} minWidth={140} />
         </label>
         <label>K 线数
@@ -946,14 +981,19 @@ function PaperTrading({ targetConcept, theme }: { targetConcept?: string; theme:
   const [error, setError] = useState('');
   const chartRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const selectedByUser = useRef(false);
 
   useEffect(() => {
     api.listStrategies().then(d => {
       setStrategies(d.strategies);
-      if (d.strategies.length > 0) setStrategy(d.strategies.find(s => s.name === 'sma_cross')?.name || d.strategies[0].name);
-    });
-    api.paperSnapshot().then(setSnapshot).catch(console.error);
+      if (d.strategies.length > 0) setStrategy(current => current || d.strategies[0].name);
+    }).catch(e => setError(String(e)));
+    api.paperSnapshot().then(setSnapshot).catch(e => setError(String(e)));
   }, []);
+
+  useEffect(() => {
+    if (snapshot?.strategy && !selectedByUser.current) setStrategy(snapshot.strategy);
+  }, [snapshot?.strategy]);
 
   // WebSocket
   useEffect(() => {
@@ -970,8 +1010,9 @@ function PaperTrading({ targetConcept, theme }: { targetConcept?: string; theme:
   useEffect(() => {
     if (!snapshot || !chartRef.current) return;
     if (snapshot.equity_curve.length === 0) return;
+    const chart = chartRef.current;
     const colors = plotTheme();
-    Plotly.react(chartRef.current, [{
+    Plotly.react(chart, [{
       x: snapshot.equity_curve.map((p: EquityPoint) => new Date(p.timestamp)),
       y: snapshot.equity_curve.map((p: EquityPoint) => p.equity),
       type: 'scatter', mode: 'lines',
@@ -985,6 +1026,7 @@ function PaperTrading({ targetConcept, theme }: { targetConcept?: string; theme:
       yaxis: { gridcolor: colors.grid, zerolinecolor: colors.grid, title: '净值 ($)' },
       hoverlabel: { bgcolor: colors.paper, bordercolor: colors.grid, font: { color: colors.text } },
     }, { responsive: true, displayModeBar: false });
+    return () => Plotly.purge(chart);
   }, [snapshot, theme]);
 
   const start = async () => {
@@ -1003,23 +1045,24 @@ function PaperTrading({ targetConcept, theme }: { targetConcept?: string; theme:
     } catch (e) { setError(String(e)); }
   };
 
-  if (!snapshot) return <div className="ax-loading">加载中…</div>;
+  if (!snapshot) return <div className={error ? 'ax-error' : 'ax-loading'}>{error || '加载中…'}</div>;
 
   return (
     <section className="ax-section">
       <h2>模拟盘</h2>
-      <p className="ax-lead">实时数据 + 实时策略,5 秒一次推送。</p>
+      <p className="ax-lead">使用已收盘行情推进模拟账户；状态每 2 秒更新。</p>
       <div className="ax-controls">
         <label>策略
-          <Dropdown options={strategies.map(s => ({ v: s.name, l: s.display_name }))}
-            value={strategy} onChange={setStrategy} minWidth={200} />
+          <Dropdown label="策略" options={strategies.map(s => ({ v: s.name, l: s.display_name }))}
+            value={strategy} onChange={value => { selectedByUser.current = true; setStrategy(value); }} minWidth={200} />
         </label>
         <button className="ax-btn primary" onClick={start} disabled={snapshot.is_running}>▶ 启动</button>
-        <button className="ax-btn" onClick={stop} disabled={!snapshot.is_running}>⏸ 停止</button>
+        <button className="ax-btn" onClick={stop} disabled={!snapshot.is_running}>■ 停止</button>
         <span className={'ax-status ' + (snapshot.is_running ? 'on' : 'off')}>
-          {snapshot.is_running ? '🟢 运行中' : '⏹️ 未运行'}
+          {snapshot.is_running ? '运行中' : '已停止'}
         </span>
       </div>
+      <p className="ax-practice-note">账户策略：{strategies.find(item => item.name === snapshot.strategy)?.display_name || snapshot.strategy || '—'}。启动将采用上方选择的策略；已有持仓和资金会保留。</p>
       {error && <div className="ax-error">{error}</div>}
       <div className="ax-paper-stats">
         <div className="ax-stat"><div className="ax-stat-label">现金</div><div className="ax-stat-value">{fmtMoney(snapshot.cash)}</div></div>
@@ -1028,7 +1071,7 @@ function PaperTrading({ targetConcept, theme }: { targetConcept?: string; theme:
         <div className="ax-stat"><div className="ax-stat-label">持仓数量</div><div className="ax-stat-value">{fmtNum(snapshot.position_size, 4)}</div></div>
         <div className="ax-stat"><div className="ax-stat-label">成交笔数</div><div className="ax-stat-value">{snapshot.trades_count}</div></div>
         <div className="ax-stat"><div className="ax-stat-label">交易对</div><div className="ax-stat-value">{snapshot.symbol || '—'}</div></div>
-        <div className="ax-stat"><div className="ax-stat-label">数据源</div><div className="ax-stat-value">{snapshot.source || '—'}</div></div>
+        <div className="ax-stat"><div className="ax-stat-label">数据源</div><div className="ax-stat-value">{snapshot.source === 'synthetic' ? '合成教学行情' : snapshot.source === 'real' ? 'Binance' : '—'}</div></div>
         <div className="ax-stat"><div className="ax-stat-label">最新价</div><div className="ax-stat-value">{snapshot.current_bar ? fmtNum(snapshot.current_bar.close) : '—'}</div></div>
       </div>
       <div ref={chartRef} className="ax-chart"></div>
@@ -1152,17 +1195,18 @@ function CompareStrategies({ targetConcept, theme }: { targetConcept?: string; t
 
   useEffect(() => {
     if (!results.length || !chartRef.current) return;
+    const chart = chartRef.current;
     const themeColors = plotTheme();
-    const colors = ['#d29922', '#58a6ff', '#a371f7', '#ff7b72', '#56d4dd', '#7ee787', '#ffa657', '#e91e63', '#607d8b'];
+    const colors = themeColors.palette;
     const names: Record<string, string> = {};
     strategies.forEach(s => { names[s.name] = s.display_name; });
     customStrategies.forEach((cs, i) => { names['custom_' + i] = '✦ ' + cs.name; });
-    Plotly.react(chartRef.current, results.map((r, i) => ({
+    Plotly.react(chart, results.map((r, i) => ({
       x: r.result.equity_curve.map(p => new Date(p.timestamp)),
       y: r.result.equity_curve.map(p => p.equity),
       type: 'scatter', mode: 'lines',
       name: names[r.name] || r.name,
-      line: { color: colors[i % colors.length], width: 1.8 },
+      line: { color: colors[i % colors.length], width: 1.8, dash: i >= colors.length ? 'dash' : 'solid' },
     })), {
       paper_bgcolor: themeColors.paper, plot_bgcolor: themeColors.plot,
       font: { color: themeColors.text, family: 'system-ui', size: 11 },
@@ -1172,6 +1216,7 @@ function CompareStrategies({ targetConcept, theme }: { targetConcept?: string; t
       legend: { orientation: 'h', y: -0.15 },
       hoverlabel: { bgcolor: themeColors.paper, bordercolor: themeColors.grid, font: { color: themeColors.text } },
     }, { responsive: true, displayModeBar: false });
+    return () => Plotly.purge(chart);
   }, [results, strategies, customStrategies, theme]);
 
   return (
@@ -1180,11 +1225,11 @@ function CompareStrategies({ targetConcept, theme }: { targetConcept?: string; t
       <p className="ax-lead">勾选策略,PK 同一段历史数据上谁最强。可自定义。</p>
       <div className="ax-controls">
         <label>交易对
-          <Dropdown options={symbols.map(s => ({ v: s, l: s }))}
+          <Dropdown label="交易对" options={symbols.map(s => ({ v: s, l: s }))}
             value={symbol} onChange={setSymbol} minWidth={120} />
         </label>
         <label>数据源
-          <Dropdown options={[{v:'real',l:'真实 (Binance)'},{v:'synthetic',l:'合成 (随机)'}]}
+          <Dropdown label="数据源" options={[{v:'real',l:'真实 (Binance)'},{v:'synthetic',l:'合成 (随机)'}]}
             value={source} onChange={(v: SourceType) => setSource(v)} minWidth={140} />
         </label>
         <label>资金
@@ -1226,7 +1271,7 @@ function CompareStrategies({ targetConcept, theme }: { targetConcept?: string; t
                 <input type="text" value={customName} onChange={e => setCustomName(e.target.value)} placeholder="我的 SMA 策略" />
               </label>
               <label>基础策略
-                <Dropdown options={strategies.filter(s => s.name !== 'random').map(s => ({ v: s.name, l: s.display_name }))}
+                <Dropdown label="基础策略" options={strategies.filter(s => s.name !== 'random').map(s => ({ v: s.name, l: s.display_name }))}
                   value={customBase} onChange={setCustomBase} minWidth={180} />
               </label>
             </div>
@@ -1251,7 +1296,8 @@ function CompareStrategies({ targetConcept, theme }: { targetConcept?: string; t
 
       {results.length > 0 && (
         <>
-          <table className="ax-cmp-table">
+          <div className="ax-cmp-table" role="region" aria-label="策略业绩对比，可横向滚动" tabIndex={0}>
+          <table>
             <thead>
               <tr>
                 <th>策略</th>
@@ -1280,6 +1326,7 @@ function CompareStrategies({ targetConcept, theme }: { targetConcept?: string; t
               })}
             </tbody>
           </table>
+          </div>
           <div ref={chartRef} className="ax-chart"></div>
         </>
       )}

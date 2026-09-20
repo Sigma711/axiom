@@ -218,3 +218,16 @@ fn consensus_reports_forecast_distribution_separately_from_ratings() {
     assert_eq!(r["values"]["average_rating"], 2.0);
     assert!((r["values"]["eps_dispersion"].as_f64().unwrap() - 2.683281573).abs() < 1e-9);
 }
+
+#[test]
+fn every_input_has_a_beginner_friendly_chinese_label() {
+    let mut missing = Vec::new();
+    for concept in axiom::practice::catalog() {
+        for input in concept.inputs {
+            if !input.label.chars().any(|c| ('一'..='鿿').contains(&c)) {
+                missing.push(format!("{}:{}", concept.id, input.key));
+            }
+        }
+    }
+    assert!(missing.is_empty(), "missing labels: {}", missing.join(", "));
+}

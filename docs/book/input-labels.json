@@ -372,7 +372,7 @@
   "slow": "慢速周期长度（根）",
   "small_holder_tokens": "小持有者代币数量（枚/币）",
   "smooth_d": "D 线平滑周期（根）",
-  "smooth_k": "K 线平滑周期（根）",
+  "smooth_k": "K 值平滑周期（根）",
   "smooth_period": "平滑周期（根）",
   "smooth_periods": "平滑周期数组（根）",
   "smoothing_recorded": "是否记录平滑口径（布尔条件）",
@@ -440,5 +440,7 @@
   "x": "Pitchfork X 坐标数组（按点）",
   "y": "Pitchfork Y 坐标数组（按点，价格单位）",
   "year1_fcf": "第 1 年自由现金流（元）",
-  "year2_fcf": "第 2 年自由现金流（元）"
+  "year2_fcf": "第 2 年自由现金流（元）",
+  "eps_estimates": "分析师每股收益预测值（同一报告期，元/股序列）",
+  "revenue_estimates": "分析师收入预测值（同一报告期，元序列）"
 }

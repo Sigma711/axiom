@@ -215,6 +215,9 @@ fn registry() -> &'static Registry {
     REGISTRY.get_or_init(|| {
         let mut concepts = Vec::new();
         let mut routes = std::collections::BTreeMap::new();
+        let labels: std::collections::BTreeMap<String, String> =
+            serde_json::from_str(include_str!("../docs/book/input-labels.json"))
+                .expect("valid input labels");
         for (owner, items) in [
             (Owner::Base, base_catalog()),
             (Owner::Book, crate::book::catalog()),
@@ -223,7 +226,17 @@ fn registry() -> &'static Registry {
             (Owner::Supplement, crate::supplement::catalog()),
             (Owner::Workflows, crate::workflows::catalog()),
         ] {
-            for item in items {
+            for mut item in items {
+                for input in &mut item.inputs {
+                    if !input.label.chars().any(|c| ('一'..='鿿').contains(&c)) {
+                        if let Some(label) = labels.get(&input.key) {
+                            input.label.clone_from(label);
+                        }
+                    }
+                    if input.key == "equity" && input.default.is_array() {
+                        input.label = "净值序列（按时间顺序，含交易前初始资金）".into();
+                    }
+                }
                 assert!(
                     !routes.contains_key(&item.id),
                     "duplicate practice id {}",

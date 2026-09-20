@@ -39,7 +39,7 @@ const IDS: &[(&str, &str, &str, &str, &str)] = &[
         "book_chart_three_line_break",
         "三线突破",
         "收盘价突破最近三条同向线极值才生成反向线",
-        "下行线的最近三条最低为 8，收盘高于 8 才反转。",
+        "下行线的最近三条最高为 10，收盘高于 10 才反转。",
         "只处理提供的已收盘价格序列。",
     ),
     (
@@ -156,6 +156,55 @@ fn ordered(v: &Value, k: &str) -> Result<Vec<f64>, String> {
 fn series(out: &mut Output, name: &str, x: Vec<f64>, unit: &str) {
     out.series(name, x.into_iter().map(Some).collect(), unit)
 }
+fn chart_bar(open: f64, high: f64, low: f64, close: f64, direction: i8) -> Value {
+    json!({"open":open,"high":high,"low":low,"close":close,"direction":direction})
+}
+fn push_step(bars: &mut Vec<Value>, open: f64, close: f64) {
+    bars.push(chart_bar(
+        open,
+        open.max(close),
+        open.min(close),
+        close,
+        if close >= open { 1 } else { -1 },
+    ));
+}
+fn capped_push(bars: &mut Vec<Value>, open: f64, close: f64) -> Result<(), String> {
+    if bars.len() >= 10_000 {
+        return Err("生成图形条数超过 10000；请增大阈值或缩短输入".into());
+    }
+    push_step(bars, open, close);
+    Ok(())
+}
+fn decorate_kagi(bars: &mut [Value]) {
+    let (mut style, mut peak, mut trough, mut previous_direction) = ("neutral", None, None, 0_i64);
+    for bar in bars {
+        let direction = bar["direction"].as_i64().unwrap_or_default();
+        let open = bar["open"].as_f64().unwrap_or_default();
+        let close = bar["close"].as_f64().unwrap_or_default();
+        let mut switch_price = Value::Null;
+        if direction > 0 {
+            if let Some(level) = peak {
+                if open <= level && close > level {
+                    style = "yang";
+                    switch_price = json!(level);
+                }
+            }
+        } else if let Some(level) = trough {
+            if open >= level && close < level {
+                style = "yin";
+                switch_price = json!(level);
+            }
+        }
+        if previous_direction > 0 && direction < 0 {
+            peak = Some(open);
+        } else if previous_direction < 0 && direction > 0 {
+            trough = Some(open);
+        }
+        bar["line_style"] = json!(style);
+        bar["switch_price"] = switch_price;
+        previous_direction = direction;
+    }
+}
 pub fn evaluate(id: &str, _: &[Bar], inputs: &Value) -> Result<Value, String> {
     let mut v = defaults(id);
     if v.as_object().unwrap().is_empty() {
@@ -168,6 +217,7 @@ pub fn evaluate(id: &str, _: &[Bar], inputs: &Value) -> Result<Value, String> {
         v[k] = x.clone();
     }
     let mut out = Output::default();
+    let chart: Value;
     match id {
         "book_chart_heikin_ashi" => {
             let (o, h, l, c) = (
@@ -196,10 +246,26 @@ pub fn evaluate(id: &str, _: &[Bar], inputs: &Value) -> Result<Value, String> {
                 highs.push(h[i].max(ho).max(hc));
                 lows.push(l[i].min(ho).min(hc));
             }
+            let bars = opens
+                .iter()
+                .zip(&highs)
+                .zip(&lows)
+                .zip(&closes)
+                .map(|(((open, high), low), close)| {
+                    chart_bar(
+                        *open,
+                        *high,
+                        *low,
+                        *close,
+                        if close >= open { 1 } else { -1 },
+                    )
+                })
+                .collect::<Vec<_>>();
             series(&mut out, "ha_open", opens, "currency");
             series(&mut out, "ha_close", closes, "currency");
             series(&mut out, "ha_high", highs, "currency");
             series(&mut out, "ha_low", lows, "currency");
+            chart = json!({"kind":"heikin_ashi","bars":bars,"input":"explicit_ohlc"});
         }
         "book_chart_renko" => {
             let p = ordered(&v, "prices")?;
@@ -207,6 +273,7 @@ pub fn evaluate(id: &str, _: &[Bar], inputs: &Value) -> Result<Value, String> {
             let mut x = vec![p[0]];
             let mut last = p[0];
             let mut dir = 0.0_f64;
+            let mut bars = Vec::new();
             for q in p.into_iter().skip(1) {
                 let delta = q - last;
                 if dir == 0.0 && delta.abs() >= b {
@@ -217,26 +284,29 @@ pub fn evaluate(id: &str, _: &[Bar], inputs: &Value) -> Result<Value, String> {
                 if same || reverse {
                     if reverse {
                         dir = -dir;
+                        let open = last + dir * b;
                         last += dir * 2.0 * b;
+                        capped_push(&mut bars, open, last)?;
                         x.push(last);
                     }
                     while dir * (q - last) >= b {
+                        let open = last;
                         last += dir * b;
+                        capped_push(&mut bars, open, last)?;
                         x.push(last);
-                        if x.len() > 10_000 {
-                            return Err("生成砖数超过 10000；请增大砖宽或缩短输入".into());
-                        }
                     }
                 }
             }
             series(&mut out, "renko_close", x, "currency");
+            chart = json!({"kind":"renko","bars":bars,"input":"explicit_close_only","note":"砖是由阈值合成的图形价格，不是逐笔成交；每块固定一砖宽。"});
         }
         "book_chart_point_figure" => {
             let p = ordered(&v, "prices")?;
             let b = positive(&v, "box_size")?;
-            let r = positive(&v, "reversal_boxes")?;
+            let r = positive_integer(&v, "reversal_boxes")? as f64;
             let mut x = vec![p[0]];
             let (mut last, mut dir) = (p[0], 0.);
+            let mut bars = Vec::new();
             for q in p.into_iter().skip(1) {
                 let d = q - last;
                 if dir == 0. && d.abs() >= b {
@@ -247,78 +317,135 @@ pub fn evaluate(id: &str, _: &[Bar], inputs: &Value) -> Result<Value, String> {
                         dir = -dir
                     }
                     while dir * (q - last) >= b {
+                        let open = last;
                         last += dir * b;
+                        capped_push(&mut bars, open, last)?;
                         x.push(last)
                     }
                 }
             }
             series(&mut out, "point_figure_box", x, "currency");
+            chart = json!({"kind":"point_figure","bars":bars,"input":"explicit_close_only","reversal_boxes":r});
         }
         "book_chart_kagi" => {
             let p = ordered(&v, "prices")?;
             let r = positive(&v, "reversal_size")?;
             let mut x = vec![p[0]];
             let (mut last, mut dir) = (p[0], 0.);
+            let mut bars = Vec::new();
             for q in p.into_iter().skip(1) {
                 let d = q - last;
-                if dir == 0. && d.abs() >= r {
-                    dir = d.signum()
-                }
-                if dir * d >= 0. || dir * d <= -r {
-                    if dir * d <= -r {
-                        dir = -dir
+                if dir == 0. {
+                    if d.abs() < r {
+                        continue;
                     }
+                    dir = d.signum();
+                    capped_push(&mut bars, last, q)?;
                     last = q;
-                    x.push(last)
+                    x.push(last);
+                    continue;
+                }
+                if dir * d >= 0. {
+                    capped_push(&mut bars, last, q)?;
+                    last = q;
+                    x.push(last);
+                } else if dir * d <= -r {
+                    dir = -dir;
+                    capped_push(&mut bars, last, q)?;
+                    last = q;
+                    x.push(last);
                 }
             }
             series(&mut out, "kagi_turn", x, "currency");
+            decorate_kagi(&mut bars);
+            chart =
+                json!({"kind":"kagi","bars":bars,"input":"explicit_close_only","reversal_size":r});
         }
         "book_chart_three_line_break" => {
             let p = ordered(&v, "prices")?;
             let n = positive_integer(&v, "line_count")?;
             let mut x = vec![p[0]];
+            let mut bars = Vec::new();
+            let mut direction = 0_i8;
             for q in p.into_iter().skip(1) {
-                let recent = &x[x.len().saturating_sub(n)..];
                 let last = *x.last().unwrap();
-                if (q > last && q > *recent.iter().max_by(|a, b| a.total_cmp(b)).unwrap())
-                    || (q < last && q < *recent.iter().min_by(|a, b| a.total_cmp(b)).unwrap())
-                {
-                    x.push(q)
+                if direction == 0 {
+                    if q == last {
+                        continue;
+                    }
+                    direction = if q > last { 1 } else { -1 };
+                    capped_push(&mut bars, last, q)?;
+                    x.push(q);
+                    continue;
+                }
+                let recent = &bars[bars.len().saturating_sub(n)..];
+                let high = recent
+                    .iter()
+                    .filter_map(|b| b["high"].as_f64())
+                    .fold(f64::NEG_INFINITY, f64::max);
+                let low = recent
+                    .iter()
+                    .filter_map(|b| b["low"].as_f64())
+                    .fold(f64::INFINITY, f64::min);
+                let continuation = (direction > 0 && q > last) || (direction < 0 && q < last);
+                let reversal = (direction > 0 && q < low) || (direction < 0 && q > high);
+                if continuation || reversal {
+                    if reversal {
+                        direction = -direction;
+                    }
+                    capped_push(&mut bars, last, q)?;
+                    x.push(q);
                 }
             }
             series(&mut out, "three_line_close", x, "currency");
+            chart = json!({"kind":"three_line_break","bars":bars,"input":"explicit_close_only","line_count":n});
         }
         "book_chart_range_bars" => {
             let p = ordered(&v, "ticks")?;
             let r = positive(&v, "range_size")?;
-            let mut x = vec![p[0]];
-            let (mut lo, mut hi) = (p[0], p[0]);
+            let mut x = Vec::new();
+            let (mut open, mut lo, mut hi) = (p[0], p[0], p[0]);
+            let mut bars = Vec::new();
             for q in p.into_iter().skip(1) {
                 lo = lo.min(q);
                 hi = hi.max(q);
                 if hi - lo >= r {
                     x.push(q);
+                    bars.push(chart_bar(open, hi, lo, q, if q >= open { 1 } else { -1 }));
+                    open = q;
                     lo = q;
                     hi = q
                 }
             }
             series(&mut out, "range_close", x, "currency");
+            chart = json!({"kind":"range_bars","bars":bars,"input":"explicit_ordered_ticks","range_size":r,"note":"仅在已提供成交使范围达到阈值时完成；跳空不会虚构中间成交。"});
         }
         "book_chart_tick_bars" => {
             let p = ordered(&v, "ticks")?;
             let n = positive_integer(&v, "ticks_per_bar")?;
-            let x = p
-                .chunks(n)
-                .filter(|c| c.len() == n)
-                .map(|c| *c.last().unwrap())
-                .collect();
+            let completed: Vec<_> = p.chunks(n).filter(|c| c.len() == n).collect();
+            let x = completed.iter().map(|c| *c.last().unwrap()).collect();
             series(&mut out, "tick_close", x, "currency");
+            let bars = completed
+                .into_iter()
+                .map(|c| {
+                    let open = c[0];
+                    let close = *c.last().unwrap();
+                    chart_bar(
+                        open,
+                        c.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+                        c.iter().copied().fold(f64::INFINITY, f64::min),
+                        close,
+                        if close >= open { 1 } else { -1 },
+                    )
+                })
+                .collect::<Vec<_>>();
+            chart = json!({"kind":"tick_bars","bars":bars,"input":"explicit_ordered_ticks","ticks_per_bar":n});
         }
         _ => return Err(format!("未知图表概念: {id}")),
     };
     out.note("仅使用调用方提供的有序输入；不使用未来数据或回填历史。");
     Ok(
-        json!({"concept_id":id,"input_kind":"independent_inputs","provenance":"editable_teaching_inputs","status":"computed","reason":null,"values":out.values,"units":out.units,"series":out.series,"notes":out.reasons,"inputs":v}),
+        json!({"concept_id":id,"input_kind":"independent_inputs","provenance":"editable_teaching_inputs","status":"computed","reason":null,"values":out.values,"units":out.units,"series":out.series,"chart":chart,"notes":out.reasons,"inputs":v}),
     )
 }
