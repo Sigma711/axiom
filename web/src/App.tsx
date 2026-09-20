@@ -3,6 +3,7 @@ import { api, fmtPct, fmtNum, fmtMoney, fmtPctSigned } from './api';
 import type {
   TabId, SourceType, Bar, BacktestResult, StrategyMeta,
   KnowledgeResponse, KnowledgeEntry, CustomStrategy, ChartType,
+  PaperSnapshot, Trade, EquityPoint,
 } from './types';
 
 // ===================================================================
@@ -741,8 +742,8 @@ function PaperTrading() {
     if (!Plotly) return;
     if (snapshot.equity_curve.length === 0) return;
     Plotly.react(chartRef.current, [{
-      x: snapshot.equity_curve.map(p => new Date(p.timestamp)),
-      y: snapshot.equity_curve.map(p => p.equity),
+      x: snapshot.equity_curve.map((p: EquityPoint) => new Date(p.timestamp)),
+      y: snapshot.equity_curve.map((p: EquityPoint) => p.equity),
       type: 'scatter', mode: 'lines',
       line: { color: '#d29922', width: 1.8 },
       fill: 'tozeroy', fillcolor: 'rgba(210, 153, 34, 0.05)',
@@ -795,7 +796,7 @@ function PaperTrading() {
       <details className="ax-trades" open>
         <summary>运行日志</summary>
         <div className="ax-log">
-          {snapshot.log.slice(0, 30).map((l, i) => (
+          {snapshot.log.slice(0, 30).map((l: { timestamp: string; level: string; message: string }, i: number) => (
             <div className="ax-log-entry" key={i}>
               <span className="ax-log-ts">{new Date(l.timestamp).toLocaleTimeString()}</span>
               <span className={'ax-log-lvl ' + l.level.toLowerCase()}>{l.level}</span>

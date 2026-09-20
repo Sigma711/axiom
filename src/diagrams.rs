@@ -7,8 +7,7 @@ pub fn rsi_diagram() -> String {
    ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
    超卖区(买)    中性区间     超买区(卖)
    30 阈值       50 中轴       70 阈值
-"#
-    .to_string()
+"#.to_string()
 }
 
 /// MACD 图示
@@ -24,8 +23,7 @@ pub fn macd_diagram() -> String {
    金叉:    死叉:   顶背离:
    MACD 柱   MACD 柱   价格↑而
    由负转正  由正转负  MACD 柱↓
-"#
-    .to_string()
+"#.to_string()
 }
 
 /// Bollinger Bands 图示
@@ -41,8 +39,7 @@ pub fn bollinger_diagram() -> String {
    下轨(均价-2σ)
    Squeeze: 上下轨极度收窄 → 即将大幅波动
    触上轨: 超买;触下轨: 超卖
-"#
-    .to_string()
+"#.to_string()
 }
 
 /// Ichimoku 云图
@@ -55,8 +52,7 @@ pub fn ichimoku_diagram() -> String {
    ════════════ 转换线
    ════════════ 基准线
    ╲╲ 云: 绿(多)/红(空) ╱╱
-"#
-    .to_string()
+"#.to_string()
 }
 
 /// Sharpe Ratio 图示
@@ -65,8 +61,7 @@ pub fn sharpe_diagram() -> String {
    0.0  0.5  1.0  1.5  2.0  2.5  3.0
    ├────┼────┼────┼────┼────┼────┤
    差   凑合  合格  良好  优秀  顶尖
-"#
-    .to_string()
+"#.to_string()
 }
 
 /// 最大回撤 图示
@@ -83,8 +78,7 @@ pub fn drawdown_diagram() -> String {
    ↑
    峰值
    回撤% = (峰值 - 谷底) / 峰值
-"#
-    .to_string()
+"#.to_string()
 }
 
 /// KDJ 图示
@@ -98,8 +92,7 @@ pub fn kdj_diagram() -> String {
       ╲   ╱  ╲ ╱
        ╲ ╱    ╲
    0   ──── 超卖区(金叉)
-"#
-    .to_string()
+"#.to_string()
 }
 
 /// OBV 图示
@@ -112,8 +105,7 @@ pub fn obv_diagram() -> String {
    ↓ ╱
      ╲ 持续新低 = 资金流出
    OBV 创新高 + 价格未创新高 = 潜在买入信号
-"#
-    .to_string()
+"#.to_string()
 }
 
 /// 锤子线 / 上吊线 - 重要 K 线形态
@@ -138,8 +130,7 @@ pub fn hammer_diagram() -> String {
    趋势底部               趋势顶部
    ↓ 跌 → 涨 ↑             ↑ 涨 → 跌 ↓
    确认: 次日阳线收盘价 > 锤子线实体的 50%
-"#
-    .to_string()
+"#.to_string()
 }
 
 /// 十字星 (Doji) - 开盘价 ≈ 收盘价
@@ -162,8 +153,7 @@ pub fn doji_diagram() -> String {
    标准型:                长腿型:               墓碑型:
    多空平衡              极度犹豫             看跌反转
    趋势中继/反转预警      高波动后             顶部出现
-"#
-    .to_string()
+"#.to_string()
 }
 
 /// 吞没形态 (Engulfing) - 后一根 K 线完全包裹前一根
@@ -186,8 +176,7 @@ pub fn engulfing_diagram() -> String {
         跌→涨                            涨→跌
 
    确认: 第三根 K 线继续同方向, 强化信号
-"#
-    .to_string()
+"#.to_string()
 }
 
 /// 早晨之星 / 黄昏之星 - 3 根 K 线反转形态
@@ -213,8 +202,7 @@ pub fn morning_star_diagram() -> String {
 
    关键: 第 2 根必须跳空低开 (早晨) / 高开 (黄昏), 显示动能衰减
    信号强度: 出现于支撑阻力位 + 成交量放大 > 强信号
-"#
-    .to_string()
+"#.to_string()
 }
 
 /// 通用 fallback

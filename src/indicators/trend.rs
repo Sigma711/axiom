@@ -19,34 +19,22 @@ pub struct MacdOutput {
 pub fn macd(prices: &[f64], fast: usize, slow: usize, signal: usize) -> MacdOutput {
     let ema_fast = ema(prices, fast);
     let ema_slow = ema(prices, slow);
-    let dif: Vec<f64> = ema_fast
-        .iter()
-        .zip(ema_slow.iter())
+    let dif: Vec<f64> = ema_fast.iter().zip(ema_slow.iter())
         .map(|(f, s)| match (f, s) {
             (Some(x), Some(y)) => x - y,
             _ => 0.0,
-        })
-        .collect();
+        }).collect();
     let dea = ema(&dif, signal);
-    let hist: Vec<Option<f64>> = dif
-        .iter()
-        .zip(dea.iter())
+    let hist: Vec<Option<f64>> = dif.iter().zip(dea.iter())
         .map(|(d, e)| match e {
             Some(x) => Some(d - x),
             None => None,
-        })
-        .collect();
-    MacdOutput {
-        dif: vec_to_option(&dif),
-        dea,
-        hist,
-    }
+        }).collect();
+    MacdOutput { dif: vec_to_option(&dif), dea, hist }
 }
 
 fn vec_to_option(v: &[f64]) -> Vec<Option<f64>> {
-    v.iter()
-        .map(|x| if x.is_finite() { Some(*x) } else { None })
-        .collect()
+    v.iter().map(|x| if x.is_finite() { Some(*x) } else { None }).collect()
 }
 
 /// DMI / ADX —— Directional Movement Index
@@ -102,11 +90,7 @@ pub fn dmi(bars: &[Bar], period: usize) -> DmiOutput {
         }
     }
     let adx = rma_wilder(&dx, period);
-    DmiOutput {
-        plus_di,
-        minus_di,
-        adx,
-    }
+    DmiOutput { plus_di, minus_di, adx }
 }
 
 pub fn rma_wilder(values: &[f64], period: usize) -> Vec<Option<f64>> {
@@ -163,7 +147,7 @@ pub fn aroon(bars: &[Bar], period: usize) -> AroonOutput {
 /// 简化版:Welles 经典算法
 pub struct SarOutput {
     pub sar: Vec<Option<f64>>,
-    pub trend: Vec<Option<i8>>, // 1=多头, -1=空头
+    pub trend: Vec<Option<i8>>,  // 1=多头, -1=空头
 }
 
 pub fn parabolic_sar(bars: &[Bar], af_start: f64, af_step: f64, af_max: f64) -> SarOutput {
@@ -176,7 +160,7 @@ pub fn parabolic_sar(bars: &[Bar], af_start: f64, af_step: f64, af_max: f64) -> 
     // 初始:假设多头
     let mut is_long = true;
     let mut af = af_start;
-    let mut ep = bars[0].high; // 极点
+    let mut ep = bars[0].high;   // 极点
     let mut sar_val = bars[0].low;
     sar[0] = Some(sar_val);
     trend[0] = Some(1);
@@ -224,7 +208,7 @@ pub fn parabolic_sar(bars: &[Bar], af_start: f64, af_step: f64, af_max: f64) -> 
 /// 上轨 = (H+L)/2 + multiplier × ATR
 /// 价格跌破下轨 =翻多;反之翻空
 pub struct SupertrendOutput {
-    pub trend: Vec<Option<f64>>,    // Supertrend 线本身
+    pub trend: Vec<Option<f64>>,   // Supertrend 线本身
     pub direction: Vec<Option<i8>>, // 1=多, -1=空
 }
 
@@ -237,9 +221,7 @@ pub fn supertrend(bars: &[Bar], period: usize, multiplier: f64) -> SupertrendOut
         let high = bars[i].high;
         let low = bars[i].low;
         let prev_close = bars[i - 1].close;
-        tr[i] = (high - low)
-            .max((high - prev_close).abs())
-            .max((low - prev_close).abs());
+        tr[i] = (high - low).max((high - prev_close).abs()).max((low - prev_close).abs());
     }
     atr_vals[0] = tr[0];
     let alpha = 1.0 / period as f64;
@@ -301,28 +283,18 @@ pub fn donchian(bars: &[Bar], period: usize) -> DonchianOutput {
     for i in period - 1..n {
         // 窗口不包含当前 bar,只看前 N 根
         let window = &bars[i + 1 - period..i];
-        if window.is_empty() {
-            continue;
-        }
+        if window.is_empty() { continue; }
         let mut hi = window[0].high;
         let mut lo = window[0].low;
         for b in window {
-            if b.high > hi {
-                hi = b.high;
-            }
-            if b.low < lo {
-                lo = b.low;
-            }
+            if b.high > hi { hi = b.high; }
+            if b.low < lo { lo = b.low; }
         }
         upper[i] = Some(hi);
         lower[i] = Some(lo);
         middle[i] = Some((hi + lo) / 2.0);
     }
-    DonchianOutput {
-        upper,
-        lower,
-        middle,
-    }
+    DonchianOutput { upper, lower, middle }
 }
 
 /// Keltner Channel —— EMA ± multiplier × ATR
@@ -354,30 +326,21 @@ pub fn keltner(bars: &[Bar], period: usize, multiplier: f64) -> KeltnerOutput {
             lower[i] = Some(m - multiplier * a);
         }
     }
-    KeltnerOutput {
-        upper,
-        lower,
-        middle,
-    }
+    KeltnerOutput { upper, lower, middle }
 }
 
 /// 一目均衡表 Ichimoku Cloud
 /// 转换线 (9) + 基准线 (26) + 先行带 A/B + 迟行线
 pub struct IchimokuOutput {
     pub tenkan: Vec<Option<f64>>,   // 转换线
-    pub kijun: Vec<Option<f64>>,    // 基准线
-    pub senkou_a: Vec<Option<f64>>, // 先行带 A
-    pub senkou_b: Vec<Option<f64>>, // 先行带 B
-    pub chikou: Vec<Option<f64>>,   // 迟行线
+    pub kijun: Vec<Option<f64>>,     // 基准线
+    pub senkou_a: Vec<Option<f64>>,  // 先行带 A
+    pub senkou_b: Vec<Option<f64>>,  // 先行带 B
+    pub chikou: Vec<Option<f64>>,    // 迟行线
 }
 
-pub fn ichimoku(
-    bars: &[Bar],
-    tenkan_p: usize,
-    kijun_p: usize,
-    senkou_b_p: usize,
-    displacement: usize,
-) -> IchimokuOutput {
+pub fn ichimoku(bars: &[Bar], tenkan_p: usize, kijun_p: usize,
+                 senkou_b_p: usize, displacement: usize) -> IchimokuOutput {
     let n = bars.len();
     let tenkan = midpoint(bars, tenkan_p);
     let kijun = midpoint(bars, kijun_p);
@@ -394,8 +357,7 @@ pub fn ichimoku(
     let senkou_b_shift = shift_forward(&senkou_b, displacement);
     let chikou = shift_forward_by_close(bars, displacement);
     IchimokuOutput {
-        tenkan,
-        kijun,
+        tenkan, kijun,
         senkou_a: senkou_a_shift,
         senkou_b: senkou_b_shift,
         chikou,
@@ -407,10 +369,7 @@ fn midpoint(bars: &[Bar], period: usize) -> Vec<Option<f64>> {
     let mut out = vec![None; n];
     for i in period - 1..n {
         let window = &bars[i + 1 - period..=i];
-        let hi = window
-            .iter()
-            .map(|b| b.high)
-            .fold(f64::NEG_INFINITY, f64::max);
+        let hi = window.iter().map(|b| b.high).fold(f64::NEG_INFINITY, f64::max);
         let lo = window.iter().map(|b| b.low).fold(f64::INFINITY, f64::min);
         out[i] = Some((hi + lo) / 2.0);
     }
@@ -423,10 +382,7 @@ fn midpoint_at(bars: &[Bar], idx: usize, period: usize) -> Option<f64> {
     }
     let start = idx + 1 - period;
     let window = &bars[start..=idx];
-    let hi = window
-        .iter()
-        .map(|b| b.high)
-        .fold(f64::NEG_INFINITY, f64::max);
+    let hi = window.iter().map(|b| b.high).fold(f64::NEG_INFINITY, f64::max);
     let lo = window.iter().map(|b| b.low).fold(f64::INFINITY, f64::min);
     Some((hi + lo) / 2.0)
 }
@@ -459,7 +415,7 @@ pub fn zigzag(prices: &[f64], threshold_pct: f64) -> Vec<Option<f64>> {
     out[0] = Some(prices[0]);
     let mut last_pivot_idx = 0;
     let mut last_pivot_val = prices[0];
-    let mut direction = 0i8; // 1=up, -1=down, 0=unknown
+    let mut direction = 0i8;  // 1=up, -1=down, 0=unknown
     for i in 1..n {
         let change = (prices[i] - last_pivot_val) / last_pivot_val;
         if direction >= 0 && change >= threshold_pct {
@@ -493,23 +449,15 @@ pub fn zigzag(prices: &[f64], threshold_pct: f64) -> Vec<Option<f64>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::Bar;
     use chrono::{TimeZone, Utc};
+    use crate::types::Bar;
 
     fn make_bars(prices: &[f64]) -> Vec<Bar> {
         let t = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
-        prices
-            .iter()
-            .enumerate()
-            .map(|(i, &p)| Bar {
-                timestamp: t + chrono::Duration::hours(i as i64),
-                open: p,
-                high: p + 0.5,
-                low: p - 0.5,
-                close: p,
-                volume: 100.0,
-            })
-            .collect()
+        prices.iter().enumerate().map(|(i, &p)| Bar {
+            timestamp: t + chrono::Duration::hours(i as i64),
+            open: p, high: p + 0.5, low: p - 0.5, close: p, volume: 100.0,
+        }).collect()
     }
 
     #[test]
