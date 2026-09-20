@@ -46,6 +46,11 @@ function plotTheme() {
 }
 
 
+function dateAxis(grid: string) {
+  return { type: 'date', gridcolor: grid, zerolinecolor: grid, tickformat: '%m-%d<br>%H:%M', hoverformat: '%Y-%m-%d %H:%M', tickangle: 0, nticks: 5, automargin: true };
+}
+
+
 // ===================================================================
 // 顶栏
 // ===================================================================
@@ -693,7 +698,7 @@ function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 
       paper_bgcolor: colors.paper, plot_bgcolor: colors.plot,
       font: { color: colors.text, family: 'system-ui', size: 11 },
       margin: { t: 30, b: 90, l: 55, r: 30 },
-      xaxis: { gridcolor: colors.grid, type: 'date', anchor: 'free', position: 0, rangeslider: { visible: false } },
+      xaxis: { ...dateAxis(colors.grid), anchor: 'free', position: 0, rangeslider: { visible: false } },
       yaxis: { gridcolor: colors.grid, title: '价格', domain: [subPanels.length * 0.17, 1], fixedrange: false },
       legend: { orientation: 'h', y: -0.13 },
       hovermode: 'x unified',
@@ -850,7 +855,7 @@ function Backtest({ targetConcept, theme }: { targetConcept?: string; theme: 'li
       paper_bgcolor: colors.paper, plot_bgcolor: colors.plot,
       font: { color: colors.text, family: 'system-ui', size: 11 },
       margin: { t: 30, b: 40, l: 60, r: 20 },
-      xaxis: { gridcolor: colors.grid, zerolinecolor: colors.grid },
+      xaxis: dateAxis(colors.grid),
       yaxis: { gridcolor: colors.grid, zerolinecolor: colors.grid, title: '净值 ($)' },
       hoverlabel: { bgcolor: colors.paper, bordercolor: colors.grid, font: { color: colors.text } },
     }, { responsive: true, displayModeBar: false });
@@ -1022,7 +1027,7 @@ function PaperTrading({ targetConcept, theme }: { targetConcept?: string; theme:
       paper_bgcolor: colors.paper, plot_bgcolor: colors.plot,
       font: { color: colors.text, family: 'system-ui', size: 11 },
       margin: { t: 30, b: 40, l: 60, r: 20 },
-      xaxis: { gridcolor: colors.grid, zerolinecolor: colors.grid },
+      xaxis: dateAxis(colors.grid),
       yaxis: { gridcolor: colors.grid, zerolinecolor: colors.grid, title: '净值 ($)' },
       hoverlabel: { bgcolor: colors.paper, bordercolor: colors.grid, font: { color: colors.text } },
     }, { responsive: true, displayModeBar: false });
@@ -1211,7 +1216,7 @@ function CompareStrategies({ targetConcept, theme }: { targetConcept?: string; t
       paper_bgcolor: themeColors.paper, plot_bgcolor: themeColors.plot,
       font: { color: themeColors.text, family: 'system-ui', size: 11 },
       margin: { t: 30, b: 40, l: 60, r: 20 },
-      xaxis: { gridcolor: themeColors.grid, zerolinecolor: themeColors.grid },
+      xaxis: dateAxis(themeColors.grid),
       yaxis: { gridcolor: themeColors.grid, zerolinecolor: themeColors.grid, title: '净值 ($)' },
       legend: { orientation: 'h', y: -0.15 },
       hoverlabel: { bgcolor: themeColors.paper, bordercolor: themeColors.grid, font: { color: themeColors.text } },

@@ -341,6 +341,13 @@ test('charts and concept diagrams remain readable across themes and widths', asy
           return svg.width >= node.clientWidth * .85 && svg.width <= node.getBoundingClientRect().width && svg.height <= node.getBoundingClientRect().height;
         })).toBe(true);
         if (module === 'data') expect(await chart.evaluate(node => node.clientHeight)).toBeGreaterThanOrEqual(698);
+        expect(await chart.evaluate(node => {
+          const frame = node.getBoundingClientRect();
+          return [...node.querySelectorAll('.xtick text')].every(label => {
+            const box = label.getBoundingClientRect();
+            return box.left >= frame.left && box.right <= frame.right && box.bottom <= frame.bottom;
+          });
+        })).toBe(true);
         await expect(chart).toHaveScreenshot(`${theme}-${module}-${width}.png`, {maxDiffPixelRatio:0.01});
       }
     }
@@ -354,4 +361,20 @@ test('charts and concept diagrams remain readable across themes and widths', asy
       await expect(card).toHaveScreenshot(`${theme}-eps-${width}.png`, {maxDiffPixelRatio:0.01});
     }
   }
+});
+
+test.describe('local market time', () => {
+  test.use({timezoneId:'Asia/Shanghai'});
+  test('mobile date labels remain inside the plot in Shanghai time', async ({page}) => {
+    await page.setViewportSize({width:390, height:844});
+    await page.goto('/');
+    await page.getByRole('button', {name:'回测', exact:true}).click();
+    await page.getByRole('button', {name:'运行回测'}).click();
+    const chart = page.locator('.ax-chart');
+    await expect(chart.locator('.xtick text').first()).toBeVisible();
+    expect(await chart.evaluate(node => {
+      const frame = node.getBoundingClientRect();
+      return [...node.querySelectorAll('.xtick text')].every(label => label.getBoundingClientRect().bottom <= frame.bottom);
+    })).toBe(true);
+  });
 });

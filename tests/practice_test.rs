@@ -2,6 +2,16 @@ use axiom::practice;
 use serde_json::json;
 #[test]
 fn editable_valuation_uses_company_inputs_not_market_candles() {
+    let eps = practice::evaluate("eps", &[], &json!({"net_income":3000000.0,"preferred_dividends":300000.0,"weighted_average_shares":1000000.0})).unwrap();
+    assert_eq!(eps["values"]["eps"], 2.7);
+    let entry = axiom::knowledge::all_entries()
+        .into_iter()
+        .find(|entry| entry.id == "eps")
+        .unwrap();
+    assert!(
+        entry.formula.contains("优先股"),
+        "EPS lesson must disclose the preferred-dividend deduction used by its implementation"
+    );
     let r = practice::evaluate("pe", &[], &json!({"price":60.0,"eps":3.0})).unwrap();
     assert_eq!(r["values"]["pe"], 20.0);
     assert_eq!(r["provenance"], "editable_teaching_inputs");

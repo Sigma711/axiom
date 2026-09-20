@@ -243,15 +243,15 @@ fn market_microstructure() -> Vec<KnowledgeEntry> {
 fn fundamentals() -> Vec<KnowledgeEntry> {
     vec![
         KnowledgeEntry {
-            id: "eps".into(),            summary: "".into(),
-            example: "".into(),
+            id: "eps".into(),            summary: "把归属于普通股的利润平摊到每一股，观察盈利能力。".into(),
+            example: "净利润 300 万元，优先股股息 30 万元，加权平均普通股 100 万股：EPS = (300 − 30) / 100 = 2.7 元/股。".into(),
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs#symbol-CompanyFinancials".into(),
             code_ref: "src/indicators/fundamental.rs::CompanyFinancials".into(),
 
             category: "估值".into(),
             name: "EPS 每股收益".into(),
-            formula: "净利润 / 加权平均股数".into(),
+            formula: "(净利润 − 优先股股息) / 加权平均普通股股数".into(),
             meaning: "每股对应多少会计利润，并不等于实发股息。".into(),
             signals: "EPS 同比持续增长 → 业绩好;EPS 转负 → 警惕。".into(),
             pitfalls: "EPS 受一次性损益影响,需看扣非 EPS。".into(),

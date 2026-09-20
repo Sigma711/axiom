@@ -6,56 +6,88 @@ use crate::{
 };
 use serde_json::{json, Value};
 
-const IDS: &[(&str, &str, &str, &str, &str)] = &[
-    (
-        "book_chart_heikin_ashi",
-        "Heikin-Ashi 平均K线",
-        "HA收盘=(O+H+L+C)/4；HA开盘=(前HA开盘+前HA收盘)/2",
-        "首根 OHLC(10,12,9,11) 的 HA 收盘为 10.5。",
-        "使用已收盘 OHLC；不从 OHLC 推断逐笔路径。",
-    ),
-    (
-        "book_chart_renko",
-        "Renko 固定砖",
-        "收盘价每跨越一个固定砖宽生成一砖",
-        "价格 10→12.1、砖宽 1，生成两块向上砖。",
-        "close-only 砖图不表示盘中触及顺序。",
-    ),
-    (
-        "book_chart_point_figure",
-        "点数图 P&F",
-        "固定箱格，反转须达到指定箱格数",
-        "箱格 1、反转 3 时，价格反向移动 3 才换列。",
-        "仅由顺序价格输入重建。",
-    ),
-    (
-        "book_chart_kagi",
-        "Kagi 线",
-        "价格反向达到反转幅度才改变线方向",
-        "上行到 12 后回落 1，反转幅度 1 时转为下行。",
-        "不从 OHLC 假装识别盘中反转。",
-    ),
-    (
-        "book_chart_three_line_break",
-        "三线突破",
-        "收盘价突破最近三条同向线极值才生成反向线",
-        "下行线的最近三条最高为 10，收盘高于 10 才反转。",
-        "只处理提供的已收盘价格序列。",
-    ),
-    (
-        "book_chart_range_bars",
-        "Range Bars 区间K线",
-        "每根完成条覆盖固定价格区间",
-        "成交价格从 10 到 11、区间 1，完成一根区间条。",
-        "必须提供有序成交价；OHLC 无法还原成交路径。",
-    ),
-    (
-        "book_chart_tick_bars",
-        "Tick Bars 成交笔数K线",
-        "每固定笔数成交组成一根K线",
-        "每 3 笔成交组成一根条。",
-        "必须提供有序逐笔成交价；不把OHLC当作逐笔。",
-    ),
+struct ChartLesson {
+    id: &'static str,
+    name: &'static str,
+    summary: &'static str,
+    formula: &'static str,
+    example: &'static str,
+    meaning: &'static str,
+    signals: &'static str,
+    pitfall: &'static str,
+}
+
+const IDS: &[ChartLesson] = &[
+    ChartLesson {
+        id: "book_chart_heikin_ashi",
+        name: "Heikin-Ashi 平均K线",
+        summary: "把每个时段的 OHLC 平均成更平滑的蜡烛，帮助观察趋势。",
+        formula: "HA收盘=(O+H+L+C)/4；HA开盘=(前HA开盘+前HA收盘)/2",
+        example: "首根 OHLC(10,12,9,11) 的 HA 收盘为 10.5。",
+        meaning: "连续阳线且下影较短提示上行较稳；连续阴线且上影较短提示下行较稳；频繁变色提示震荡。",
+        signals: "连续阳线可作上行趋势提示，连续阴线可作下行提示；拐点要结合原始K线确认。",
+        pitfall: "输入是已收盘 OHLC；HA 保留原时段但改变价格读数，不能还原逐笔路径。",
+    },
+    ChartLesson {
+        id: "book_chart_renko",
+        name: "Renko 固定砖",
+        summary: "按价格每跨过固定砖宽画砖，忽略未跨阈值的波动，让方向变化更醒目。",
+        formula: "同向延续需跨一砖；反转需跨两砖，之后按砖宽续画",
+        example: "价格 10→12.1、砖宽 1，生成两块向上砖。",
+        meaning: "连续同向砖表示价格沿该方向推进；方向切换表示价格达到反转门槛。",
+        signals: "连续向上砖可作趋势提示；出现反向砖才关注反转，不把砖数当成交次数。",
+        pitfall: "只用有序收盘价；看不到盘中触及顺序，砖是按阈值合成的图形价格。",
+    },
+    ChartLesson {
+        id: "book_chart_point_figure",
+        name: "点数图 P&F",
+        summary: "用 X/O 列记录价格方向，只在达到箱格阈值时延长或换列。",
+        formula: "固定箱格，反转须达到指定箱格数",
+        example: "箱格 1、反转 3 时，价格反向移动 3 才换列。",
+        meaning: "X列表示上行、O列表示下行；列越长说明该方向推进的价格距离越大，换列说明反向波动达到门槛。",
+        signals: "突破前列极值可作趋势延续提示；达到反转箱数换列才视为反转候选。",
+        pitfall: "只用有序价格重建；箱格内的盘中顺序不可见，箱格和反转箱数会改变结果。",
+    },
+    ChartLesson {
+        id: "book_chart_kagi",
+        name: "Kagi 线",
+        summary: "沿价格方向画线，反向移动达到反转幅度才转向，并标出关键高低点。",
+        formula: "价格反向达到反转幅度才改变线方向",
+        example: "上行到 12 后回落 1，反转幅度 1 时转为下行。",
+        meaning: "线方向显示趋势；穿过前高或前低时样式切换，帮助关注趋势强弱。",
+        signals: "向上穿越前高并转为阳线可作强势提示；向下跌破前低并转为阴线可作弱势提示。",
+        pitfall: "只用有序价格判断反转；不从 OHLC 推断盘中反转，反转幅度会改变灵敏度。",
+    },
+    ChartLesson {
+        id: "book_chart_three_line_break",
+        name: "三线突破",
+        summary: "按收盘线画趋势，延续只需创新高或新低，反转要突破最近 N 条已完成线的极值。",
+        formula: "延续突破上一线继续画；反转需突破最近 min(N,已有条数) 条已完成线的最高或最低；预热期使用已有条数",
+        example: "下行线的最近三条最高为 10，收盘高于 10 才反转。",
+        meaning: "同向线连续表示趋势延续；反向突破窗口极值才改变方向，线数越多反应越慢。",
+        signals: "向上突破最近 N 条最高可作上行反转或延续提示；向下跌破最近 N 条最低可作下行提示。",
+        pitfall: "只处理已收盘价格；预热期不足 N 条时按已有条数计算，不是最近 N 条同向线。",
+    },
+    ChartLesson {
+        id: "book_chart_range_bars",
+        name: "Range Bars 区间K线",
+        summary: "按成交价走过的区间完成K线，达到阈值才收一根，时间和笔数不固定。",
+        formula: "条内最高价 − 最低价达到设定区间时完成，跳价可超过阈值",
+        example: "成交价格从 10 到 11、区间 1，完成一根区间条。",
+        meaning: "每根条的价格范围大致达到设定宽度；条多表示波动更频繁，条少表示价格较平静。",
+        signals: "连续同向区间条可作短线方向提示；宽幅波动或方向切换提示市场状态变化。",
+        pitfall: "必须提供有序成交价；单笔跳价可能使范围超过阈值，不会虚构中间成交或交易。",
+    },
+    ChartLesson {
+        id: "book_chart_tick_bars",
+        name: "Tick Bars 成交笔数K线",
+        summary: "每固定笔数成交组成一根K线，让每根图的成交活动量相近。",
+        formula: "每固定笔数成交组成一根K线",
+        example: "每 3 笔成交组成一根条。",
+        meaning: "每根条代表相同成交笔数；相邻条覆盖的实际时间会随成交活跃度变化。",
+        signals: "条形成得更快说明成交更活跃；结合连续收盘方向观察趋势，别把条间时间当固定。",
+        pitfall: "必须提供有序逐笔成交价；OHLC 不能还原分笔结果，尾部不足固定笔数不成条。",
+    },
 ];
 fn defaults(id: &str) -> Value {
     match id {
@@ -75,58 +107,77 @@ fn defaults(id: &str) -> Value {
 }
 pub fn catalog() -> Vec<PracticeConcept> {
     IDS.iter()
-        .map(|(id, name, formula, _, boundary)| {
-            let d = defaults(id);
-            PracticeConcept {
-                id: (*id).into(),
-                name: (*name).into(),
-                category: "原书非标准图表".into(),
-                input_kind: "independent_inputs".into(),
-                inputs: d
-                    .as_object()
-                    .unwrap()
-                    .iter()
-                    .map(|(key, default)| PracticeInput {
-                        key: key.clone(),
-                        default: default.clone(),
-                        label: (match key.as_str() {
-                            "prices" => "有序收盘价格（元）",
-                            "ticks" => "有序逐笔成交价（元）",
-                            "brick_size" => "砖宽（元）",
-                            "box_size" => "箱格（元）",
-                            "reversal_boxes" => "反转箱数（格）",
-                            "reversal_size" => "反转幅度（元）",
-                            "line_count" => "突破线数（条）",
-                            "range_size" => "区间宽度（元）",
-                            "ticks_per_bar" => "每条成交笔数（笔）",
-                            _ => "已收盘 OHLC（元）",
+        .map(
+            |ChartLesson {
+                 id,
+                 name,
+                 summary,
+                 pitfall,
+                 ..
+             }| {
+                let d = defaults(id);
+                PracticeConcept {
+                    id: (*id).into(),
+                    name: (*name).into(),
+                    category: "原书非标准图表".into(),
+                    input_kind: "independent_inputs".into(),
+                    inputs: d
+                        .as_object()
+                        .unwrap()
+                        .iter()
+                        .map(|(key, default)| PracticeInput {
+                            key: key.clone(),
+                            default: default.clone(),
+                            label: (match key.as_str() {
+                                "prices" => "有序收盘价格（元）",
+                                "ticks" => "有序逐笔成交价（元）",
+                                "brick_size" => "砖宽（元）",
+                                "box_size" => "箱格（元）",
+                                "reversal_boxes" => "反转箱数（格）",
+                                "reversal_size" => "反转幅度（元）",
+                                "line_count" => "突破线数（条）",
+                                "range_size" => "区间宽度（元）",
+                                "ticks_per_bar" => "每条成交笔数（笔）",
+                                _ => "已收盘 OHLC（元）",
+                            })
+                            .into(),
                         })
-                        .into(),
-                    })
-                    .collect(),
-                notes: format!("{}；{}", formula, boundary),
-            }
-        })
+                        .collect(),
+                    notes: format!("{} 输入边界：{}", summary, pitfall),
+                }
+            },
+        )
         .collect()
 }
 pub fn entries() -> Vec<KnowledgeEntry> {
     IDS.iter()
-        .map(|(id, name, formula, example, boundary)| KnowledgeEntry {
-            id: (*id).into(),
-            summary: format!("{}：{}", name, boundary),
-            example: (*example).into(),
-            related: vec![],
-            code_url: "https://github.com/Sigma711/axiom/blob/main/src/book_charts.rs".into(),
-            code_ref: "src/book_charts.rs::evaluate".into(),
-            category: "原书非标准图表".into(),
-            name: (*name).into(),
-            formula: (*formula).into(),
-            meaning: (*boundary).into(),
-            signals: "图形压缩了时间或成交路径，须先确认输入粒度。".into(),
-            pitfalls: (*boundary).into(),
-            implementation: "src/book_charts.rs::evaluate".into(),
-            diagram: None,
-        })
+        .map(
+            |ChartLesson {
+                 id,
+                 name,
+                 summary,
+                 formula,
+                 example,
+                 meaning,
+                 signals,
+                 pitfall,
+             }| KnowledgeEntry {
+                id: (*id).into(),
+                summary: (*summary).into(),
+                example: (*example).into(),
+                related: vec![],
+                code_url: "https://github.com/Sigma711/axiom/blob/main/src/book_charts.rs".into(),
+                code_ref: "src/book_charts.rs::evaluate".into(),
+                category: "原书非标准图表".into(),
+                name: (*name).into(),
+                formula: (*formula).into(),
+                meaning: (*meaning).into(),
+                signals: (*signals).into(),
+                pitfalls: (*pitfall).into(),
+                implementation: "src/book_charts.rs::evaluate".into(),
+                diagram: None,
+            },
+        )
         .collect()
 }
 fn positive(v: &Value, k: &str) -> Result<f64, String> {
