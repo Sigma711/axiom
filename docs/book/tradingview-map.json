@@ -1,0 +1,1049 @@
+{
+  "mappings": [
+    {
+      "source_id": "tradingview_001",
+      "name": "1 year active supply %",
+      "target_source_id": "appendix_069"
+    },
+    {
+      "source_id": "tradingview_002",
+      "name": "24-hour Volume",
+      "target_source_id": "appendix_055"
+    },
+    {
+      "source_id": "tradingview_003",
+      "name": "Accumulation Distribution (ADL)",
+      "target_source_id": "book_18_05"
+    },
+    {
+      "source_id": "tradingview_004",
+      "name": "Active addresses with contracts",
+      "target_source_id": "appendix_070"
+    },
+    {
+      "source_id": "tradingview_005",
+      "name": "Addresses with balance ≥ X (% of supply)",
+      "target_source_id": "appendix_071"
+    },
+    {
+      "source_id": "tradingview_006",
+      "name": "Addresses with balance ≥ X (USD)",
+      "target_source_id": "appendix_071"
+    },
+    {
+      "source_id": "tradingview_007",
+      "name": "Advance/Decline Line",
+      "target_source_id": "book_21_02"
+    },
+    {
+      "source_id": "tradingview_008",
+      "name": "Advance/Decline Ratio",
+      "target_source_id": "appendix_051"
+    },
+    {
+      "source_id": "tradingview_009",
+      "name": "Advance/Decline Ratio (Bars)",
+      "target_source_id": "appendix_051"
+    },
+    {
+      "source_id": "tradingview_010",
+      "name": "Analyst price forecast",
+      "target_source_id": "appendix_001"
+    },
+    {
+      "source_id": "tradingview_011",
+      "name": "Arnaud Legoux Moving Average",
+      "target_source_id": "book_12_09"
+    },
+    {
+      "source_id": "tradingview_012",
+      "name": "Aroon Indicator",
+      "target_source_id": "book_14_02"
+    },
+    {
+      "source_id": "tradingview_013",
+      "name": "Aroon Oscillator",
+      "target_source_id": "appendix_002"
+    },
+    {
+      "source_id": "tradingview_014",
+      "name": "Auto Fib Extension",
+      "target_source_id": "appendix_003"
+    },
+    {
+      "source_id": "tradingview_015",
+      "name": "Auto Fib Retracement",
+      "target_source_id": "appendix_003"
+    },
+    {
+      "source_id": "tradingview_016",
+      "name": "Auto key levels",
+      "target_source_id": "appendix_004"
+    },
+    {
+      "source_id": "tradingview_017",
+      "name": "Auto Pitchfork",
+      "target_source_id": "appendix_005"
+    },
+    {
+      "source_id": "tradingview_018",
+      "name": "Auto Trendlines",
+      "target_source_id": "appendix_006"
+    },
+    {
+      "source_id": "tradingview_019",
+      "name": "Average Daily Range (ADR) indicator",
+      "target_source_id": "book_17_07"
+    },
+    {
+      "source_id": "tradingview_020",
+      "name": "Average Directional Index (ADX)",
+      "target_source_id": "book_14_01"
+    },
+    {
+      "source_id": "tradingview_021",
+      "name": "Average transaction volume",
+      "target_source_id": "appendix_073"
+    },
+    {
+      "source_id": "tradingview_022",
+      "name": "Average True Range (ATR)",
+      "target_source_id": "book_17_02"
+    },
+    {
+      "source_id": "tradingview_023",
+      "name": "Awesome Oscillator (AO)",
+      "target_source_id": "book_16_17"
+    },
+    {
+      "source_id": "tradingview_024",
+      "name": "Balance of Power (BOP)",
+      "target_source_id": "book_16_20"
+    },
+    {
+      "source_id": "tradingview_025",
+      "name": "Basis",
+      "target_source_id": "appendix_056"
+    },
+    {
+      "source_id": "tradingview_026",
+      "name": "BBTrend",
+      "target_source_id": "appendix_007"
+    },
+    {
+      "source_id": "tradingview_027",
+      "name": "Block height",
+      "target_source_id": "appendix_074"
+    },
+    {
+      "source_id": "tradingview_028",
+      "name": "Blocks mined",
+      "target_source_id": "appendix_074"
+    },
+    {
+      "source_id": "tradingview_029",
+      "name": "Bollinger Bands (BB)",
+      "target_source_id": "book_17_05"
+    },
+    {
+      "source_id": "tradingview_030",
+      "name": "Bollinger Bands %b (%b)",
+      "target_source_id": "book_17_05"
+    },
+    {
+      "source_id": "tradingview_031",
+      "name": "Bollinger BandWidth (BBW)",
+      "target_source_id": "book_17_05"
+    },
+    {
+      "source_id": "tradingview_032",
+      "name": "Bollinger Bars",
+      "target_source_id": "appendix_008"
+    },
+    {
+      "source_id": "tradingview_033",
+      "name": "Bull Bear Power",
+      "target_source_id": "book_16_19"
+    },
+    {
+      "source_id": "tradingview_034",
+      "name": "Chaikin Money Flow (CMF)",
+      "target_source_id": "book_18_06"
+    },
+    {
+      "source_id": "tradingview_035",
+      "name": "Chaikin Oscillator",
+      "target_source_id": "book_18_07"
+    },
+    {
+      "source_id": "tradingview_036",
+      "name": "Chande Kroll Stop",
+      "target_source_id": "appendix_009"
+    },
+    {
+      "source_id": "tradingview_037",
+      "name": "Chande Momentum Oscillator (CMO)",
+      "target_source_id": "book_16_09"
+    },
+    {
+      "source_id": "tradingview_038",
+      "name": "Chandelier Exit",
+      "target_source_id": "book_14_06"
+    },
+    {
+      "source_id": "tradingview_039",
+      "name": "Chop Zone",
+      "target_source_id": "appendix_010"
+    },
+    {
+      "source_id": "tradingview_040",
+      "name": "Choppiness Index (CHOP)",
+      "target_source_id": "appendix_011"
+    },
+    {
+      "source_id": "tradingview_041",
+      "name": "Commodity Channel Index (CCI)",
+      "target_source_id": "book_16_05"
+    },
+    {
+      "source_id": "tradingview_042",
+      "name": "Connors RSI (CRSI)",
+      "target_source_id": "appendix_012"
+    },
+    {
+      "source_id": "tradingview_043",
+      "name": "Coppock Curve",
+      "target_source_id": "book_16_21"
+    },
+    {
+      "source_id": "tradingview_044",
+      "name": "Correlation Coefficient (CC)",
+      "target_source_id": "book_22_05"
+    },
+    {
+      "source_id": "tradingview_045",
+      "name": "Created UTXOs",
+      "target_source_id": "appendix_078"
+    },
+    {
+      "source_id": "tradingview_046",
+      "name": "Cumulative Volume Delta",
+      "target_source_id": "book_19_04"
+    },
+    {
+      "source_id": "tradingview_047",
+      "name": "Cumulative Volume Index (CVI)",
+      "target_source_id": "appendix_013"
+    },
+    {
+      "source_id": "tradingview_048",
+      "name": "Detrended Price Oscillator (DPO)",
+      "target_source_id": "book_16_13"
+    },
+    {
+      "source_id": "tradingview_049",
+      "name": "Difficulty",
+      "target_source_id": "appendix_075"
+    },
+    {
+      "source_id": "tradingview_050",
+      "name": "Directional Movement (DMI)",
+      "target_source_id": "book_14_01"
+    },
+    {
+      "source_id": "tradingview_051",
+      "name": "Dividend Yield",
+      "target_source_id": "appendix_053"
+    },
+    {
+      "source_id": "tradingview_052",
+      "name": "Donchian Channels (DC)",
+      "target_source_id": "book_14_07"
+    },
+    {
+      "source_id": "tradingview_053",
+      "name": "Double Exponential Moving Average (EMA)",
+      "target_source_id": "book_12_06"
+    },
+    {
+      "source_id": "tradingview_054",
+      "name": "Ease of Movement (EOM)",
+      "target_source_id": "book_18_11"
+    },
+    {
+      "source_id": "tradingview_055",
+      "name": "El Salvador Government balance",
+      "target_source_id": "appendix_068"
+    },
+    {
+      "source_id": "tradingview_056",
+      "name": "Elder’s Force Index (EFI)",
+      "target_source_id": "book_18_10"
+    },
+    {
+      "source_id": "tradingview_057",
+      "name": "Envelope (ENV)",
+      "target_source_id": "book_14_09"
+    },
+    {
+      "source_id": "tradingview_058",
+      "name": "ETF balances",
+      "target_source_id": "appendix_066"
+    },
+    {
+      "source_id": "tradingview_059",
+      "name": "ETF flows",
+      "target_source_id": "appendix_067"
+    },
+    {
+      "source_id": "tradingview_060",
+      "name": "Ethereum new deposits",
+      "target_source_id": "appendix_091"
+    },
+    {
+      "source_id": "tradingview_061",
+      "name": "Ethereum new unique depositors",
+      "target_source_id": "appendix_092"
+    },
+    {
+      "source_id": "tradingview_062",
+      "name": "Ethereum new value staked",
+      "target_source_id": "appendix_093"
+    },
+    {
+      "source_id": "tradingview_063",
+      "name": "Ethereum total number of deposits",
+      "target_source_id": "appendix_091"
+    },
+    {
+      "source_id": "tradingview_064",
+      "name": "Ethereum total unique depositors",
+      "target_source_id": "appendix_092"
+    },
+    {
+      "source_id": "tradingview_065",
+      "name": "Ethereum total value staked",
+      "target_source_id": "appendix_093"
+    },
+    {
+      "source_id": "tradingview_066",
+      "name": "Exponential Moving Average",
+      "target_source_id": "book_12_02"
+    },
+    {
+      "source_id": "tradingview_067",
+      "name": "Fisher Transform",
+      "target_source_id": "book_16_14"
+    },
+    {
+      "source_id": "tradingview_068",
+      "name": "Funding rate: a guide to market sentiment",
+      "target_source_id": "appendix_058"
+    },
+    {
+      "source_id": "tradingview_069",
+      "name": "Hash Rate",
+      "target_source_id": "appendix_075"
+    },
+    {
+      "source_id": "tradingview_070",
+      "name": "Held tokens in addresses ≥ X (% of supply)",
+      "target_source_id": "appendix_072"
+    },
+    {
+      "source_id": "tradingview_071",
+      "name": "Held tokens in addresses ≥ X (tokens)",
+      "target_source_id": "appendix_072"
+    },
+    {
+      "source_id": "tradingview_072",
+      "name": "Held tokens in addresses ≥ X (USD)",
+      "target_source_id": "appendix_072"
+    },
+    {
+      "source_id": "tradingview_073",
+      "name": "Historical Volatility",
+      "target_source_id": "book_17_04"
+    },
+    {
+      "source_id": "tradingview_074",
+      "name": "Hull Moving Average",
+      "target_source_id": "book_12_07"
+    },
+    {
+      "source_id": "tradingview_075",
+      "name": "Ichimoku Cloud",
+      "target_source_id": "book_15_06"
+    },
+    {
+      "source_id": "tradingview_076",
+      "name": "Index price",
+      "target_source_id": "appendix_059"
+    },
+    {
+      "source_id": "tradingview_077",
+      "name": "Kaufman’s Adaptive Moving Average (KAMA)",
+      "target_source_id": "book_12_08"
+    },
+    {
+      "source_id": "tradingview_078",
+      "name": "Keltner Channels (KC)",
+      "target_source_id": "book_14_08"
+    },
+    {
+      "source_id": "tradingview_079",
+      "name": "Klinger Oscillator",
+      "target_source_id": "book_18_12"
+    },
+    {
+      "source_id": "tradingview_080",
+      "name": "Know Sure Thing (KST)",
+      "target_source_id": "book_16_12"
+    },
+    {
+      "source_id": "tradingview_081",
+      "name": "Large transaction volume",
+      "target_source_id": "appendix_073"
+    },
+    {
+      "source_id": "tradingview_082",
+      "name": "Least Squares Moving Average",
+      "target_source_id": "appendix_014"
+    },
+    {
+      "source_id": "tradingview_083",
+      "name": "Linear Regression",
+      "target_source_id": "book_14_10"
+    },
+    {
+      "source_id": "tradingview_084",
+      "name": "Liquidation data: what to watch and why it matters",
+      "target_source_id": "appendix_062"
+    },
+    {
+      "source_id": "tradingview_085",
+      "name": "Long / Short Ratio Accounts",
+      "target_source_id": "appendix_063"
+    },
+    {
+      "source_id": "tradingview_086",
+      "name": "Long Short Accounts %",
+      "target_source_id": "appendix_063"
+    },
+    {
+      "source_id": "tradingview_087",
+      "name": "MA Cross",
+      "target_source_id": "appendix_015"
+    },
+    {
+      "source_id": "tradingview_088",
+      "name": "Mark price",
+      "target_source_id": "appendix_060"
+    },
+    {
+      "source_id": "tradingview_089",
+      "name": "Mass Index",
+      "target_source_id": "book_17_09"
+    },
+    {
+      "source_id": "tradingview_090",
+      "name": "McGinley Dynamic",
+      "target_source_id": "appendix_016"
+    },
+    {
+      "source_id": "tradingview_091",
+      "name": "Mean block interval",
+      "target_source_id": "appendix_076"
+    },
+    {
+      "source_id": "tradingview_092",
+      "name": "Mean block size in bytes",
+      "target_source_id": "appendix_077"
+    },
+    {
+      "source_id": "tradingview_093",
+      "name": "Mean gas used",
+      "target_source_id": "appendix_081"
+    },
+    {
+      "source_id": "tradingview_094",
+      "name": "Mean transaction fees",
+      "target_source_id": "appendix_085"
+    },
+    {
+      "source_id": "tradingview_095",
+      "name": "Mean transaction gas limit",
+      "target_source_id": "appendix_082"
+    },
+    {
+      "source_id": "tradingview_096",
+      "name": "Mean transaction gas price",
+      "target_source_id": "appendix_083"
+    },
+    {
+      "source_id": "tradingview_097",
+      "name": "Mean transaction size in bytes",
+      "target_source_id": "appendix_086"
+    },
+    {
+      "source_id": "tradingview_098",
+      "name": "Mean transfer volume",
+      "target_source_id": "appendix_088"
+    },
+    {
+      "source_id": "tradingview_099",
+      "name": "Mean UTXO value created",
+      "target_source_id": "appendix_080"
+    },
+    {
+      "source_id": "tradingview_100",
+      "name": "Mean UTXO value spent",
+      "target_source_id": "appendix_080"
+    },
+    {
+      "source_id": "tradingview_101",
+      "name": "Median",
+      "target_source_id": "appendix_017"
+    },
+    {
+      "source_id": "tradingview_102",
+      "name": "Median block interval",
+      "target_source_id": "appendix_076"
+    },
+    {
+      "source_id": "tradingview_103",
+      "name": "Median gas used",
+      "target_source_id": "appendix_081"
+    },
+    {
+      "source_id": "tradingview_104",
+      "name": "Median transaction fees",
+      "target_source_id": "appendix_085"
+    },
+    {
+      "source_id": "tradingview_105",
+      "name": "Median transaction gas limit",
+      "target_source_id": "appendix_082"
+    },
+    {
+      "source_id": "tradingview_106",
+      "name": "Median transaction gas price",
+      "target_source_id": "appendix_083"
+    },
+    {
+      "source_id": "tradingview_107",
+      "name": "Median transfer volume",
+      "target_source_id": "appendix_088"
+    },
+    {
+      "source_id": "tradingview_108",
+      "name": "Median UTXO value created",
+      "target_source_id": "appendix_080"
+    },
+    {
+      "source_id": "tradingview_109",
+      "name": "Median UTXO value spent",
+      "target_source_id": "appendix_080"
+    },
+    {
+      "source_id": "tradingview_110",
+      "name": "Momentum",
+      "target_source_id": "book_16_07"
+    },
+    {
+      "source_id": "tradingview_111",
+      "name": "Money Flow (MFI)",
+      "target_source_id": "book_18_08"
+    },
+    {
+      "source_id": "tradingview_112",
+      "name": "Moon Phases",
+      "target_source_id": "appendix_050"
+    },
+    {
+      "source_id": "tradingview_113",
+      "name": "Moving average convergence divergence (MACD) indicator",
+      "target_source_id": "book_13_03"
+    },
+    {
+      "source_id": "tradingview_114",
+      "name": "Moving Average Ribbon",
+      "target_source_id": "book_12_11"
+    },
+    {
+      "source_id": "tradingview_115",
+      "name": "Moving Averages",
+      "target_source_id": "book_12_01"
+    },
+    {
+      "source_id": "tradingview_116",
+      "name": "MovingAvg Cross",
+      "target_source_id": "appendix_015"
+    },
+    {
+      "source_id": "tradingview_117",
+      "name": "MovingAvg2Line Cross",
+      "target_source_id": "appendix_015"
+    },
+    {
+      "source_id": "tradingview_118",
+      "name": "Multi-Time Period Charts indicator",
+      "target_source_id": "appendix_018"
+    },
+    {
+      "source_id": "tradingview_119",
+      "name": "Negative Volume Index (NVI)",
+      "target_source_id": "book_18_13"
+    },
+    {
+      "source_id": "tradingview_120",
+      "name": "Net Volume",
+      "target_source_id": "appendix_019"
+    },
+    {
+      "source_id": "tradingview_121",
+      "name": "On Balance Volume (OBV)",
+      "target_source_id": "book_18_04"
+    },
+    {
+      "source_id": "tradingview_122",
+      "name": "Open Interest",
+      "target_source_id": "appendix_061"
+    },
+    {
+      "source_id": "tradingview_123",
+      "name": "Parabolic SAR (SAR)",
+      "target_source_id": "book_14_04"
+    },
+    {
+      "source_id": "tradingview_124",
+      "name": "Percentage Price Oscillator (PPO)",
+      "target_source_id": "book_14_13"
+    },
+    {
+      "source_id": "tradingview_125",
+      "name": "Percentage Volume Oscillator (PVO)",
+      "target_source_id": "appendix_020"
+    },
+    {
+      "source_id": "tradingview_126",
+      "name": "Performance",
+      "target_source_id": "appendix_021"
+    },
+    {
+      "source_id": "tradingview_127",
+      "name": "Pivot Points High Low",
+      "target_source_id": "appendix_022"
+    },
+    {
+      "source_id": "tradingview_128",
+      "name": "Pivot Points Standard",
+      "target_source_id": "book_20_03"
+    },
+    {
+      "source_id": "tradingview_129",
+      "name": "Positive Volume Index (PVI)",
+      "target_source_id": "book_18_13"
+    },
+    {
+      "source_id": "tradingview_130",
+      "name": "Power-Law Model",
+      "target_source_id": "appendix_097"
+    },
+    {
+      "source_id": "tradingview_131",
+      "name": "Premium",
+      "target_source_id": "appendix_057"
+    },
+    {
+      "source_id": "tradingview_132",
+      "name": "Price Momentum Oscillator (PMO)",
+      "target_source_id": "appendix_023"
+    },
+    {
+      "source_id": "tradingview_133",
+      "name": "Price target - indicator",
+      "target_source_id": "appendix_001"
+    },
+    {
+      "source_id": "tradingview_134",
+      "name": "Price Volume Trend (PVT)",
+      "target_source_id": "book_18_09"
+    },
+    {
+      "source_id": "tradingview_135",
+      "name": "Pring’s Special K",
+      "target_source_id": "appendix_024"
+    },
+    {
+      "source_id": "tradingview_136",
+      "name": "Rank Correlation Index (RCI)",
+      "target_source_id": "appendix_025"
+    },
+    {
+      "source_id": "tradingview_137",
+      "name": "Rate of Change (ROC)",
+      "target_source_id": "book_16_08"
+    },
+    {
+      "source_id": "tradingview_138",
+      "name": "RCI Ribbon",
+      "target_source_id": "appendix_026"
+    },
+    {
+      "source_id": "tradingview_139",
+      "name": "Realized market cap",
+      "target_source_id": "appendix_094"
+    },
+    {
+      "source_id": "tradingview_140",
+      "name": "Receiving addresses",
+      "target_source_id": "appendix_090"
+    },
+    {
+      "source_id": "tradingview_141",
+      "name": "Relative Strength Index (RSI)",
+      "target_source_id": "book_16_01"
+    },
+    {
+      "source_id": "tradingview_142",
+      "name": "Relative Vigor Index",
+      "target_source_id": "book_16_15"
+    },
+    {
+      "source_id": "tradingview_143",
+      "name": "Relative Volatility Index",
+      "target_source_id": "appendix_027"
+    },
+    {
+      "source_id": "tradingview_144",
+      "name": "Relative Volume at Time",
+      "target_source_id": "appendix_028"
+    },
+    {
+      "source_id": "tradingview_145",
+      "name": "Rob Booker - ADX Breakout",
+      "target_source_id": "appendix_029"
+    },
+    {
+      "source_id": "tradingview_146",
+      "name": "Rob Booker - Knoxville Divergence",
+      "target_source_id": "appendix_030"
+    },
+    {
+      "source_id": "tradingview_147",
+      "name": "Rob Booker Intraday Pivot Points",
+      "target_source_id": "appendix_031"
+    },
+    {
+      "source_id": "tradingview_148",
+      "name": "Rob Booker Missed Pivot Points",
+      "target_source_id": "appendix_032"
+    },
+    {
+      "source_id": "tradingview_149",
+      "name": "Rob Booker Reversal",
+      "target_source_id": "appendix_033"
+    },
+    {
+      "source_id": "tradingview_150",
+      "name": "Rob Booker Ziv Ghost Pivots",
+      "target_source_id": "appendix_034"
+    },
+    {
+      "source_id": "tradingview_151",
+      "name": "RSI divergence indicator",
+      "target_source_id": "appendix_035"
+    },
+    {
+      "source_id": "tradingview_152",
+      "name": "RVT ratio, 90 days",
+      "target_source_id": "appendix_099"
+    },
+    {
+      "source_id": "tradingview_153",
+      "name": "Seasonality",
+      "target_source_id": "appendix_036"
+    },
+    {
+      "source_id": "tradingview_154",
+      "name": "Seasonals",
+      "target_source_id": "appendix_036"
+    },
+    {
+      "source_id": "tradingview_155",
+      "name": "Sending addresses",
+      "target_source_id": "appendix_090"
+    },
+    {
+      "source_id": "tradingview_156",
+      "name": "Simple Moving Average",
+      "target_source_id": "book_12_01"
+    },
+    {
+      "source_id": "tradingview_157",
+      "name": "SMI Ergodic Indicator",
+      "target_source_id": "appendix_037"
+    },
+    {
+      "source_id": "tradingview_158",
+      "name": "SMI Ergodic Oscillator",
+      "target_source_id": "appendix_038"
+    },
+    {
+      "source_id": "tradingview_159",
+      "name": "Smoothed Moving Average",
+      "target_source_id": "book_12_04"
+    },
+    {
+      "source_id": "tradingview_160",
+      "name": "Spent Output Profit Ratio (SOPR)",
+      "target_source_id": "appendix_095"
+    },
+    {
+      "source_id": "tradingview_161",
+      "name": "Spent UTXOs",
+      "target_source_id": "appendix_078"
+    },
+    {
+      "source_id": "tradingview_162",
+      "name": "Stochastic (STOCH)",
+      "target_source_id": "book_16_02"
+    },
+    {
+      "source_id": "tradingview_163",
+      "name": "Stochastic Momentum Index (SMI)",
+      "target_source_id": "appendix_039"
+    },
+    {
+      "source_id": "tradingview_164",
+      "name": "Stochastic RSI (STOCH RSI)",
+      "target_source_id": "book_16_04"
+    },
+    {
+      "source_id": "tradingview_165",
+      "name": "Stock-to-Flow Ratio in USD",
+      "target_source_id": "appendix_096"
+    },
+    {
+      "source_id": "tradingview_166",
+      "name": "Supertrend",
+      "target_source_id": "book_14_05"
+    },
+    {
+      "source_id": "tradingview_167",
+      "name": "Supply Equality Ratio",
+      "target_source_id": "appendix_098"
+    },
+    {
+      "source_id": "tradingview_168",
+      "name": "Technical Ratings",
+      "target_source_id": "appendix_040"
+    },
+    {
+      "source_id": "tradingview_169",
+      "name": "Time Weighted Average Price",
+      "target_source_id": "appendix_041"
+    },
+    {
+      "source_id": "tradingview_170",
+      "name": "Top trader long/short accounts",
+      "target_source_id": "appendix_064"
+    },
+    {
+      "source_id": "tradingview_171",
+      "name": "Top trader long/short accounts ratio",
+      "target_source_id": "appendix_064"
+    },
+    {
+      "source_id": "tradingview_172",
+      "name": "Top trader long/short positions",
+      "target_source_id": "appendix_065"
+    },
+    {
+      "source_id": "tradingview_173",
+      "name": "Top trader long/short positions ratio",
+      "target_source_id": "appendix_065"
+    },
+    {
+      "source_id": "tradingview_174",
+      "name": "Total block size in bytes",
+      "target_source_id": "appendix_077"
+    },
+    {
+      "source_id": "tradingview_175",
+      "name": "Total gas used",
+      "target_source_id": "appendix_084"
+    },
+    {
+      "source_id": "tradingview_176",
+      "name": "Total transactions size in bytes",
+      "target_source_id": "appendix_086"
+    },
+    {
+      "source_id": "tradingview_177",
+      "name": "Total UTXO value created",
+      "target_source_id": "appendix_079"
+    },
+    {
+      "source_id": "tradingview_178",
+      "name": "Total UTXO value spent",
+      "target_source_id": "appendix_079"
+    },
+    {
+      "source_id": "tradingview_179",
+      "name": "Total UTXOs",
+      "target_source_id": "appendix_078"
+    },
+    {
+      "source_id": "tradingview_180",
+      "name": "Trading Sessions",
+      "target_source_id": "appendix_042"
+    },
+    {
+      "source_id": "tradingview_181",
+      "name": "Transaction fees",
+      "target_source_id": "appendix_085"
+    },
+    {
+      "source_id": "tradingview_182",
+      "name": "Transaction fees",
+      "target_source_id": "appendix_085"
+    },
+    {
+      "source_id": "tradingview_183",
+      "name": "Transaction rate",
+      "target_source_id": "appendix_087"
+    },
+    {
+      "source_id": "tradingview_184",
+      "name": "Transfer count",
+      "target_source_id": "appendix_089"
+    },
+    {
+      "source_id": "tradingview_185",
+      "name": "Transfer rate",
+      "target_source_id": "appendix_089"
+    },
+    {
+      "source_id": "tradingview_186",
+      "name": "Trend Strength Index",
+      "target_source_id": "appendix_043"
+    },
+    {
+      "source_id": "tradingview_187",
+      "name": "Triple EMA",
+      "target_source_id": "book_12_06"
+    },
+    {
+      "source_id": "tradingview_188",
+      "name": "TRIX",
+      "target_source_id": "book_14_15"
+    },
+    {
+      "source_id": "tradingview_189",
+      "name": "True Strength Index",
+      "target_source_id": "book_16_10"
+    },
+    {
+      "source_id": "tradingview_190",
+      "name": "Ulcer Index",
+      "target_source_id": "book_17_10"
+    },
+    {
+      "source_id": "tradingview_191",
+      "name": "Ultimate Oscillator (UO)",
+      "target_source_id": "book_16_11"
+    },
+    {
+      "source_id": "tradingview_192",
+      "name": "Understanding crypto open interest",
+      "target_source_id": "appendix_061"
+    },
+    {
+      "source_id": "tradingview_193",
+      "name": "Up/Down Volume",
+      "target_source_id": "appendix_044"
+    },
+    {
+      "source_id": "tradingview_194",
+      "name": "US spot crypto ETF balances",
+      "target_source_id": "appendix_066"
+    },
+    {
+      "source_id": "tradingview_195",
+      "name": "US spot crypto ETF flows",
+      "target_source_id": "appendix_067"
+    },
+    {
+      "source_id": "tradingview_196",
+      "name": "Visible Average Price",
+      "target_source_id": "appendix_045"
+    },
+    {
+      "source_id": "tradingview_197",
+      "name": "Volatility Stop",
+      "target_source_id": "appendix_046"
+    },
+    {
+      "source_id": "tradingview_198",
+      "name": "Volume",
+      "target_source_id": "book_18_01"
+    },
+    {
+      "source_id": "tradingview_199",
+      "name": "Volume Delta",
+      "target_source_id": "appendix_047"
+    },
+    {
+      "source_id": "tradingview_200",
+      "name": "Volume Weighted Average Price (VWAP)",
+      "target_source_id": "book_18_02"
+    },
+    {
+      "source_id": "tradingview_201",
+      "name": "Volume-Weighted Moving Average (VWMA)",
+      "target_source_id": "book_12_05"
+    },
+    {
+      "source_id": "tradingview_202",
+      "name": "Vortex Indicator",
+      "target_source_id": "book_14_03"
+    },
+    {
+      "source_id": "tradingview_203",
+      "name": "VWAP Auto Anchored",
+      "target_source_id": "appendix_048"
+    },
+    {
+      "source_id": "tradingview_204",
+      "name": "Weighted Moving Average",
+      "target_source_id": "book_12_03"
+    },
+    {
+      "source_id": "tradingview_205",
+      "name": "Williams %R (%R)",
+      "target_source_id": "book_16_06"
+    },
+    {
+      "source_id": "tradingview_206",
+      "name": "Williams Alligator",
+      "target_source_id": "book_12_12"
+    },
+    {
+      "source_id": "tradingview_207",
+      "name": "Williams Fractal",
+      "target_source_id": "book_14_12"
+    },
+    {
+      "source_id": "tradingview_208",
+      "name": "Woodies CCI",
+      "target_source_id": "appendix_049"
+    },
+    {
+      "source_id": "tradingview_209",
+      "name": "Zig Zag",
+      "target_source_id": "book_14_11"
+    }
+  ]
+}

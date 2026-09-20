@@ -13,19 +13,18 @@ use tracing_subscriber::EnvFilter;
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("info")),
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
         )
         .init();
 
     // 加载配置(config.yaml 不存在就用默认)
-    let config = load_config(&PathBuf::from("config.yaml"))
-        .unwrap_or_else(|_| {
-            tracing::warn!("未找到 config.yaml,使用默认配置");
-            default_config()
-        });
+    let config = load_config(&PathBuf::from("config.yaml")).unwrap_or_else(|_| {
+        tracing::warn!("未找到 config.yaml,使用默认配置");
+        default_config()
+    });
 
-    let data_cache_dir = PathBuf::from("data");
+    let data_cache_dir =
+        PathBuf::from(std::env::var("AXIOM_DATA_DIR").unwrap_or_else(|_| "data".into()));
     std::fs::create_dir_all(&data_cache_dir).ok();
 
     let state = Arc::new(AppState::new(config, data_cache_dir));
@@ -33,12 +32,19 @@ async fn main() -> anyhow::Result<()> {
     // 启动后台模拟盘循环
     let paper_clone = state.paper_state.clone();
     let feed_clone = state.feed.clone();
-    tokio::spawn(async move {
-        run_paper_loop(feed_clone, paper_clone).await;
-    });
+    if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
+        tokio::spawn(axiom::paper::run_offline_paper_loop(paper_clone));
+    } else {
+        tokio::spawn(async move {
+            run_paper_loop(feed_clone, paper_clone).await;
+        });
+    }
 
     let app = api::router(state);
-    let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
+    let port: u16 = std::env::var("AXIOM_PORT")
+        .unwrap_or_else(|_| "8080".into())
+        .parse()?;
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!("◆ AXIOM 已启动,监听 {}", addr);
     tracing::info!("→ 打开浏览器访问 http://localhost:8080");
 

@@ -1,15 +1,59 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { api, fmtPct, fmtNum, fmtMoney, fmtPctSigned } from './api';
+import Plotly from 'plotly.js-dist-min';
+import { api, fmtPct, fmtNum, fmtMoney } from './api';
+import { indicatorPanel, validSeries, type IndicatorPanel } from './chart';
 import type {
   TabId, SourceType, Bar, BacktestResult, StrategyMeta,
   KnowledgeResponse, KnowledgeEntry, CustomStrategy, ChartType,
-  PaperSnapshot, Trade, EquityPoint,
+  PaperSnapshot, EquityPoint, PracticeConcept, PracticeResult,
 } from './types';
+
+const CHINESE_FIELDS: Record<string, string> = {
+  price: '价格', close: '收盘价', open: '开盘价', high: '最高价', low: '最低价', volume: '成交量',
+  period: '周期', fast: '快线周期', slow: '慢线周期', signal: '信号周期', multiplier: '倍数',
+  returns: '收益率序列', equity: '净值序列', elapsed_days: '经过天数', periods_per_year: '年化周期数',
+  rsi: '相对强弱指标', value: '计算值', mean: '均值', stddev: '标准差', correlation: '相关系数',
+  beta: '贝塔系数', alpha: '阿尔法', sharpe: '夏普比率', max_drawdown: '最大回撤',
+  eps: '每股收益', net_income: '净利润', preferred_dividends: '优先股股息', shares: '普通股股数', weighted_shares: '加权平均普通股股数', weighted_average_shares: '加权平均普通股股数',
+};
+const CHINESE_UNITS: Record<string, string> = { currency: '元', share: '股', shares: '股', 'currency/share': '元/股', '元/股': '元/股', percent: '%', ratio: '比率', days: '天', bars: '根 K 线' };
+function chineseUnit(unit?: string) { return unit ? (CHINESE_UNITS[unit] || unit) : ''; }
+function chineseField(key: string, label?: string) {
+  if (CHINESE_FIELDS[key]) return CHINESE_FIELDS[key];
+  if (label && !/^[a-z_]+$/i.test(label)) return label;
+  return key.replace(/_/g, ' · ');
+}
+function resultSentence(name: string, values: Record<string, number | null>, units?: Record<string, string>, hasSeries = false) {
+  const first = Object.entries(values).find(([, value]) => value != null);
+  if (!first) return `${name} 当前没有足够数据，图中的空白表示预热期或无法定义的结果。`;
+  const [key, value] = first;
+  const prefix = hasSeries ? '基于这段教学行情' : '给定图中的教学输入';
+  const reading = hasSeries ? '曲线展示该数值随样本变化；留意水平、拐点和空白预热区。' : Object.keys(values).length > 1 ? '请结合各结果之间的关系解读。' : '这是单次计算结果，应结合它的定义和背景解读。';
+  return `${prefix}，${name} 的${chineseField(key)}为 ${fmtNum(value, 6)}${chineseUnit(units?.[key]) ? ` ${chineseUnit(units?.[key])}` : ''}；${reading}`;
+}
+function performanceInputs(points: EquityPoint[] | undefined, initialCapital?: number): Record<string, unknown> {
+  const equity = points?.map(point => point.equity).filter(Number.isFinite) ?? [];
+  const returns = equity.slice(1).map((value, index) => equity[index] ? value / equity[index] - 1 : 0).filter(Number.isFinite);
+  const first = points?.[0]?.timestamp;
+  const last = points?.[points.length - 1]?.timestamp;
+  const elapsedDays = first && last ? Math.max(1, (Date.parse(last) - Date.parse(first)) / 86_400_000) : undefined;
+  return { equity, returns, initial_capital: initialCapital ?? equity[0], elapsed_days: elapsedDays };
+}
+function plotTheme() {
+  const style = getComputedStyle(document.documentElement);
+  return {
+    paper: style.getPropertyValue('--bg-card').trim(), plot: style.getPropertyValue('--bg-card').trim(),
+    text: style.getPropertyValue('--text').trim(), grid: style.getPropertyValue('--border-soft').trim(),
+    accent: style.getPropertyValue('--accent').trim(), blue: style.getPropertyValue('--accent-2').trim(),
+    fill: style.getPropertyValue('--chart-fill').trim(),
+  };
+}
+
 
 // ===================================================================
 // 顶栏
 // ===================================================================
-function Header() {
+function Header({ theme, onToggleTheme }: { theme: 'light' | 'dark'; onToggleTheme: () => void }) {
   return (
     <header className="ax-header">
       <div className="ax-header-inner">
@@ -18,6 +62,7 @@ function Header() {
           <span className="ax-title">AXIOM</span>
           <span className="ax-sub">从公理出发,推导你的市场观</span>
         </div>
+        <button className="ax-theme-toggle" onClick={onToggleTheme} aria-label={theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'} title={theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'}>{theme === 'dark' ? '☀' : '☾'}</button>
       </div>
     </header>
   );
@@ -77,10 +122,9 @@ function Dropdown<T extends string | number>({ options, value, onChange, minWidt
   const current = options.find(o => o.v === value) || options[0];
 
   return (
-    <div className="ax-dropdown" ref={ref} style={{ minWidth }}>
+    <div className={'ax-dropdown' + (open ? ' open' : '')} ref={ref} style={{ minWidth }}>
       <button className="ax-dd-trigger" onClick={() => setOpen(o => !o)}>
         <span>{current?.l || '选择...'}</span>
-        <span className="ax-dd-arrow">▾</span>
       </button>
       {open && (
         <div className="ax-dd-menu">
@@ -123,7 +167,7 @@ const LEARN_SUBS: { id: LearnSub; label: string }[] = [
   { id: 'path', label: '学习路径' },
 ];
 
-function LearnCenter() {
+function LearnCenter({ onPractice }: { onPractice: (conceptId: string, module: TabId) => void }) {
   const [sub, setSub] = useState<LearnSub>('knowledge');
   return (
     <section className="ax-section">
@@ -136,7 +180,7 @@ function LearnCenter() {
             onClick={() => setSub(s.id)}>{s.label}</button>
         ))}
       </nav>
-      {sub === 'knowledge' && <KnowledgeView />}
+      {sub === 'knowledge' && <KnowledgeView onPractice={onPractice} />}
       {sub === 'concepts' && <ConceptsView />}
       {sub === 'build' && <BuildView />}
       {sub === 'path' && <PathView />}
@@ -145,7 +189,7 @@ function LearnCenter() {
 }
 
 // 指标大全
-function KnowledgeView() {
+function KnowledgeView({ onPractice }: { onPractice: (conceptId: string, module: TabId) => void }) {
   const [data, setData] = useState<KnowledgeResponse | null>(null);
   const [search, setSearch] = useState('');
   const [activeCat, setActiveCat] = useState('');
@@ -188,21 +232,28 @@ function KnowledgeView() {
       <p style={{ color: 'var(--text-dim)', fontSize: '0.82rem', margin: '0.4rem 0 0.8rem' }}>
         {filtered.length} 条结果
       </p>
-      {filtered.map(e => <KbCard key={e.id} e={e} />)}
+      {filtered.map(e => <KbCard key={e.id} e={e} onPractice={onPractice} />)}
     </div>
   );
 }
 
-function KbCard({ e }: { e: KnowledgeEntry }) {
+function KbCard({ e, onPractice }: { e: KnowledgeEntry; onPractice: (conceptId: string, module: TabId) => void }) {
+  const [open, setOpen] = useState(false);
   return (
     <div className="ax-kb-card">
       <div className="ax-kb-header">
         <h4>{e.name}</h4>
-        <a href={e.code_url} target="_blank" rel="noopener" className="ax-gh-btn">↗ GitHub</a>
+        <CodeLink entry={e} />
       </div>
       <div className="ax-kb-summary">{e.summary}</div>
-      <details>
-        <summary className="ax-kb-details">展开详情</summary>
+      <div className="ax-kb-practice" aria-label={`${e.name} 实践入口`}>
+        {(['data', 'backtest', 'paper', 'compare'] as const).map(module => <button key={module} onClick={() => onPractice(e.id, module)}>在{({ data: '数据探索', backtest: '回测', paper: '模拟盘', compare: '策略对比' })[module]}中实践</button>)}
+      </div>
+      <details onToggle={event => setOpen((event.currentTarget as HTMLDetailsElement).open)}>
+        <summary className={`ax-kb-details${open ? ' is-open' : ''}`} aria-label={open ? `收起 ${e.name} 详情` : `展开 ${e.name} 详情`}>
+          <span className="ax-kb-details-icon" aria-hidden="true">{open ? '⌃' : '⌄'}</span>
+          {open ? '收起详情' : '展开详情'}
+        </summary>
         <Section label="公式"><code>{e.formula || 'N/A'}</code></Section>
         <Section label="含义">{e.meaning}</Section>
         {e.example && <Section label="例子" highlight>{e.example}</Section>}
@@ -215,7 +266,9 @@ function KbCard({ e }: { e: KnowledgeEntry }) {
             ))}
           </Section>
         )}
-        <Section label="代码实现"><code className="ax-code-link">{e.implementation}</code></Section>
+        {e.source_refs && e.source_refs.length > 0 && <Section label="书中出处">{e.source_refs.map(ref => <span key={`${ref.source_id}-${ref.pdf_page}`} className="ax-tag">{ref.title} · 第 {ref.pdf_page} 页</span>)}</Section>}
+        <Section label="代码实现"><CodeLink entry={e} detailed /></Section>
+        {open && <KnowledgeVisual concept={e} />}
       </details>
     </div>
   );
@@ -227,6 +280,145 @@ function Section({ label, children, danger, highlight }: { label: string; childr
       <div className="ax-section-label">{label}</div>
       <div>{children}</div>
     </div>
+  );
+}
+
+function CodeLink({ entry, detailed = false }: { entry: KnowledgeEntry; detailed?: boolean }) {
+  const [url, setUrl] = useState('');
+  const [loading, setLoading] = useState(false);
+  const resolve = async () => {
+    if (url || loading) return;
+    setLoading(true);
+    try {
+      const location = await api.getCodeLocation(entry.code_ref || entry.implementation || entry.id);
+      const resolved = [location.url, location.github_url, location.source_url].find((value): value is string => typeof value === 'string' && value.length > 0);
+      setUrl(resolved || entry.code_url);
+    } catch { setUrl(entry.code_url); } finally { setLoading(false); }
+  };
+  useEffect(() => { void resolve(); }, [entry.id]);
+  if (url) return <a href={url} target="_blank" rel="noopener noreferrer" className={detailed ? 'ax-code-link' : 'ax-gh-btn'}>{detailed ? <><code>{entry.implementation || entry.code_ref || entry.id}</code><span className="ax-goto">打开精确源码 ↗</span></> : '↗ 源码'}</a>;
+  return <button className={detailed ? 'ax-code-link ax-code-resolve' : 'ax-gh-btn'} onClick={resolve} disabled={loading}>{loading ? '定位中…' : detailed ? `定位 ${entry.implementation || entry.code_ref || entry.id}` : '↗ 定位源码'}</button>;
+}
+
+let practiceCatalogPromise: Promise<PracticeConcept[]> | undefined;
+function practiceCatalog() {
+  practiceCatalogPromise ??= api.listPractice().then(response => response.concepts);
+  return practiceCatalogPromise;
+}
+const FORMULA_FALLBACK: Record<string, string> = { earnings_per_share: '(净利润 − 优先股股息) ÷ 加权平均普通股股数' };
+function ScalarKnowledgeDiagram({ concept, inputs, scalar, unit, loading }: { concept: KnowledgeEntry; inputs: PracticeConcept['inputs']; scalar?: [string, number | null]; unit?: string; loading?: boolean }) {
+  const formula = concept.formula || FORMULA_FALLBACK[concept.id] || `${concept.name} 的定义公式`;
+  const height = Math.max(142, 74 + inputs.length * 19);
+  const shownInputs = inputs.length ? inputs : [{ key: 'market_bars', label: '教学行情样本', default: '已传入 K 线' }];
+  return <figure className="ax-knowledge-chart ax-scalar-chart"><svg viewBox={`0 0 620 ${height}`} role="img" aria-label={`${concept.name} 输入、公式和结果图解`}><rect x="8" y="18" width="190" height={height - 34} rx="6" /><text x="20" y="40">输入</text>{shownInputs.map((input, index) => <text key={input.key} x="20" y={62 + index * 19}>{`${chineseField(input.key, input.label)}${input.label && input.label !== chineseField(input.key, input.label) ? `（${input.key}）` : ''}：${JSON.stringify(input.default)}`}</text>)}<path d="M208 60 H234" /><rect x="244" y="18" width="176" height={height - 34} rx="6" /><text x="256" y="40">公式</text><text x="256" y="66">{formula}</text><path d="M430 60 H456" /><rect x="466" y="18" width="146" height={height - 34} rx="6" /><text x="478" y="40">结果</text><text x="478" y="68">{loading ? '计算中…' : scalar && scalar[1] != null ? `${chineseField(scalar[0])}：${fmtNum(scalar[1], 6)}` : '当前无定义'}</text><text x="478" y="90">{loading ? '教学示例' : scalar ? chineseUnit(unit) : '数据不足'}</text></svg><figcaption>{shownInputs.length ? '完整教学输入' : '教学行情'} → {formula} → 可解释的结果</figcaption></figure>;
+}
+
+function KnowledgeVisual({ concept }: { concept: KnowledgeEntry }) {
+  const [result, setResult] = useState<PracticeResult | null>(null);
+  const [practiceConcept, setPracticeConcept] = useState<PracticeConcept | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    Promise.all([practiceCatalog(), api.runPractice({ concept_id: concept.id, module: 'data', symbol: 'BTCUSDT', source: 'synthetic', limit: 80, inputs: {} })])
+      .then(([catalog, value]) => { if (active) { setPracticeConcept(catalog.find(item => item.id === concept.id) || null); setResult(value); } })
+      .catch(reason => { if (active) setError(String(reason)); });
+    return () => { active = false; };
+  }, [concept.id]);
+  if (error) return <Section label="可计算示例" highlight><ScalarKnowledgeDiagram concept={concept} inputs={concept.inputs || []} /><p className="ax-practice-note">示例结果暂不可用：{error}</p></Section>;
+  if (!result) return <Section label="可计算示例" highlight><ScalarKnowledgeDiagram concept={concept} inputs={concept.inputs || []} loading /><p className="ax-practice-note">正在生成与 {concept.name} 对应的示例…</p></Section>;
+  const series = result.series.find(item => item.values.some(value => value != null));
+  const values = series?.values.filter((value): value is number => value != null) ?? [];
+  const min = Math.min(...values, 0), max = Math.max(...values, 1), span = max - min || 1;
+  const points = series?.values.map((value, index) => value == null ? '' : `${12 + index * (276 / Math.max(series.values.length - 1, 1))},${88 - ((value - min) / span) * 72}`).filter(Boolean).join(' ') ?? '';
+  const scalar = Object.entries(result.values).find(([, value]) => value != null);
+  const inputs = practiceConcept?.inputs || concept.inputs || [];
+  return <Section label="可计算示例" highlight>
+    <p className="ax-practice-note">{result.provenance === 'provided_market_bars' ? '基于合成教学行情计算，用来观察数值变化，不代表当前币种行情。' : '基于可编辑教学输入计算，不代表当前币种行情。'}</p>
+    {series && values.length > 1 ? <figure className="ax-knowledge-chart"><svg viewBox="0 0 300 100" role="img" aria-label={`${concept.name} 示例数值图`}><line x1="12" y1="88" x2="288" y2="88" /><line x1="12" y1="12" x2="12" y2="88" /><polyline points={points} /></svg><figcaption>{chineseField(series.name)}：范围 {fmtNum(min, 4)} 到 {fmtNum(max, 4)}</figcaption></figure> : <ScalarKnowledgeDiagram concept={concept} inputs={inputs} scalar={scalar} unit={scalar ? result.units?.[scalar[0]] : undefined} />}
+    <p className="ax-practice-reading">{resultSentence(concept.name, result.values, result.units, Boolean(series && values.length > 1))}</p>
+    {result.notes.slice(0, 1).map(note => <p className="ax-practice-note" key={note}>{note}</p>)}
+  </Section>;
+}
+
+function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}, targetConcept }: {
+  module: 'data' | 'backtest' | 'paper' | 'compare'; symbol: string; source: SourceType; limit: number; bars?: Bar[]; contextInputs?: Record<string, unknown>; targetConcept?: string;
+}) {
+  const [concepts, setConcepts] = useState<PracticeConcept[]>([]);
+  const [conceptId, setConceptId] = useState('');
+  const [inputs, setInputs] = useState<Record<string, string>>({});
+  const [result, setResult] = useState<PracticeResult | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const selectConcept = (id: string, catalog = concepts) => {
+    const concept = catalog.find(item => item.id === id);
+    setConceptId(id);
+    setInputs(Object.fromEntries((concept?.inputs ?? []).map(input => [input.key,
+      JSON.stringify(contextInputs[input.key] ?? input.default)])));
+    setResult(null);
+    setError('');
+  };
+
+  useEffect(() => {
+    api.listPractice().then(data => {
+      setConcepts(data.concepts);
+      selectConcept(targetConcept && data.concepts.some(item => item.id === targetConcept) ? targetConcept : data.concepts[0]?.id ?? '', data.concepts);
+    }).catch(e => setError(`无法加载实践目录：${String(e)}`));
+  }, []);
+
+  useEffect(() => {
+    if (targetConcept && concepts.some(item => item.id === targetConcept) && targetConcept !== conceptId) selectConcept(targetConcept);
+  }, [targetConcept, concepts, conceptId]);
+
+  const concept = concepts.find(item => item.id === conceptId);
+  const run = async () => {
+    if (!concept) return;
+    if (concept.input_kind === 'market_bars' && !bars?.length) {
+      setError('当前模块还没有可用行情上下文。请先加载数据、运行回测或等待模拟盘产生数据。');
+      return;
+    }
+    const parsed: Record<string, unknown> = {};
+    try {
+      for (const input of concept.inputs) parsed[input.key] = contextInputs[input.key] ?? JSON.parse(inputs[input.key] ?? 'null');
+    } catch {
+      setError('输入必须是有效的 JSON 数值、数组或字符串。');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      setResult(await api.runPractice({ concept_id: concept.id, module, symbol, source, limit, inputs: parsed, bars: bars?.length ? bars : undefined }));
+    } catch (e) {
+      setError(String(e));
+      setResult(null);
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <aside className="ax-practice" aria-label="概念实践">
+      <div><h3>概念实践</h3><p>用当前模块的上下文检验一个概念；绩效概念会优先使用本页已产生的净值和收益，其他可编辑输入会清楚标为教学示例。</p></div>
+      {error && <div className="ax-error">{error}</div>}
+      {concepts.length > 0 && <>
+        <label>概念
+          <Dropdown options={concepts.map(item => ({ v: item.id, l: `${item.name} · ${item.category}` }))} value={conceptId} onChange={selectConcept} minWidth={260} />
+        </label>
+        {concept && <>
+          <p className="ax-practice-note">{concept.notes}</p>
+          {concept.input_kind !== 'market_bars' && <p className="ax-practice-provenance">教学示例：这些可编辑输入不是 {symbol || '当前交易对'} 的实时或历史行情。</p>}
+          {concept.inputs.length > 0 && <div className="ax-practice-inputs">{concept.inputs.map(input => <label key={input.key}>{chineseField(input.key, input.label)}
+            <input value={inputs[input.key] ?? ''} onChange={event => setInputs(current => ({ ...current, [input.key]: event.target.value }))} aria-label={chineseField(input.key, input.label)} />
+          </label>)}</div>}
+          <button className="ax-btn primary" onClick={run} disabled={loading}>{loading ? '计算中…' : '运行实践'}</button>
+        </>}
+      </>}
+      {result && <div className="ax-practice-result">
+        <p className={result.status === 'computed' ? 'positive' : 'negative'}>{result.status === 'computed' ? '已计算' : '无法计算'} · {result.provenance === 'provided_market_bars' ? '使用当前模块行情上下文' : '使用可编辑教学输入'}</p>
+        {result.reason && <p>{result.reason}</p>}
+        {Object.keys(result.values).length > 0 && <dl>{Object.entries(result.values).map(([key, value]) => <div key={key}><dt>{chineseField(key)}{result.units?.[key] ? `（${result.units[key]}）` : ''}</dt><dd>{value == null ? '—' : fmtNum(value, 6)}</dd></div>)}</dl>}
+        <p className="ax-practice-reading">{resultSentence(concept?.name || '该概念', result.values, result.units)}</p>
+        {result.notes.map((note, index) => <p className="ax-practice-note" key={index}>{note}</p>)}
+      </div>}
+    </aside>
   );
 }
 
@@ -342,7 +534,7 @@ function PathView() {
 // ===================================================================
 // 数据探索
 // ===================================================================
-function DataExplore() {
+function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 'light' | 'dark' }) {
   const [symbols, setSymbols] = useState<string[]>([]);
   const [symbol, setSymbol] = useState('');
   const [customSymbol, setCustomSymbol] = useState('');
@@ -356,7 +548,7 @@ function DataExplore() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const chartRef = useRef<HTMLDivElement>(null);
-  const plotlyRef = useRef<any>(null);
+  const requestId = useRef(0);
 
   useEffect(() => {
     api.listSymbols().then(d => {
@@ -367,6 +559,7 @@ function DataExplore() {
   }, []);
 
   const loadData = useCallback(async () => {
+    const id = ++requestId.current;
     const sym = (customSymbol || symbol || 'BTCUSDT').toUpperCase();
     setLoading(true);
     setError('');
@@ -378,6 +571,7 @@ function DataExplore() {
           if (ha.bars) data.bars = ha.bars;
         } catch {}
       }
+      if (id !== requestId.current) return;
       setChartData(data);
 
       // 摘要
@@ -398,13 +592,16 @@ function DataExplore() {
       // 形态
       try {
         const pat = await api.getPatterns(sym, Math.min(limit, 100), source);
-        setPatterns(pat.patterns.filter(p => p.pattern !== '无特殊形态').slice(0, 5));
+        if (id === requestId.current) setPatterns(pat.patterns.filter(p => p.pattern !== '无特殊形态').slice(0, 5));
       } catch {}
     } catch (e) {
+      if (id !== requestId.current) return;
       setError(String(e));
       setChartData(null);
+      setSummary(null);
+      setPatterns([]);
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, [symbol, customSymbol, limit, source, indicatorSet, chartType]);
 
@@ -414,8 +611,13 @@ function DataExplore() {
   useEffect(() => {
     if (!chartData) return;
     if (!chartRef.current) return;
-    const Plotly = (window as any).Plotly;
-    if (!Plotly) return;
+    if (chartData.bars.length === 0) {
+      Plotly.purge(chartRef.current);
+      chartRef.current.replaceChildren(Object.assign(document.createElement('p'), { className: 'ax-chart-empty', textContent: '没有可用的 K 线数据。请调整交易对、数据源或数量后重试。' }));
+      return;
+    }
+    chartRef.current.querySelector('.ax-chart-empty')?.remove();
+    const colors = plotTheme();
     const traces: any[] = [{
       x: chartData.bars.map(b => new Date(b.timestamp)),
       open: chartData.bars.map(b => b.open),
@@ -429,28 +631,49 @@ function DataExplore() {
     if (chartType === 'heikin_ashi') {
       traces[0].name = chartData.symbol + ' (HA)';
     }
+    const usedPanels = new Set<IndicatorPanel>();
     if (chartData.indicators) {
       const colors = ['#d29922', '#58a6ff', '#a371f7', '#ff7b72', '#56d4dd', '#7ee787'];
       let ci = 0;
       for (const [name, vals] of Object.entries(chartData.indicators)) {
+        const series = validSeries(vals);
+        if (!series.some(Boolean)) continue;
+        const panel = indicatorPanel(name);
+        usedPanels.add(panel);
         traces.push({
-          x: vals.map((v: any) => v ? new Date(v.x) : null),
-          y: vals.map((v: any) => v ? v.y : null),
+          x: series.map(v => v ? new Date(v.x) : null),
+          y: series.map(v => v ? v.y : null),
           type: 'scatter', mode: 'lines', name,
           line: { color: colors[ci++ % colors.length], width: 1.5 },
           connectgaps: false,
+          yaxis: panel === 'price' ? 'y' : `y${['oscillator', 'momentum', 'volume', 'volatility'].indexOf(panel) + 2}`,
         });
       }
     }
-    Plotly.react(chartRef.current, traces, {
-      paper_bgcolor: '#1c2128', plot_bgcolor: '#1c2128',
-      font: { color: '#e6edf3', family: 'system-ui', size: 11 },
-      margin: { t: 30, b: 40, l: 50, r: 20 },
-      xaxis: { gridcolor: '#21262d' },
-      yaxis: { gridcolor: '#21262d' },
-      legend: { orientation: 'h', y: -0.15 },
-    }, { responsive: true, displayModeBar: false });
-  }, [chartData, chartType]);
+    const panelLayout: Record<Exclude<IndicatorPanel, 'price'>, { key: string; title: string; domain: [number, number]; range?: [number, number] }> = {
+      oscillator: { key: 'yaxis2', title: '振荡器', domain: [0.38, 0.5] },
+      momentum: { key: 'yaxis3', title: '动量', domain: [0.25, 0.35] },
+      volume: { key: 'yaxis4', title: '量能', domain: [0.13, 0.22] },
+      volatility: { key: 'yaxis5', title: '波动率', domain: [0.02, 0.1] },
+    };
+    const layout: any = {
+      paper_bgcolor: colors.paper, plot_bgcolor: colors.plot,
+      font: { color: colors.text, family: 'system-ui', size: 11 },
+      margin: { t: 30, b: 55, l: 55, r: 55 },
+      xaxis: { gridcolor: colors.grid, type: 'date', rangeslider: { visible: false } },
+      yaxis: { gridcolor: colors.grid, title: '价格', domain: usedPanels.size ? [0.54, 1] : [0, 1], fixedrange: false },
+      legend: { orientation: 'h', y: -0.2 },
+      hovermode: 'x unified',
+      hoverlabel: { bgcolor: colors.paper, bordercolor: colors.grid, font: { color: colors.text } },
+    };
+    for (const panel of usedPanels) {
+      if (panel === 'price') continue;
+      const spec = panelLayout[panel];
+      layout[spec.key] = { gridcolor: colors.grid, title: spec.title, domain: spec.domain, anchor: 'x', range: spec.range, fixedrange: false };
+    }
+    Plotly.react(chartRef.current, traces, layout, { responsive: true, displayModeBar: false });
+    return () => Plotly.purge(chartRef.current);
+  }, [chartData, chartType, theme]);
 
   return (
     <section className="ax-section">
@@ -510,6 +733,7 @@ function DataExplore() {
           ))}
         </div>
       )}
+      <PracticePanel module="data" symbol={chartData?.symbol || symbol} source={source} limit={limit} bars={chartData?.bars} targetConcept={targetConcept} />
     </section>
   );
 }
@@ -517,7 +741,7 @@ function DataExplore() {
 // ===================================================================
 // 回测
 // ===================================================================
-function Backtest() {
+function Backtest({ targetConcept, theme }: { targetConcept?: string; theme: 'light' | 'dark' }) {
   const [strategies, setStrategies] = useState<StrategyMeta[]>([]);
   const [strategy, setStrategy] = useState('');
   const [params, setParams] = useState<Record<string, number>>({});
@@ -581,22 +805,22 @@ function Backtest() {
 
   useEffect(() => {
     if (!result || !chartRef.current) return;
-    const Plotly = (window as any).Plotly;
-    if (!Plotly) return;
+    const colors = plotTheme();
     Plotly.react(chartRef.current, [{
       x: result.equity_curve.map(p => new Date(p.timestamp)),
       y: result.equity_curve.map(p => p.equity),
       type: 'scatter', mode: 'lines', name: '净值',
-      line: { color: '#d29922', width: 1.8 },
-      fill: 'tozeroy', fillcolor: 'rgba(210, 153, 34, 0.05)',
+      line: { color: colors.accent, width: 1.8 },
+      fill: 'tozeroy', fillcolor: colors.fill,
     }], {
-      paper_bgcolor: '#1c2128', plot_bgcolor: '#1c2128',
-      font: { color: '#e6edf3', family: 'system-ui', size: 11 },
+      paper_bgcolor: colors.paper, plot_bgcolor: colors.plot,
+      font: { color: colors.text, family: 'system-ui', size: 11 },
       margin: { t: 30, b: 40, l: 60, r: 20 },
-      xaxis: { gridcolor: '#21262d' },
-      yaxis: { gridcolor: '#21262d', title: '净值 ($)' },
+      xaxis: { gridcolor: colors.grid, zerolinecolor: colors.grid },
+      yaxis: { gridcolor: colors.grid, zerolinecolor: colors.grid, title: '净值 ($)' },
+      hoverlabel: { bgcolor: colors.paper, bordercolor: colors.grid, font: { color: colors.text } },
     }, { responsive: true, displayModeBar: false });
-  }, [result]);
+  }, [result, theme]);
 
   const currentMeta = strategies.find(s => s.name === strategy);
 
@@ -652,7 +876,8 @@ function Backtest() {
         <>
           <div className="ax-metrics">
             {METRIC_FIELDS.map(f => {
-              const v = result.metrics[f.key];
+              const raw = result.metrics[f.key];
+              const v = typeof raw === 'number' ? raw : null;
               let cls = '';
               if (f.sign && typeof v === 'number') {
                 cls = v > 0 ? 'positive' : v < 0 ? 'negative' : '';
@@ -665,6 +890,11 @@ function Backtest() {
               );
             })}
           </div>
+          {typeof result.metrics['指标说明'] === 'object' && result.metrics['指标说明'] !== null && <details className="ax-trades ax-metric-notes">
+            <summary>指标说明</summary>
+            <p>显示“—”表示该指标在当前样本中无定义，不等于零。</p>
+            {Object.entries(result.metrics['指标说明']).map(([key, note]) => <p key={key}><b>{key}</b>：{String(note)}</p>)}
+          </details>}
           <div ref={chartRef} className="ax-chart"></div>
           {result.trades.length > 0 && (
             <details className="ax-trades">
@@ -681,7 +911,7 @@ function Backtest() {
                       <td>{t.exit_time ? new Date(t.exit_time).toLocaleString() : '—'}</td>
                       <td>{t.exit_price ? fmtNum(t.exit_price) : '—'}</td>
                       <td className={t.pnl >= 0 ? 'positive' : 'negative'}>{fmtMoney(t.pnl)}</td>
-                      <td className={t.pnl_pct >= 0 ? 'positive' : 'negative'}>{t.pnl_pct.toFixed(2)}%</td>
+                      <td className={t.pnl_pct >= 0 ? 'positive' : 'negative'}>{fmtPct(t.pnl_pct)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -690,6 +920,7 @@ function Backtest() {
           )}
         </>
       )}
+      <PracticePanel module="backtest" symbol={symbol} source={source} limit={limit} bars={result?.bars} contextInputs={performanceInputs(result?.equity_curve, capital)} targetConcept={targetConcept} />
     </section>
   );
 }
@@ -708,7 +939,7 @@ const METRIC_FIELDS: { key: string; label: string; sign?: boolean; fmt: (v: any)
 // ===================================================================
 // 模拟盘
 // ===================================================================
-function PaperTrading() {
+function PaperTrading({ targetConcept, theme }: { targetConcept?: string; theme: 'light' | 'dark' }) {
   const [snapshot, setSnapshot] = useState<PaperSnapshot | null>(null);
   const [strategies, setStrategies] = useState<StrategyMeta[]>([]);
   const [strategy, setStrategy] = useState('');
@@ -738,32 +969,38 @@ function PaperTrading() {
 
   useEffect(() => {
     if (!snapshot || !chartRef.current) return;
-    const Plotly = (window as any).Plotly;
-    if (!Plotly) return;
     if (snapshot.equity_curve.length === 0) return;
+    const colors = plotTheme();
     Plotly.react(chartRef.current, [{
       x: snapshot.equity_curve.map((p: EquityPoint) => new Date(p.timestamp)),
       y: snapshot.equity_curve.map((p: EquityPoint) => p.equity),
       type: 'scatter', mode: 'lines',
-      line: { color: '#d29922', width: 1.8 },
-      fill: 'tozeroy', fillcolor: 'rgba(210, 153, 34, 0.05)',
+      line: { color: colors.accent, width: 1.8 },
+      fill: 'tozeroy', fillcolor: colors.fill,
     }], {
-      paper_bgcolor: '#1c2128', plot_bgcolor: '#1c2128',
-      font: { color: '#e6edf3', family: 'system-ui', size: 11 },
+      paper_bgcolor: colors.paper, plot_bgcolor: colors.plot,
+      font: { color: colors.text, family: 'system-ui', size: 11 },
       margin: { t: 30, b: 40, l: 60, r: 20 },
-      xaxis: { gridcolor: '#21262d' },
-      yaxis: { gridcolor: '#21262d', title: '净值 ($)' },
+      xaxis: { gridcolor: colors.grid, zerolinecolor: colors.grid },
+      yaxis: { gridcolor: colors.grid, zerolinecolor: colors.grid, title: '净值 ($)' },
+      hoverlabel: { bgcolor: colors.paper, bordercolor: colors.grid, font: { color: colors.text } },
     }, { responsive: true, displayModeBar: false });
-  }, [snapshot]);
+  }, [snapshot, theme]);
 
   const start = async () => {
     try {
+      setError('');
       await api.paperStrategy(strategy);
       await api.paperStart();
+      setSnapshot(await api.paperSnapshot());
     } catch (e) { setError(String(e)); }
   };
   const stop = async () => {
-    try { await api.paperStop(); } catch (e) { setError(String(e)); }
+    try {
+      setError('');
+      await api.paperStop();
+      setSnapshot(await api.paperSnapshot());
+    } catch (e) { setError(String(e)); }
   };
 
   if (!snapshot) return <div className="ax-loading">加载中…</div>;
@@ -790,6 +1027,8 @@ function PaperTrading() {
         <div className="ax-stat"><div className="ax-stat-label">总净值</div><div className="ax-stat-value">{fmtMoney(snapshot.equity)}</div></div>
         <div className="ax-stat"><div className="ax-stat-label">持仓数量</div><div className="ax-stat-value">{fmtNum(snapshot.position_size, 4)}</div></div>
         <div className="ax-stat"><div className="ax-stat-label">成交笔数</div><div className="ax-stat-value">{snapshot.trades_count}</div></div>
+        <div className="ax-stat"><div className="ax-stat-label">交易对</div><div className="ax-stat-value">{snapshot.symbol || '—'}</div></div>
+        <div className="ax-stat"><div className="ax-stat-label">数据源</div><div className="ax-stat-value">{snapshot.source || '—'}</div></div>
         <div className="ax-stat"><div className="ax-stat-label">最新价</div><div className="ax-stat-value">{snapshot.current_bar ? fmtNum(snapshot.current_bar.close) : '—'}</div></div>
       </div>
       <div ref={chartRef} className="ax-chart"></div>
@@ -805,6 +1044,7 @@ function PaperTrading() {
           ))}
         </div>
       </details>
+      <PracticePanel module="paper" symbol={snapshot.symbol || 'BTCUSDT'} source={snapshot.source || 'real'} limit={snapshot.bars?.length || 200} bars={snapshot.bars} contextInputs={performanceInputs(snapshot.equity_curve, snapshot.initial_capital ?? snapshot.equity)} targetConcept={targetConcept} />
     </section>
   );
 }
@@ -812,7 +1052,7 @@ function PaperTrading() {
 // ===================================================================
 // 策略对比
 // ===================================================================
-function CompareStrategies() {
+function CompareStrategies({ targetConcept, theme }: { targetConcept?: string; theme: 'light' | 'dark' }) {
   const [strategies, setStrategies] = useState<StrategyMeta[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [customStrategies, setCustomStrategies] = useState<CustomStrategy[]>([]);
@@ -888,19 +1128,21 @@ function CompareStrategies() {
     setError('');
     setResults([]);
     const list: Array<{ name: string; result: BacktestResult }> = [];
+    let sharedBars: Bar[] | undefined;
     for (const item of selected) {
       let req;
       if (item.startsWith('custom_')) {
         const cs = customStrategies[parseInt(item.replace('custom_', ''))];
-        req = { strategy: cs.base, params: cs.params, symbol, source, limit: 500, initial_capital: capital, stop_loss_pct: cs.sl };
+        req = { strategy: cs.base, params: cs.params, symbol, source, limit: 500, initial_capital: capital, stop_loss_pct: cs.sl, bars: sharedBars };
       } else {
         const meta = strategies.find(s => s.name === item);
         const params: Record<string, number> = {};
         if (meta) meta.params.forEach((p: any) => params[p.key] = p.default);
-        req = { strategy: item, params, symbol, source, limit: 500, initial_capital: capital };
+        req = { strategy: item, params, symbol, source, limit: 500, initial_capital: capital, bars: sharedBars };
       }
       try {
         const r = await api.runBacktest(req);
+        sharedBars ??= r.bars;
         list.push({ name: item, result: r });
       } catch (e) { console.error('策略失败:', item, e); }
     }
@@ -910,8 +1152,7 @@ function CompareStrategies() {
 
   useEffect(() => {
     if (!results.length || !chartRef.current) return;
-    const Plotly = (window as any).Plotly;
-    if (!Plotly) return;
+    const themeColors = plotTheme();
     const colors = ['#d29922', '#58a6ff', '#a371f7', '#ff7b72', '#56d4dd', '#7ee787', '#ffa657', '#e91e63', '#607d8b'];
     const names: Record<string, string> = {};
     strategies.forEach(s => { names[s.name] = s.display_name; });
@@ -923,14 +1164,15 @@ function CompareStrategies() {
       name: names[r.name] || r.name,
       line: { color: colors[i % colors.length], width: 1.8 },
     })), {
-      paper_bgcolor: '#1c2128', plot_bgcolor: '#1c2128',
-      font: { color: '#e6edf3', family: 'system-ui', size: 11 },
+      paper_bgcolor: themeColors.paper, plot_bgcolor: themeColors.plot,
+      font: { color: themeColors.text, family: 'system-ui', size: 11 },
       margin: { t: 30, b: 40, l: 60, r: 20 },
-      xaxis: { gridcolor: '#21262d' },
-      yaxis: { gridcolor: '#21262d', title: '净值 ($)' },
+      xaxis: { gridcolor: themeColors.grid, zerolinecolor: themeColors.grid },
+      yaxis: { gridcolor: themeColors.grid, zerolinecolor: themeColors.grid, title: '净值 ($)' },
       legend: { orientation: 'h', y: -0.15 },
+      hoverlabel: { bgcolor: themeColors.paper, bordercolor: themeColors.grid, font: { color: themeColors.text } },
     }, { responsive: true, displayModeBar: false });
-  }, [results, strategies, customStrategies]);
+  }, [results, strategies, customStrategies, theme]);
 
   return (
     <section className="ax-section">
@@ -1025,7 +1267,8 @@ function CompareStrategies() {
                   <tr key={r.name}>
                     <td><b>{displayName}</b></td>
                     {METRIC_FIELDS.map(f => {
-                      const v = r.result.metrics[f.key];
+                      const raw = r.result.metrics[f.key];
+                      const v = typeof raw === 'number' ? raw : null;
                       let cls = '';
                       if (f.sign && typeof v === 'number') {
                         cls = v > 0 ? 'positive' : v < 0 ? 'negative' : '';
@@ -1040,6 +1283,7 @@ function CompareStrategies() {
           <div ref={chartRef} className="ax-chart"></div>
         </>
       )}
+      <PracticePanel module="compare" symbol={symbol} source={source} limit={500} bars={results[0]?.result.bars} contextInputs={performanceInputs(results[0]?.result.equity_curve, capital)} targetConcept={targetConcept} />
     </section>
   );
 }
@@ -1049,17 +1293,27 @@ function CompareStrategies() {
 // ===================================================================
 export default function App() {
   const [tab, setTab] = useState<TabId>('learn');
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => localStorage.getItem('axiom-theme') === 'light' ? 'light' : 'dark');
+  const [practiceTarget, setPracticeTarget] = useState<string>();
+  const openPractice = (conceptId: string, module: TabId) => {
+    setPracticeTarget(conceptId);
+    setTab(module);
+  };
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('axiom-theme', theme);
+  }, [theme]);
 
   return (
     <div className="ax-app">
-      <Header />
+      <Header theme={theme} onToggleTheme={() => setTheme(current => current === 'dark' ? 'light' : 'dark')} />
       <TabBar active={tab} onChange={setTab} />
       <main className="ax-main">
-        {tab === 'learn' && <LearnCenter />}
-        {tab === 'data' && <DataExplore />}
-        {tab === 'backtest' && <Backtest />}
-        {tab === 'paper' && <PaperTrading />}
-        {tab === 'compare' && <CompareStrategies />}
+        {tab === 'learn' && <LearnCenter onPractice={openPractice} />}
+        {tab === 'data' && <DataExplore targetConcept={practiceTarget} theme={theme} />}
+        {tab === 'backtest' && <Backtest targetConcept={practiceTarget} theme={theme} />}
+        {tab === 'paper' && <PaperTrading targetConcept={practiceTarget} theme={theme} />}
+        {tab === 'compare' && <CompareStrategies targetConcept={practiceTarget} theme={theme} />}
       </main>
       <footer className="ax-footer">
         AXIOM · 仅供学习,不构成任何投资建议

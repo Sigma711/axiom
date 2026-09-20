@@ -15,15 +15,15 @@ use serde::Serialize;
 #[derive(Debug, Clone, Serialize)]
 pub struct KnowledgeEntry {
     pub id: String,
-    pub summary: String,        // 一句话简介
-    pub example: String,        // 实用例子
-    pub related: Vec<String>,   // 关联概念
-    pub code_url: String,      // GitHub 深链接
-    pub code_ref: String,      // 路径::函数 (稳定引用)
+    pub summary: String,      // 一句话简介
+    pub example: String,      // 实用例子
+    pub related: Vec<String>, // 关联概念
+    pub code_url: String,     // GitHub 深链接
+    pub code_ref: String,     // 路径::函数 (稳定引用)
     pub category: String,
     pub name: String,
     pub formula: String,
-    pub meaning: String,        // 详细解释(可多段)
+    pub meaning: String, // 详细解释(可多段)
     pub signals: String,
     pub pitfalls: String,
     pub implementation: String,
@@ -31,150 +31,35 @@ pub struct KnowledgeEntry {
     pub diagram: Option<String>,
 }
 
-/// 给所有 entry 生成 GitHub 深链接
-fn code_url(id: &str) -> String {
-    let base = "https://github.com/Sigma711/axiom/blob/main/src";
-    let url = match id {
-        // 策略
-        "sma_cross" => format!("{}/strategy.rs#L74-L200", base),
-        "rsi" => format!("{}/strategy.rs#L121-L200", base),
-        "macd" => format!("{}/strategy.rs#L205-L250", base),
-        "bollinger" => format!("{}/strategy.rs#L256-L290", base),
-        "supertrend" => format!("{}/strategy.rs#L297-L330", base),
-        "donchian_breakout" => format!("{}/strategy.rs#L332-L365", base),
-        "vwap_reversion" => format!("{}/strategy.rs#L370-L400", base),
-        "kdj" => format!("{}/strategy.rs#L408-L445", base),
-        "ichimoku" => format!("{}/strategy.rs#L451-L490", base),
-        "ppo" => format!("{}/strategy.rs#L495-L540", base),
-        "vortex" => format!("{}/indicators/trend.rs#L450-L490", base),
-        "elder_ray" => format!("{}/indicators/trend.rs#L490-L540", base),
-        "buy_and_hold" => format!("{}/strategy.rs#L55-L72", base),
-        "random" => format!("{}/strategy.rs#L176-L200", base),
-        // 均线
-        "sma" => format!("{}/indicators/ma.rs#L12-L32", base),
-        "ema" => format!("{}/indicators/ma.rs#L33-L56", base),
-        "wma" => format!("{}/indicators/ma.rs#L58-L79", base),
-        "rma" => format!("{}/indicators/ma.rs#L81-L100", base),
-        "hma" => format!("{}/indicators/ma.rs#L106-L126", base),
-        "dema" => format!("{}/indicators/ma.rs#L128-L137", base),
-        "tema" => format!("{}/indicators/ma.rs#L139-L150", base),
-        "vwma" => format!("{}/indicators/ma.rs#L152-L175", base),
-        "bbi" => format!("{}/indicators/ma.rs#L178-L191", base),
-        "bias" => format!("{}/indicators/ma.rs#L193-L210", base),
-        "alligator" => format!("{}/indicators/ma.rs#L81-L100", base),
-        // 趋势
-        "dmi" => format!("{}/indicators/trend.rs#L50-L94", base),
-        "aroon" => format!("{}/indicators/trend.rs#L121-L146", base),
-        "parabolic_sar" => format!("{}/indicators/trend.rs#L153-L208", base),
-        "donchian" => format!("{}/indicators/trend.rs#L360-L410", base),
-        "keltner" => format!("{}/indicators/trend.rs#L410-L450", base),
-        "zigzag" => format!("{}/indicators/trend.rs#L490-L540", base),
-        "fractal" => format!("{}/indicators/trend.rs#L540-L580", base),
-        "trix" => format!("{}/indicators/trend.rs#L620-L660", base),
-        "ichimoku_indicator" => format!("{}/indicators/trend.rs#L280-L360", base),
-        // 动量
-        "stochastic" => format!("{}/indicators/momentum.rs#L60-L100", base),
-        "stoch_rsi" => format!("{}/indicators/momentum.rs#L160-L220", base),
-        "cci" => format!("{}/indicators/momentum.rs#L220-L260", base),
-        "williams_r" => format!("{}/indicators/momentum.rs#L260-L290", base),
-        "momentum" | "roc" => format!("{}/indicators/momentum.rs#L290-L320", base),
-        "cmo" => format!("{}/indicators/momentum.rs#L320-L360", base),
-        "tsi" => format!("{}/indicators/momentum.rs#L360-L400", base),
-        "ultimate" | "ultimate_oscillator" => format!("{}/indicators/momentum.rs#L400-L450", base),
-        "kst" => format!("{}/indicators/momentum.rs#L450-L490", base),
-        "dpo" => format!("{}/indicators/momentum.rs#L490-L530", base),
-        "fisher_transform" => format!("{}/indicators/momentum.rs#L530-L570", base),
-        "rvi" => format!("{}/indicators/momentum.rs#L570-L610", base),
-        "demarker" => format!("{}/indicators/momentum.rs#L610-L650", base),
-        "elder_ray_indicator" => format!("{}/indicators/momentum.rs#L650-L700", base),
-        "awesome_oscillator" => format!("{}/indicators/momentum.rs#L700-L740", base),
-        "bop" => format!("{}/indicators/momentum.rs#L740-L780", base),
-        "coppock" => format!("{}/indicators/momentum.rs#L780-L820", base),
-        "psy" => format!("{}/indicators/momentum.rs#L820-L860", base),
-        "arbr" => format!("{}/indicators/momentum.rs#L860-L900", base),
-        "cr" => format!("{}/indicators/momentum.rs#L900-L940", base),
-        "osc" => format!("{}/indicators/momentum.rs#L940-L980", base),
-        "td_sequential" => format!("{}/indicators/momentum.rs#L980-L1020", base),
-        // 波动率
-        "true_range" => format!("{}/indicators/volatility.rs#L1-L40", base),
-        "atr" | "atr_percent" => format!("{}/indicators/volatility.rs#L40-L80", base),
-        "hv" | "historical_volatility" => format!("{}/indicators/volatility.rs#L80-L120", base),
-        "bollinger_bands" => format!("{}/indicators/volatility.rs#L120-L160", base),
-        "squeeze" => format!("{}/indicators/volatility.rs#L160-L200", base),
-        "adr" => format!("{}/indicators/volatility.rs#L200-L240", base),
-        "chaikin_vol" | "chaikin_volatility" => format!("{}/indicators/volatility.rs#L240-L280", base),
-        "mass_index" => format!("{}/indicators/volatility.rs#L280-L320", base),
-        "ulcer_index" => format!("{}/indicators/volatility.rs#L320-L360", base),
-        "parkinson" => format!("{}/indicators/volatility.rs#L360-L400", base),
-        "garman_klass" => format!("{}/indicators/volatility.rs#L400-L440", base),
-        "yang_zhang" => format!("{}/indicators/volatility.rs#L440-L480", base),
-        // 成交量
-        "obv" => format!("{}/indicators/volume.rs#L1-L50", base),
-        "adl" => format!("{}/indicators/volume.rs#L50-L90", base),
-        "cmf" => format!("{}/indicators/volume.rs#L90-L130", base),
-        "mfi" => format!("{}/indicators/volume.rs#L130-L180", base),
-        "vwap" => format!("{}/indicators/volume.rs#L180-L220", base),
-        "anchored_vwap" => format!("{}/indicators/volume.rs#L220-L260", base),
-        "chaikin_osc" | "chaikin_oscillator" => format!("{}/indicators/volume.rs#L260-L300", base),
-        "pvt" | "pvt_vpt" => format!("{}/indicators/volume.rs#L300-L340", base),
-        "force_index" => format!("{}/indicators/volume.rs#L340-L380", base),
-        "emv" | "emv_eom" => format!("{}/indicators/volume.rs#L380-L420", base),
-        "klinger" => format!("{}/indicators/volume.rs#L420-L460", base),
-        "nvi" => format!("{}/indicators/volume.rs#L460-L500", base),
-        "pvi" => format!("{}/indicators/volume.rs#L500-L540", base),
-        "volume_oscillator" | "vol_osc" => format!("{}/indicators/volume.rs#L540-L580", base),
-        "vroc" => format!("{}/indicators/volume.rs#L580-L620", base),
-        "vr" => format!("{}/indicators/volume.rs#L620-L660", base),
-        "wvad" => format!("{}/indicators/volume.rs#L660-L700", base),
-        "volume_profile" => format!("{}/indicators/volume.rs#L700-L740", base),
-        "tpo" => format!("{}/indicators/volume.rs#L740-L780", base),
-        "footprint" => format!("{}/indicators/volume.rs#L780-L820", base),
-        "chip_distribution" => format!("{}/indicators/volume.rs#L820-L860", base),
-        "ddx_ddy_ddz" => format!("{}/indicators/volume.rs#L860-L900", base),
-        "cvd" => format!("{}/indicators/volume.rs#L900-L940", base),
-        // 统计
-        "correlation" => format!("{}/indicators/statistics.rs#L50-L90", base),
-        "rolling_correlation" => format!("{}/indicators/statistics.rs#L90-L120", base),
-        "zscore" | "z_score" => format!("{}/indicators/statistics.rs#L120-L150", base),
-        "beta" => format!("{}/indicators/statistics.rs#L150-L180", base),
-        "alpha" => format!("{}/indicators/statistics.rs#L180-L220", base),
-        "skewness" => format!("{}/indicators/statistics.rs#L220-L250", base),
-        "kurtosis" => format!("{}/indicators/statistics.rs#L250-L280", base),
-        "percentile_rank" => format!("{}/indicators/statistics.rs#L280-L310", base),
-        "hurst" => format!("{}/indicators/statistics.rs#L310-L340", base),
-        "pairs_spread" => format!("{}/indicators/statistics.rs#L340-L380", base),
-        // 风险/绩效
-        "total_return" => format!("{}/metrics.rs#L8-L90", base),
-        "cagr" => format!("{}/metrics.rs#L8-L90", base),
-        "sharpe" => format!("{}/metrics.rs#L8-L90", base),
-        "sortino" => format!("{}/metrics.rs#L182-L200", base),
-        "calmar" => format!("{}/metrics.rs#L194-L210", base),
-        "var" | "cvar" => format!("{}/metrics.rs#L202-L220", base),
-        "information_ratio" => format!("{}/metrics.rs#L220-L250", base),
-        "treynor" => format!("{}/metrics.rs#L250-L280", base),
-        "tracking_error" => format!("{}/metrics.rs#L280-L310", base),
-        "capture_ratio" => format!("{}/metrics.rs#L310-L340", base),
-        "max_drawdown" => format!("{}/metrics.rs#L8-L90", base),
-        "max_drawdown_pct" => format!("{}/metrics.rs#L8-L90", base),
-        "industry_pe_compare" => format!("{}/indicators/statistics.rs#L340-L380", base),
-        "reit_ffo" => format!("{}/indicators/statistics.rs#L380-L420", base),
-        "bank_nim" => format!("{}/indicators/statistics.rs#L420-L460", base),
-        // 模块
-        "simulatedbroker" => format!("{}/broker.rs#L53-L240", base),
-        "broker" => format!("{}/broker.rs#L140-L240", base),
-        "spread" | "bid_ask_spread" => format!("{}/broker.rs#L100-L130", base),
-        "backtestengine" => format!("{}/engine.rs#L50-L120", base),
-        "portfolio" => format!("{}/portfolio.rs#L36-L130", base),
-        "riskmanager" => format!("{}/risk.rs#L1-L100", base),
-        "stop_loss" | "take_profit" | "stop_loss_pct" | "take_profit_pct" => format!("{}/risk.rs#L40-L80", base),
-        "max_position_pct" | "position_sizing" => format!("{}/portfolio.rs#L80-L130", base),
-        // 财务质量/股东/期权/财务基础/行情/形态/宽度/误区 默认走 knowledge.rs
-        _ => format!("{}/knowledge.rs", base),
-    };
-    url
+pub fn all_entries() -> Vec<KnowledgeEntry> {
+    let mut entries = base_entries();
+    entries.extend(crate::book::entries());
+    entries.extend(crate::book_charts::entries());
+    entries.extend(crate::book_technical::entries());
+    entries.extend(crate::supplement::entries());
+    entries.extend(crate::workflows::entries());
+    for entry in &mut entries {
+        if entry.summary.trim().is_empty() {
+            entry.summary = entry
+                .meaning
+                .split('。')
+                .next()
+                .unwrap_or(&entry.name)
+                .to_string();
+        }
+        if let Some(location) = crate::code_links::for_concept(&entry.id) {
+            entry.code_ref = location.code_ref;
+            entry.code_url = location.url;
+            entry.implementation = format!(
+                "{} · 第 {}–{} 行",
+                location.path, location.line, location.end_line
+            );
+        }
+    }
+    entries
 }
 
-pub fn all_entries() -> Vec<KnowledgeEntry> {
+pub fn base_entries() -> Vec<KnowledgeEntry> {
     let mut e = Vec::new();
     // 第一部分:行情与微观结构
     e.extend(market_microstructure());
@@ -226,7 +111,7 @@ fn market_microstructure() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/types.rs#symbol-Bar".into(),
             code_ref: "src/types.rs::Bar".into(),
-            
+
             category: "行情".into(),
             name: "最新价 / 昨收 / 涨跌".into(),
             formula: "涨跌 = 最新 - 昨收; 涨跌幅 = 涨跌 / 昨收 × 100%".into(),
@@ -242,11 +127,11 @@ fn market_microstructure() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/types.rs#symbol-Bar".into(),
             code_ref: "src/types.rs::Bar".into(),
-            
+
             category: "行情".into(),
             name: "开高低收(OHLC)".into(),
             formula: "Open, High, Low, Close + Volume".into(),
-            meaning: "一根 K 线包含这段时间内的全部价格信息。".into(),
+            meaning: "一根 K 线汇总该时段的开高低收与成交量，不保留成交路径和盘口。".into(),
             signals: "上下影线反映多空拉锯;实体反映趋势力度。".into(),
             pitfalls: "数据源不同(交易所 / 聚合商)价格可能略有差异。".into(),
             implementation: "src/types.rs::Bar".into(),
@@ -258,7 +143,7 @@ fn market_microstructure() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volatility.rs#symbol-true_range".into(),
             code_ref: "src/indicators/volatility.rs::true_range - 自计算".into(),
-            
+
             category: "行情".into(),
             name: "振幅".into(),
             formula: "(High - Low) / 昨收 × 100%".into(),
@@ -274,7 +159,7 @@ fn market_microstructure() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#symbol-vwap".into(),
             code_ref: "src/indicators/volume.rs::vwap".into(),
-            
+
             category: "行情".into(),
             name: "均价".into(),
             formula: "sum(成交价 × 成交量) / sum(成交量)".into(),
@@ -290,7 +175,7 @@ fn market_microstructure() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#symbol-volume_ratio".into(),
             code_ref: "src/indicators/volume.rs::volume_ratio".into(),
-            
+
             category: "行情".into(),
             name: "量比".into(),
             formula: "现量 / (过去 5 日同时段平均量)".into(),
@@ -306,7 +191,7 @@ fn market_microstructure() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/shareholder.rs#symbol-buyback_ratio".into(),
             code_ref: "src/indicators/shareholder.rs::buyback_ratio - 类似".into(),
-            
+
             category: "行情".into(),
             name: "换手率".into(),
             formula: "成交量 / 流通股数 × 100%".into(),
@@ -322,7 +207,7 @@ fn market_microstructure() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/broker.rs#symbol-SimulatedBroker".into(),
             code_ref: "src/broker.rs::SimulatedBroker - resolve_fill_price".into(),
-            
+
             category: "盘口".into(),
             name: "买卖价差 Spread".into(),
             formula: "Ask - Bid".into(),
@@ -338,7 +223,7 @@ fn market_microstructure() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/extra.rs#symbol-detect_inside_outside".into(),
             code_ref: "src/indicators/extra.rs::detect_inside_outside".into(),
-            
+
             category: "盘口".into(),
             name: "内盘 / 外盘".into(),
             formula: "内盘 = 主动卖单成交量;外盘 = 主动买单成交量".into(),
@@ -363,11 +248,11 @@ fn fundamentals() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs#symbol-CompanyFinancials".into(),
             code_ref: "src/indicators/fundamental.rs::CompanyFinancials".into(),
-            
+
             category: "估值".into(),
             name: "EPS 每股收益".into(),
             formula: "净利润 / 加权平均股数".into(),
-            meaning: "股东每持有一股能分到多少利润。".into(),
+            meaning: "每股对应多少会计利润，并不等于实发股息。".into(),
             signals: "EPS 同比持续增长 → 业绩好;EPS 转负 → 警惕。".into(),
             pitfalls: "EPS 受一次性损益影响,需看扣非 EPS。".into(),
             implementation: "Binance 公开数据不含 EPS;需公司财报".into(),
@@ -379,7 +264,7 @@ fn fundamentals() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs#symbol-CompanyFinancials".into(),
             code_ref: "src/indicators/fundamental.rs::CompanyFinancials::pe".into(),
-            
+
             category: "估值".into(),
             name: "市盈率 PE".into(),
             formula: "股价 / EPS = 总市值 / 净利润".into(),
@@ -395,7 +280,7 @@ fn fundamentals() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs#symbol-CompanyFinancials".into(),
             code_ref: "src/indicators/fundamental.rs::CompanyFinancials::pb".into(),
-            
+
             category: "估值".into(),
             name: "市净率 PB".into(),
             formula: "股价 / 每股净资产 = 总市值 / 净资产".into(),
@@ -411,7 +296,7 @@ fn fundamentals() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs#symbol-CompanyFinancials".into(),
             code_ref: "src/indicators/fundamental.rs::CompanyFinancials::ps".into(),
-            
+
             category: "估值".into(),
             name: "市销率 PS".into(),
             formula: "总市值 / 营业收入".into(),
@@ -427,7 +312,7 @@ fn fundamentals() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs#symbol-CompanyFinancials".into(),
             code_ref: "src/indicators/fundamental.rs::CompanyFinancials::peg".into(),
-            
+
             category: "估值".into(),
             name: "PEG".into(),
             formula: "PE / 盈利增长率 × 100".into(),
@@ -443,7 +328,7 @@ fn fundamentals() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs#symbol-CompanyFinancials".into(),
             code_ref: "src/indicators/fundamental.rs::CompanyFinancials::ev_ebitda_ratio".into(),
-            
+
             category: "估值".into(),
             name: "EV/EBITDA".into(),
             formula: "企业价值 / EBITDA".into(),
@@ -459,7 +344,7 @@ fn fundamentals() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs#symbol-CompanyFinancials".into(),
             code_ref: "src/indicators/fundamental.rs::CompanyFinancials::roe".into(),
-            
+
             category: "盈利".into(),
             name: "ROE 净资产收益率".into(),
             formula: "净利润 / 平均净资产 × 100%".into(),
@@ -475,7 +360,7 @@ fn fundamentals() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs#symbol-CompanyFinancials".into(),
             code_ref: "src/indicators/fundamental.rs::CompanyFinancials - 类似 roe".into(),
-            
+
             category: "盈利".into(),
             name: "ROIC 投入资本回报率".into(),
             formula: "NOPAT / 投入资本".into(),
@@ -491,7 +376,7 @@ fn fundamentals() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs#symbol-dupont".into(),
             code_ref: "src/indicators/fundamental.rs::dupont".into(),
-            
+
             category: "盈利".into(),
             name: "杜邦分析".into(),
             formula: "ROE = 净利率 × 资产周转率 × 权益乘数".into(),
@@ -507,7 +392,7 @@ fn fundamentals() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs#symbol-CompanyFinancials".into(),
             code_ref: "src/indicators/fundamental.rs::CompanyFinancials - 自计算".into(),
-            
+
             category: "现金流".into(),
             name: "FCF 自由现金流".into(),
             formula: "经营性现金流 - 资本开支".into(),
@@ -523,7 +408,7 @@ fn fundamentals() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/shareholder.rs#symbol-piotroski_f_score".into(),
             code_ref: "src/indicators/shareholder.rs::piotroski_f_score".into(),
-            
+
             category: "财务质量".into(),
             name: "Piotroski F-Score".into(),
             formula: "9 个二元信号(盈利/杠杆/运营/流动性)求和,0-9 分".into(),
@@ -539,7 +424,7 @@ fn fundamentals() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs#symbol-altman_z".into(),
             code_ref: "src/indicators/fundamental.rs::altman_z".into(),
-            
+
             category: "财务质量".into(),
             name: "Altman Z-Score".into(),
             formula: "Z = 1.2A + 1.4B + 3.3C + 0.6D + 1.0E".into(),
@@ -564,7 +449,7 @@ fn trend_indicators() -> Vec<KnowledgeEntry> {
             related: vec![String::from("ema"), String::from("hma"), String::from("dema"), String::from("tema"), String::from("vwma")],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#symbol-sma".into(),
             code_ref: "src/indicators/ma.rs::sma".into(),
-            
+
             category: "趋势-均线".into(),
             name: "SMA 简单移动平均".into(),
             formula: "SMA(N) = sum(close, N) / N".into(),
@@ -580,7 +465,7 @@ fn trend_indicators() -> Vec<KnowledgeEntry> {
             related: vec![String::from("sma"), String::from("dema"), String::from("tema"), String::from("hma"), String::from("macd")],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#symbol-ema".into(),
             code_ref: "src/indicators/ma.rs::ema".into(),
-            
+
             category: "趋势-均线".into(),
             name: "EMA 指数移动平均".into(),
             formula: "EMA_t = α·P_t + (1-α)·EMA_{t-1}, α = 2/(N+1)".into(),
@@ -596,7 +481,7 @@ fn trend_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#symbol-wma".into(),
             code_ref: "src/indicators/ma.rs::wma".into(),
-            
+
             category: "趋势-均线".into(),
             name: "WMA 加权移动平均".into(),
             formula: "WMA = sum(i·P_{N-i}) / sum(i)".into(),
@@ -612,7 +497,7 @@ fn trend_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#symbol-rma".into(),
             code_ref: "src/indicators/ma.rs::rma".into(),
-            
+
             category: "趋势-均线".into(),
             name: "RMA Wilder 平滑".into(),
             formula: "RMA_t = (1/N)·P_t + (N-1)/N · RMA_{t-1}".into(),
@@ -628,7 +513,7 @@ fn trend_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#symbol-hma".into(),
             code_ref: "src/indicators/ma.rs::hma".into(),
-            
+
             category: "趋势-均线".into(),
             name: "HMA Hull 移动平均".into(),
             formula: "HMA(N) = WMA(2·WMA(N/2) - WMA(N), sqrt(N))".into(),
@@ -644,7 +529,7 @@ fn trend_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#symbol-dema".into(),
             code_ref: "src/indicators/ma.rs::dema".into(),
-            
+
             category: "趋势-均线".into(),
             name: "DEMA 双重指数移动平均".into(),
             formula: "DEMA = 2·EMA - EMA(EMA)".into(),
@@ -660,7 +545,7 @@ fn trend_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#symbol-vwma".into(),
             code_ref: "src/indicators/ma.rs::vwma".into(),
-            
+
             category: "趋势-均线".into(),
             name: "VWMA 成交量加权均线".into(),
             formula: "VWMA = sum(TP·V, N) / sum(V, N)".into(),
@@ -676,7 +561,7 @@ fn trend_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#symbol-bbi".into(),
             code_ref: "src/indicators/ma.rs::bbi".into(),
-            
+
             category: "趋势-均线".into(),
             name: "BBI 多空指标".into(),
             formula: "BBI = (MA3 + MA6 + MA12 + MA24) / 4".into(),
@@ -692,7 +577,7 @@ fn trend_indicators() -> Vec<KnowledgeEntry> {
             related: vec![String::from("ema"), String::from("sma"), String::from("ppo"), String::from("tsi")],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/trend.rs#symbol-macd".into(),
             code_ref: "src/indicators/trend.rs::macd".into(),
-            
+
             category: "趋势".into(),
             name: "MACD".into(),
             formula: "DIF = EMA12 - EMA26; DEA = EMA(DIF, 9); 柱体 = DIF - DEA".into(),
@@ -708,7 +593,7 @@ fn trend_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/trend.rs#symbol-dmi".into(),
             code_ref: "src/indicators/trend.rs::dmi".into(),
-            
+
             category: "趋势".into(),
             name: "DMI / ADX".into(),
             formula: "+DI/-DI = 方向移动 / TR × 100; ADX = DX 的 Wilder 平滑".into(),
@@ -724,7 +609,7 @@ fn trend_indicators() -> Vec<KnowledgeEntry> {
             related: vec![String::from("dmi"), String::from("sma"), String::from("macd")],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/trend.rs#symbol-aroon".into(),
             code_ref: "src/indicators/trend.rs::aroon".into(),
-            
+
             category: "趋势".into(),
             name: "Aroon".into(),
             formula: "Aroon Up = (N - 距最高点数) / N × 100".into(),
@@ -740,7 +625,7 @@ fn trend_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/trend.rs#symbol-parabolic_sar".into(),
             code_ref: "src/indicators/trend.rs::parabolic_sar".into(),
-            
+
             category: "趋势".into(),
             name: "Parabolic SAR".into(),
             formula: "SAR_t = SAR_{t-1} + AF × (EP - SAR_{t-1})".into(),
@@ -756,7 +641,7 @@ fn trend_indicators() -> Vec<KnowledgeEntry> {
             related: vec![String::from("atr"), String::from("dmi"), String::from("parabolic_sar")],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/trend.rs#symbol-supertrend".into(),
             code_ref: "src/indicators/trend.rs::supertrend".into(),
-            
+
             category: "趋势".into(),
             name: "Supertrend".into(),
             formula: "上下轨 = (H+L)/2 ± k × ATR".into(),
@@ -772,7 +657,7 @@ fn trend_indicators() -> Vec<KnowledgeEntry> {
             related: vec![String::from("keltner"), String::from("bollinger_bands")],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/trend.rs#symbol-donchian".into(),
             code_ref: "src/indicators/trend.rs::donchian".into(),
-            
+
             category: "趋势".into(),
             name: "Donchian Channel".into(),
             formula: "上轨 = N 期最高;下轨 = N 期最低".into(),
@@ -788,7 +673,7 @@ fn trend_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/trend.rs#symbol-keltner".into(),
             code_ref: "src/indicators/trend.rs::keltner".into(),
-            
+
             category: "趋势".into(),
             name: "Keltner Channel".into(),
             formula: "中轨 = EMA(close, N); 上下轨 = 中轨 ± k × ATR".into(),
@@ -804,7 +689,7 @@ fn trend_indicators() -> Vec<KnowledgeEntry> {
             related: vec![String::from("sma"), String::from("dmi"), String::from("parabolic_sar"), String::from("aroon")],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/trend.rs#symbol-ichimoku".into(),
             code_ref: "src/indicators/trend.rs::ichimoku".into(),
-            
+
             category: "趋势".into(),
             name: "一目均衡表".into(),
             formula: "转换线 (9,2)、基准线 (26,2)、先行带 A/B、迟行线 (26)".into(),
@@ -820,7 +705,7 @@ fn trend_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/trend.rs#symbol-zigzag".into(),
             code_ref: "src/indicators/trend.rs::zigzag".into(),
-            
+
             category: "趋势".into(),
             name: "ZigZag".into(),
             formula: "过滤 < X% 的波动,只显示显著转折".into(),
@@ -836,7 +721,7 @@ fn trend_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#symbol-alligator".into(),
             code_ref: "src/indicators/ma.rs::alligator".into(),
-            
+
             category: "趋势-均线".into(),
             name: "Alligator 鳄鱼".into(),
             formula: "三根 Wilder 平滑均线(颚 13、齿 8、唇 5)".into(),
@@ -852,7 +737,7 @@ fn trend_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#symbol-bias".into(),
             code_ref: "src/indicators/ma.rs::bias".into(),
-            
+
             category: "趋势-均线".into(),
             name: "BIAS 乖离率".into(),
             formula: "(C - MA) / MA × 100%".into(),
@@ -877,7 +762,7 @@ fn momentum_indicators() -> Vec<KnowledgeEntry> {
             related: vec![String::from("stochastic"), String::from("kdj"), String::from("williams_r"), String::from("mfi")],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-rsi".into(),
             code_ref: "src/indicators/momentum.rs::rsi".into(),
-            
+
             category: "动量".into(),
             name: "RSI 相对强弱".into(),
             formula: "RSI = 100 - 100 / (1 + 平均涨幅 / 平均跌幅)".into(),
@@ -893,7 +778,7 @@ fn momentum_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-stochastic".into(),
             code_ref: "src/indicators/momentum.rs::stochastic".into(),
-            
+
             category: "动量".into(),
             name: "Stochastic 随机指标".into(),
             formula: "%K = (C-LN)/(HN-LN) × 100; %D = SMA(%K, smooth)".into(),
@@ -909,7 +794,7 @@ fn momentum_indicators() -> Vec<KnowledgeEntry> {
             related: vec![String::from("rsi"), String::from("stochastic")],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-kdj".into(),
             code_ref: "src/indicators/momentum.rs::kdj".into(),
-            
+
             category: "动量".into(),
             name: "KDJ".into(),
             formula: "RSV 类似 Stochastic; K/D 用 Wilder 平滑; J = 3K - 2D".into(),
@@ -925,7 +810,7 @@ fn momentum_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-stochastic_rsi".into(),
             code_ref: "src/indicators/momentum.rs::stochastic_rsi".into(),
-            
+
             category: "动量".into(),
             name: "Stochastic RSI".into(),
             formula: "对 RSI 再做一次 Stochastic".into(),
@@ -941,7 +826,7 @@ fn momentum_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-cci".into(),
             code_ref: "src/indicators/momentum.rs::cci".into(),
-            
+
             category: "动量".into(),
             name: "CCI 商品通道".into(),
             formula: "CCI = (TP - SMA(TP)) / (0.015 × 平均偏差)".into(),
@@ -957,7 +842,7 @@ fn momentum_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-williams_r".into(),
             code_ref: "src/indicators/momentum.rs::williams_r".into(),
-            
+
             category: "动量".into(),
             name: "Williams %R".into(),
             formula: "%R = (HN - C) / (HN - LN) × -100".into(),
@@ -973,7 +858,7 @@ fn momentum_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-roc".into(),
             code_ref: "src/indicators/momentum.rs::roc - 动量".into(),
-            
+
             category: "动量".into(),
             name: "Momentum".into(),
             formula: "MOM = C - C[N]".into(),
@@ -989,7 +874,7 @@ fn momentum_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-roc".into(),
             code_ref: "src/indicators/momentum.rs::roc".into(),
-            
+
             category: "动量".into(),
             name: "ROC 变化率".into(),
             formula: "ROC = (C - C[N]) / C[N] × 100%".into(),
@@ -1005,7 +890,7 @@ fn momentum_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-cmo".into(),
             code_ref: "src/indicators/momentum.rs::cmo".into(),
-            
+
             category: "动量".into(),
             name: "CMO Chande 动量".into(),
             formula: "CMO = (上涨和 - 下跌和) / (上涨和 + 下跌和) × 100".into(),
@@ -1021,7 +906,7 @@ fn momentum_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-tsi".into(),
             code_ref: "src/indicators/momentum.rs::tsi".into(),
-            
+
             category: "动量".into(),
             name: "TSI 真实强度".into(),
             formula: "TSI = 100 × EMA(EMA(价格变化)) / EMA(EMA(|价格变化|))".into(),
@@ -1037,7 +922,7 @@ fn momentum_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-ultimate_oscillator".into(),
             code_ref: "src/indicators/momentum.rs::ultimate_oscillator".into(),
-            
+
             category: "动量".into(),
             name: "Ultimate Oscillator".into(),
             formula: "三个周期的 BP/TR 加权和(短周期权重更高)".into(),
@@ -1053,7 +938,7 @@ fn momentum_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-awesome_oscillator".into(),
             code_ref: "src/indicators/momentum.rs::awesome_oscillator".into(),
-            
+
             category: "动量".into(),
             name: "AO Awesome Oscillator".into(),
             formula: "AO = SMA(HL2, 5) - SMA(HL2, 34)".into(),
@@ -1069,7 +954,7 @@ fn momentum_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-dpo".into(),
             code_ref: "src/indicators/momentum.rs::dpo".into(),
-            
+
             category: "动量".into(),
             name: "DPO 去趋势价格".into(),
             formula: "DPO = C - SMA(C, N)[位移 N/2+1 根之前]".into(),
@@ -1094,7 +979,7 @@ fn volatility_indicators() -> Vec<KnowledgeEntry> {
             related: vec![String::from("bollinger_bands"), String::from("supertrend"), String::from("keltner")],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volatility.rs#symbol-atr".into(),
             code_ref: "src/indicators/volatility.rs::atr".into(),
-            
+
             category: "波动率".into(),
             name: "ATR 平均真实波幅".into(),
             formula: "ATR = Wilder 平滑的 TR; TR = max(H-L, |H-Cp|, |L-Cp|)".into(),
@@ -1110,7 +995,7 @@ fn volatility_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volatility.rs#symbol-atr".into(),
             code_ref: "src/indicators/volatility.rs::atr - 自计算".into(),
-            
+
             category: "波动率".into(),
             name: "ATR%".into(),
             formula: "ATR% = ATR / Close × 100%".into(),
@@ -1126,7 +1011,7 @@ fn volatility_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volatility.rs#symbol-historical_volatility".into(),
             code_ref: "src/indicators/volatility.rs::historical_volatility".into(),
-            
+
             category: "波动率".into(),
             name: "HV 历史波动率".into(),
             formula: "HV = std(对数收益率, N) × sqrt(periods_per_year)".into(),
@@ -1142,7 +1027,7 @@ fn volatility_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volatility.rs#symbol-bollinger_bands".into(),
             code_ref: "src/indicators/volatility.rs::bollinger_bands".into(),
-            
+
             category: "波动率".into(),
             name: "Bollinger Bands 布林带".into(),
             formula: "中轨 = SMA(N);上下轨 = 中轨 ± k·σ".into(),
@@ -1158,7 +1043,7 @@ fn volatility_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volatility.rs#symbol-squeeze".into(),
             code_ref: "src/indicators/volatility.rs::squeeze".into(),
-            
+
             category: "波动率".into(),
             name: "BBands-Keltner Squeeze".into(),
             formula: "BBands 落在 Keltner Channel 内 → 挤压".into(),
@@ -1174,7 +1059,7 @@ fn volatility_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volatility.rs#symbol-chaikin_volatility".into(),
             code_ref: "src/indicators/volatility.rs::chaikin_volatility".into(),
-            
+
             category: "波动率".into(),
             name: "Chaikin Volatility".into(),
             formula: "(EMA(H-L, N) - EMA(H-L, N)[N 根前]) / EMA(H-L, N)[N 根前] × 100".into(),
@@ -1190,7 +1075,7 @@ fn volatility_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volatility.rs#symbol-mass_index".into(),
             code_ref: "src/indicators/volatility.rs::mass_index".into(),
-            
+
             category: "波动率".into(),
             name: "Mass Index".into(),
             formula: "sum(EMA(H-L)/EMA(EMA(H-L)), 25)".into(),
@@ -1206,7 +1091,7 @@ fn volatility_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volatility.rs#symbol-ulcer_index".into(),
             code_ref: "src/indicators/volatility.rs::ulcer_index".into(),
-            
+
             category: "波动率".into(),
             name: "Ulcer Index".into(),
             formula: "sqrt(sum(回撤%²) / N)".into(),
@@ -1231,7 +1116,7 @@ fn volume_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#symbol-obv".into(),
             code_ref: "src/indicators/volume.rs::obv".into(),
-            
+
             category: "成交量".into(),
             name: "OBV 能量潮".into(),
             formula: "上涨日 + vol;下跌日 - vol".into(),
@@ -1247,7 +1132,7 @@ fn volume_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#symbol-adl".into(),
             code_ref: "src/indicators/volume.rs::adl".into(),
-            
+
             category: "成交量".into(),
             name: "ADL 累积派发线".into(),
             formula: "ADL += MFM × Volume; MFM = ((C-L) - (H-C)) / (H-L)".into(),
@@ -1263,7 +1148,7 @@ fn volume_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#symbol-cmf".into(),
             code_ref: "src/indicators/volume.rs::cmf".into(),
-            
+
             category: "成交量".into(),
             name: "CMF 蔡金资金流".into(),
             formula: "sum(MFM × Volume, N) / sum(Volume, N)".into(),
@@ -1279,7 +1164,7 @@ fn volume_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#symbol-mfi".into(),
             code_ref: "src/indicators/volume.rs::mfi".into(),
-            
+
             category: "成交量".into(),
             name: "MFI 资金流量指数".into(),
             formula: "RSI 的量价版(用典型价 × 成交量做流入流出)".into(),
@@ -1295,7 +1180,7 @@ fn volume_indicators() -> Vec<KnowledgeEntry> {
             related: vec![String::from("mfi"), String::from("cmf"), String::from("pvt"), String::from("chaikin_osc")],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#symbol-vwap".into(),
             code_ref: "src/indicators/volume.rs::vwap".into(),
-            
+
             category: "成交量".into(),
             name: "VWAP".into(),
             formula: "VWAP = sum(TP × V) / sum(V)".into(),
@@ -1311,7 +1196,7 @@ fn volume_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#symbol-chaikin_oscillator".into(),
             code_ref: "src/indicators/volume.rs::chaikin_oscillator".into(),
-            
+
             category: "成交量".into(),
             name: "Chaikin Oscillator".into(),
             formula: "ADL 的 EMA(快) - EMA(慢)".into(),
@@ -1327,7 +1212,7 @@ fn volume_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#symbol-pvt".into(),
             code_ref: "src/indicators/volume.rs::pvt".into(),
-            
+
             category: "成交量".into(),
             name: "PVT 量价趋势".into(),
             formula: "PVT += (ΔC/C) × V".into(),
@@ -1343,7 +1228,7 @@ fn volume_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#symbol-force_index".into(),
             code_ref: "src/indicators/volume.rs::force_index".into(),
-            
+
             category: "成交量".into(),
             name: "Force Index".into(),
             formula: "Force = (C - Cp) × V".into(),
@@ -1359,7 +1244,7 @@ fn volume_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#symbol-nvi".into(),
             code_ref: "src/indicators/volume.rs::nvi".into(),
-            
+
             category: "成交量".into(),
             name: "NVI 负成交量指数".into(),
             formula: "缩量日累加 (ΔC/C);放量日不变".into(),
@@ -1375,7 +1260,7 @@ fn volume_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#symbol-volume_oscillator".into(),
             code_ref: "src/indicators/volume.rs::volume_oscillator".into(),
-            
+
             category: "成交量".into(),
             name: "Volume Oscillator".into(),
             formula: "(SMA(V, short) - SMA(V, long)) / SMA(V, long) × 100".into(),
@@ -1391,7 +1276,7 @@ fn volume_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#symbol-vroc".into(),
             code_ref: "src/indicators/volume.rs::vroc".into(),
-            
+
             category: "成交量".into(),
             name: "VROC 量能变化率".into(),
             formula: "(V - V[N]) / V[N] × 100".into(),
@@ -1407,7 +1292,7 @@ fn volume_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#symbol-vr".into(),
             code_ref: "src/indicators/volume.rs::vr".into(),
-            
+
             category: "成交量".into(),
             name: "VR 容量比率".into(),
             formula: "上涨日成交量和 / 下跌日成交量和 × 100".into(),
@@ -1423,7 +1308,7 @@ fn volume_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#symbol-wvad".into(),
             code_ref: "src/indicators/volume.rs::wvad".into(),
-            
+
             category: "成交量".into(),
             name: "WVAD 威廉变异离散量".into(),
             formula: "WVAD += (C - O) / (H - L) × V".into(),
@@ -1448,7 +1333,7 @@ fn breadth_and_stats() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/breadth.rs#symbol-adl_one_bar".into(),
             code_ref: "src/indicators/breadth.rs::adl_one_bar".into(),
-            
+
             category: "市场宽度".into(),
             name: "Advance-Decline Line 腾落线".into(),
             formula: "AD 累加(上涨家数 - 下跌家数)".into(),
@@ -1464,7 +1349,7 @@ fn breadth_and_stats() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/breadth.rs#symbol-trin".into(),
             code_ref: "src/indicators/breadth.rs::trin".into(),
-            
+
             category: "市场宽度".into(),
             name: "TRIN / Arms Index".into(),
             formula: "(上涨/下跌家数) / (上涨/下跌成交量)".into(),
@@ -1480,7 +1365,7 @@ fn breadth_and_stats() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/breadth.rs#symbol-mcclellan_oscillator".into(),
             code_ref: "src/indicators/breadth.rs::mcclellan_oscillator".into(),
-            
+
             category: "市场宽度".into(),
             name: "McClellan Oscillator".into(),
             formula: "(上涨-下跌) 的 EMA(19) - EMA(39)".into(),
@@ -1496,7 +1381,7 @@ fn breadth_and_stats() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/statistics.rs#symbol-zscore".into(),
             code_ref: "src/indicators/statistics.rs::zscore".into(),
-            
+
             category: "统计".into(),
             name: "Z-Score".into(),
             formula: "Z = (x - mean) / std".into(),
@@ -1512,7 +1397,7 @@ fn breadth_and_stats() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/statistics.rs#symbol-rolling_correlation".into(),
             code_ref: "src/indicators/statistics.rs::rolling_correlation".into(),
-            
+
             category: "统计".into(),
             name: "滚动相关系数".into(),
             formula: "皮尔逊相关系数,滚动窗口计算".into(),
@@ -1528,7 +1413,7 @@ fn breadth_and_stats() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/statistics.rs#symbol-hurst".into(),
             code_ref: "src/indicators/statistics.rs::hurst".into(),
-            
+
             category: "统计".into(),
             name: "Hurst 指数".into(),
             formula: "R/S 分析的斜率".into(),
@@ -1553,7 +1438,7 @@ fn risk_metrics() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#symbol-compute_metrics".into(),
             code_ref: "src/metrics.rs::compute_metrics".into(),
-            
+
             category: "风险-绩效".into(),
             name: "总收益".into(),
             formula: "(Final - Initial) / Initial × 100%".into(),
@@ -1569,7 +1454,7 @@ fn risk_metrics() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#symbol-compute_metrics".into(),
             code_ref: "src/metrics.rs::compute_metrics".into(),
-            
+
             category: "风险-绩效".into(),
             name: "CAGR 复合年增长率".into(),
             formula: "(Final/Initial)^(365/days) - 1".into(),
@@ -1585,7 +1470,7 @@ fn risk_metrics() -> Vec<KnowledgeEntry> {
             related: vec![String::from("sortino"), String::from("calmar"), String::from("max_drawdown"), String::from("var")],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#symbol-compute_metrics".into(),
             code_ref: "src/metrics.rs::compute_metrics".into(),
-            
+
             category: "风险-绩效".into(),
             name: "Sharpe 夏普比率".into(),
             formula: "(mean(R) - Rf) / std(R) × sqrt(periods)".into(),
@@ -1601,7 +1486,7 @@ fn risk_metrics() -> Vec<KnowledgeEntry> {
             related: vec![String::from("sharpe"), String::from("calmar"), String::from("max_drawdown")],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#symbol-sortino_ratio".into(),
             code_ref: "src/metrics.rs::sortino_ratio".into(),
-            
+
             category: "风险-绩效".into(),
             name: "Sortino 索提诺比率".into(),
             formula: "(mean(R) - Rf) / downside_deviation × sqrt(periods)".into(),
@@ -1617,7 +1502,7 @@ fn risk_metrics() -> Vec<KnowledgeEntry> {
             related: vec![String::from("calmar"), String::from("sharpe"), String::from("sortino")],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#symbol-compute_metrics".into(),
             code_ref: "src/metrics.rs::compute_metrics".into(),
-            
+
             category: "风险-绩效".into(),
             name: "最大回撤".into(),
             formula: "(peak - trough) / peak, 取历史最大".into(),
@@ -1633,7 +1518,7 @@ fn risk_metrics() -> Vec<KnowledgeEntry> {
             related: vec![String::from("sharpe"), String::from("sortino"), String::from("max_drawdown")],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#symbol-calmar_ratio".into(),
             code_ref: "src/metrics.rs::calmar_ratio".into(),
-            
+
             category: "风险-绩效".into(),
             name: "Calmar 比率".into(),
             formula: "CAGR / MaxDrawdown".into(),
@@ -1649,7 +1534,7 @@ fn risk_metrics() -> Vec<KnowledgeEntry> {
             related: vec![String::from("cvar"), String::from("max_drawdown"), String::from("sharpe")],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#symbol-var_cvar".into(),
             code_ref: "src/metrics.rs::var_cvar".into(),
-            
+
             category: "风险-绩效".into(),
             name: "VaR 风险价值".into(),
             formula: "在给定置信度下的最大可能损失".into(),
@@ -1665,7 +1550,7 @@ fn risk_metrics() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#symbol-var_cvar".into(),
             code_ref: "src/metrics.rs::var_cvar".into(),
-            
+
             category: "风险-绩效".into(),
             name: "CVaR 条件风险价值".into(),
             formula: "VaR 突破后的平均损失".into(),
@@ -1681,7 +1566,7 @@ fn risk_metrics() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/statistics.rs#symbol-beta".into(),
             code_ref: "src/indicators/statistics.rs::beta".into(),
-            
+
             category: "风险-绩效".into(),
             name: "Beta 贝塔".into(),
             formula: "Cov(R_strategy, R_benchmark) / Var(R_benchmark)".into(),
@@ -1697,7 +1582,7 @@ fn risk_metrics() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/statistics.rs#symbol-alpha".into(),
             code_ref: "src/indicators/statistics.rs::alpha".into(),
-            
+
             category: "风险-绩效".into(),
             name: "Alpha 阿尔法".into(),
             formula: "α = R_strategy - (Rf + β × (R_benchmark - Rf))".into(),
@@ -1713,7 +1598,7 @@ fn risk_metrics() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/statistics.rs#symbol-skewness".into(),
             code_ref: "src/indicators/statistics.rs::skewness".into(),
-            
+
             category: "风险-绩效".into(),
             name: "偏度 Skewness".into(),
             formula: "E[(R-μ)³] / σ³".into(),
@@ -1729,7 +1614,7 @@ fn risk_metrics() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/statistics.rs#symbol-kurtosis".into(),
             code_ref: "src/indicators/statistics.rs::kurtosis".into(),
-            
+
             category: "风险-绩效".into(),
             name: "峰度 Kurtosis".into(),
             formula: "E[(R-μ)⁴] / σ⁴ - 3 (excess)".into(),
@@ -1754,7 +1639,7 @@ fn options_greeks() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/options.rs#symbol-delta".into(),
             code_ref: "src/indicators/options.rs::delta".into(),
-            
+
             category: "期权".into(),
             name: "Delta".into(),
             formula: "∂V/∂S (期权价格对标的价格的偏导)".into(),
@@ -1770,14 +1655,14 @@ fn options_greeks() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/options.rs#symbol-gamma".into(),
             code_ref: "src/indicators/options.rs::gamma".into(),
-            
+
             category: "期权".into(),
             name: "Gamma".into(),
             formula: "∂Delta/∂S (Delta 的变化率)".into(),
             meaning: "Delta 的敏感度。".into(),
-            signals: "平值期权 Gamma 最大;临到期趋近 0 或无穷。".into(),
+            signals: "平值期权 Gamma 通常在平值附近较大；到期边界需单独处理。".into(),
             pitfalls: "Gamma 大 = Delta 变化快,对冲要积极。".into(),
-            implementation: "src/indicators/options.rs::gamma;N(d1)/(S·σ·√t)".into(),
+            implementation: "src/indicators/options.rs::gamma;φ(d1)/(S·σ·√t)".into(),
             diagram: None,
         },
         KnowledgeEntry {
@@ -1786,13 +1671,13 @@ fn options_greeks() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/options.rs#symbol-theta".into(),
             code_ref: "src/indicators/options.rs::theta".into(),
-            
+
             category: "期权".into(),
             name: "Theta".into(),
             formula: "∂V/∂t (期权价格对时间的偏导)".into(),
             meaning: "时间损耗速度。".into(),
-            signals: "Theta 总是负数(买方角度);临近到期加速。".into(),
-            pitfalls: "节假日不计 Theta(实际跨越周末扣 3 倍)。".into(),
+            signals: "普通多头期权常有负 Theta，但深度实值看跌等情形可能为正。".into(),
+            pitfalls: "本模型按365个日历日折算；真实市场时间损耗并非固定每日扣款。".into(),
             implementation: "src/indicators/options.rs::theta;每日时间损耗".into(),
             diagram: None,
         },
@@ -1802,7 +1687,7 @@ fn options_greeks() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/options.rs#symbol-vega".into(),
             code_ref: "src/indicators/options.rs::vega".into(),
-            
+
             category: "期权".into(),
             name: "Vega".into(),
             formula: "∂V/∂σ (期权价格对 IV 的偏导)".into(),
@@ -1818,7 +1703,7 @@ fn options_greeks() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/options.rs#symbol-bs_price".into(),
             code_ref: "src/indicators/options.rs::bs_price".into(),
-            
+
             category: "期权".into(),
             name: "隐含波动率 IV".into(),
             formula: "使 BS 模型价格 = 市场价格 的 σ".into(),
@@ -1834,7 +1719,7 @@ fn options_greeks() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/options.rs#symbol-iv_rank".into(),
             code_ref: "src/indicators/options.rs::iv_rank".into(),
-            
+
             category: "期权".into(),
             name: "IV Rank".into(),
             formula: "(IV - 52周最低IV) / (52周最高IV - 最低IV) × 100".into(),
@@ -1859,7 +1744,7 @@ fn common_pitfalls() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs#symbol-CompanyFinancials".into(),
             code_ref: "src/indicators/fundamental.rs::CompanyFinancials::pe - 低 PE 不一定便宜".into(),
-            
+
             category: "误区".into(),
             name: "低 PE ≠ 便宜".into(),
             formula: "N/A".into(),
@@ -1875,7 +1760,7 @@ fn common_pitfalls() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs".into(),
             code_ref: "src/indicators/fundamental.rs - 高 PE 需配合 PEG".into(),
-            
+
             category: "误区".into(),
             name: "高 PE ≠ 一定贵".into(),
             formula: "N/A".into(),
@@ -1891,7 +1776,7 @@ fn common_pitfalls() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/strategy.rs#symbol-RsiStrategy".into(),
             code_ref: "src/strategy.rs::RsiStrategy - RSI 超买强趋势中可长期 >70".into(),
-            
+
             category: "误区".into(),
             name: "RSI 超买 ≠ 卖出".into(),
             formula: "N/A".into(),
@@ -1907,7 +1792,7 @@ fn common_pitfalls() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/strategy.rs#symbol-SmaCrossStrategy".into(),
             code_ref: "src/strategy.rs::SmaCrossStrategy - 金叉滞后".into(),
-            
+
             category: "误区".into(),
             name: "金叉 ≠ 领先信号".into(),
             formula: "N/A".into(),
@@ -1923,7 +1808,7 @@ fn common_pitfalls() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs".into(),
             code_ref: "src/indicators/momentum.rs - 通用概念".into(),
-            
+
             category: "误区".into(),
             name: "背离 ≠ 立即反转".into(),
             formula: "N/A".into(),
@@ -1939,7 +1824,7 @@ fn common_pitfalls() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs".into(),
             code_ref: "src/indicators/momentum.rs - 同类指标叠加冗余".into(),
-            
+
             category: "误区".into(),
             name: "多个振荡器 ≠ 多重确认".into(),
             formula: "N/A".into(),
@@ -1955,7 +1840,7 @@ fn common_pitfalls() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs".into(),
             code_ref: "src/indicators/volume.rs - 主买主卖可伪装".into(),
-            
+
             category: "误区".into(),
             name: "主力净流入 ≠ 现金真的流入股票".into(),
             formula: "N/A".into(),
@@ -1971,7 +1856,7 @@ fn common_pitfalls() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs".into(),
             code_ref: "src/indicators/volume.rs - 放量需结合价格位置".into(),
-            
+
             category: "误区".into(),
             name: "成交量放大 ≠ 自动看多".into(),
             formula: "N/A".into(),
@@ -1987,7 +1872,7 @@ fn common_pitfalls() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/strategy.rs".into(),
             code_ref: "src/strategy.rs - 需做参数敏感性分析".into(),
-            
+
             category: "误区".into(),
             name: "参数没有神圣数字".into(),
             formula: "N/A".into(),
@@ -2003,7 +1888,7 @@ fn common_pitfalls() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs".into(),
             code_ref: "src/indicators/fundamental.rs - 跨行业 PE 不可比".into(),
-            
+
             category: "误区".into(),
             name: "不同行业不能直接比较".into(),
             formula: "N/A".into(),
@@ -2027,7 +1912,7 @@ fn support_resistance_and_patterns() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
             code_ref: "TradingView 工具".into(),
-            
+
             category: "支撑阻力".into(),
             name: "支撑位 / 阻力位".into(),
             formula: "N/A (主观识别)".into(),
@@ -2043,7 +1928,7 @@ fn support_resistance_and_patterns() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
             code_ref: "主观画线;TradingView".into(),
-            
+
             category: "形态".into(),
             name: "趋势线".into(),
             formula: "连接 N 个明显低点(上升)或高点(下降)的直线".into(),
@@ -2059,7 +1944,7 @@ fn support_resistance_and_patterns() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/extra.rs#symbol-pivot_points".into(),
             code_ref: "src/indicators/extra.rs::pivot_points".into(),
-            
+
             category: "形态".into(),
             name: "Pivot Points 枢轴点".into(),
             formula: "P = (H + L + C) / 3 (经典枢轴点)".into(),
@@ -2075,7 +1960,7 @@ fn support_resistance_and_patterns() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
             code_ref: "TradingView 工具".into(),
-            
+
             category: "形态".into(),
             name: "斐波那契回撤".into(),
             formula: "回撤位 = 高点 - (高点 - 低点) * 比例 (0.236/0.382/0.5/0.618/0.786)".into(),
@@ -2091,7 +1976,7 @@ fn support_resistance_and_patterns() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
             code_ref: "TradingView 工具".into(),
-            
+
             category: "形态".into(),
             name: "斐波那契扩展".into(),
             formula: "扩展位 = 高点 + (高点 - 低点) * 比例 (1.272/1.618/2.618)".into(),
@@ -2107,7 +1992,7 @@ fn support_resistance_and_patterns() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/knowledge.rs".into(),
             code_ref: "TradingView 工具".into(),
-            
+
             category: "形态".into(),
             name: "艾略特波浪".into(),
             formula: "5 浪推动 + 3 浪调整".into(),
@@ -2123,7 +2008,7 @@ fn support_resistance_and_patterns() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/extra.rs#symbol-detect_pattern".into(),
             code_ref: "src/indicators/extra.rs::detect_pattern".into(),
-            
+
             category: "K线形态".into(),
             name: "锤子线 / 上吊线".into(),
             formula: "小实体 + 长下影线(>实体 2 倍), 上影线极短".into(),
@@ -2139,7 +2024,7 @@ fn support_resistance_and_patterns() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/extra.rs#symbol-detect_pattern".into(),
             code_ref: "src/indicators/extra.rs::detect_pattern".into(),
-            
+
             category: "K线形态".into(),
             name: "十字星".into(),
             formula: "开收价几乎相等, 实体极小".into(),
@@ -2155,7 +2040,7 @@ fn support_resistance_and_patterns() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/extra.rs#symbol-detect_engulfing".into(),
             code_ref: "src/indicators/extra.rs::detect_engulfing".into(),
-            
+
             category: "K线形态".into(),
             name: "吞没形态".into(),
             formula: "后一根实体完全包裹前一根实体".into(),
@@ -2169,16 +2054,16 @@ fn support_resistance_and_patterns() -> Vec<KnowledgeEntry> {
             id: "k_pattern_star".into(),            summary: "".into(),
             example: "".into(),
             related: vec![],
-            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/extra.rs#symbol-detect_pattern".into(),
-            code_ref: "src/indicators/extra.rs::detect_pattern".into(),
-            
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/extra.rs#symbol-detect_star".into(),
+            code_ref: "src/indicators/extra.rs::detect_star".into(),
+
             category: "K线形态".into(),
             name: "早晨之星 / 黄昏之星".into(),
             formula: "大阴/阳 + 十字星 + 大阳/阴(反向)".into(),
             meaning: "三根 K 线的反转组合。".into(),
             signals: "非常强的反转信号。".into(),
             pitfalls: "需要严格匹配三根 K 线形态。".into(),
-            implementation: "src/indicators/extra.rs::detect_pattern;早晨/黄昏之星".into(),
+            implementation: "src/indicators/extra.rs::detect_star;三根确认，连续市场不强制缺口".into(),
             diagram: None,
         },
     ]
@@ -2191,28 +2076,12 @@ fn support_resistance_and_patterns() -> Vec<KnowledgeEntry> {
 fn more_indicators() -> Vec<KnowledgeEntry> {
     vec![
         KnowledgeEntry {
-            id: "alligator".into(),            summary: "Bill Williams 鳄鱼,三线睡眠=无趋势,张口=有趋势。".into(),
-            example: "".into(),
-            related: vec![],
-            code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#symbol-alligator".into(),
-            code_ref: "src/indicators/ma.rs::alligator".into(),
-            
-            category: "趋势-Bill Williams".into(),
-            name: "Alligator 鳄鱼".into(),
-            formula: "三根 Wilder 平滑均线: 颚(13)、齿(8)、唇(5), 各向前移 8/5/3 根".into(),
-            meaning: "比尔·威廉姆斯的趋势强度指标。".into(),
-            signals: "三线交织 -> 鳄鱼睡着(无趋势); 三线张开 -> 鳄鱼醒来(强趋势)。".into(),
-            pitfalls: "参数固定; 震荡市反复「睡醒」。".into(),
-            implementation: "可由 rma + shift_forward 组合实现".into(),
-            diagram: None,
-        },
-        KnowledgeEntry {
             id: "fractal".into(),            summary: "".into(),
             example: "".into(),
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/ma.rs#symbol-fractal".into(),
             code_ref: "src/indicators/ma.rs::fractal".into(),
-            
+
             category: "趋势-Bill Williams".into(),
             name: "Fractal 分形".into(),
             formula: "中间 K 线的高点高于左右各 2 根(顶分形) 或低点低于左右(底分形)".into(),
@@ -2228,7 +2097,7 @@ fn more_indicators() -> Vec<KnowledgeEntry> {
             related: vec![String::from("ema"), String::from("macd"), String::from("rsi")],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-elder_ray".into(),
             code_ref: "src/indicators/momentum.rs::elder_ray".into(),
-            
+
             category: "动量".into(),
             name: "Elder Ray Bull/Bear Power".into(),
             formula: "Bull = High - EMA(13); Bear = Low - EMA(13)".into(),
@@ -2244,7 +2113,7 @@ fn more_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-bop".into(),
             code_ref: "src/indicators/momentum.rs::bop".into(),
-            
+
             category: "动量".into(),
             name: "Balance of Power".into(),
             formula: "BOP = (Close - Open) / (High - Low)".into(),
@@ -2260,7 +2129,7 @@ fn more_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-fisher_transform".into(),
             code_ref: "src/indicators/momentum.rs::fisher_transform".into(),
-            
+
             category: "动量".into(),
             name: "Fisher Transform".into(),
             formula: "Y = 0.5 * ln((1+X)/(1-X)); X = 2*((C-min)/(max-min) - 0.5)".into(),
@@ -2276,7 +2145,7 @@ fn more_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-rvi".into(),
             code_ref: "src/indicators/momentum.rs::rvi".into(),
-            
+
             category: "动量".into(),
             name: "RVI Relative Vigor Index".into(),
             formula: "RVI = SMA(Close-Open, 10) / SMA(|Close-Open|, 10)".into(),
@@ -2292,7 +2161,7 @@ fn more_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-demarker".into(),
             code_ref: "src/indicators/momentum.rs::demarker".into(),
-            
+
             category: "动量".into(),
             name: "DeMarker".into(),
             formula: "DeMax = max(High - PrevHigh, 0); DeMin = max(PrevLow - Low, 0); D = SMA(DeMax) / (SMA(DeMax) + SMA(DeMin))".into(),
@@ -2308,7 +2177,7 @@ fn more_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-kst".into(),
             code_ref: "src/indicators/momentum.rs::kst".into(),
-            
+
             category: "动量".into(),
             name: "KST Know Sure Thing".into(),
             formula: "KST = SMA(ROC(10)*1, 10) + SMA(ROC(15)*2, 10) + SMA(ROC(20)*3, 10) + SMA(ROC(30)*4, 10)".into(),
@@ -2324,7 +2193,7 @@ fn more_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-coppock".into(),
             code_ref: "src/indicators/momentum.rs::coppock".into(),
-            
+
             category: "动量".into(),
             name: "Coppock Curve".into(),
             formula: "Coppock = WMA(ROC(14) + ROC(11), 10)".into(),
@@ -2340,7 +2209,7 @@ fn more_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-psy".into(),
             code_ref: "src/indicators/momentum.rs::psy".into(),
-            
+
             category: "动量-中国市场".into(),
             name: "PSY 心理线".into(),
             formula: "PSY(N) = 上涨天数 / N * 100".into(),
@@ -2356,7 +2225,7 @@ fn more_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-ar".into(),
             code_ref: "src/indicators/momentum.rs::ar".into(),
-            
+
             category: "动量-中国市场".into(),
             name: "ARBR 情绪指标".into(),
             formula: "AR = (H-O)累加 / (O-L)累加 * 100; BR = (H-PrevC)累加 / (PrevC-L)累加 * 100".into(),
@@ -2372,7 +2241,7 @@ fn more_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/momentum.rs#symbol-cr".into(),
             code_ref: "src/indicators/momentum.rs::cr".into(),
-            
+
             category: "动量-中国市场".into(),
             name: "CR 能量指标".into(),
             formula: "CR = (H-PrevMid)累加 / (PrevMid-L)累加 * 100".into(),
@@ -2388,7 +2257,7 @@ fn more_indicators() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/trend.rs#symbol-td_sequential".into(),
             code_ref: "src/indicators/trend.rs::td_sequential".into(),
-            
+
             category: "动量-中国市场".into(),
             name: "神奇九转 / TD 序列".into(),
             formula: "连续 9 根收盘价高于/低于 4 根前的收盘".into(),
@@ -2413,7 +2282,7 @@ fn more_volatility_volume() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#symbol-vwap".into(),
             code_ref: "src/indicators/volume.rs::vwap - 锚定".into(),
-            
+
             category: "成交量".into(),
             name: "Anchored VWAP 锚定 VWAP".into(),
             formula: "VWAP = sum(TP*V from anchor) / sum(V from anchor)".into(),
@@ -2429,7 +2298,7 @@ fn more_volatility_volume() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#symbol-adl".into(),
             code_ref: "src/indicators/volume.rs::adl - 简化".into(),
-            
+
             category: "成交量".into(),
             name: "CVD 累计成交量差".into(),
             formula: "CVD += 主动买入量 - 主动卖出量".into(),
@@ -2445,7 +2314,7 @@ fn more_volatility_volume() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/extra.rs".into(),
             code_ref: "src/indicators/extra.rs - 需扩展 (历史成交分布)".into(),
-            
+
             category: "成交量分布".into(),
             name: "Volume Profile 成交量分布".into(),
             formula: "横轴 = 价格, 纵轴 = 该价位的成交量".into(),
@@ -2461,7 +2330,7 @@ fn more_volatility_volume() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/extra.rs".into(),
             code_ref: "src/indicators/extra.rs - 需扩展 (时间价格机会)".into(),
-            
+
             category: "成交量分布".into(),
             name: "TPO / Market Profile".into(),
             formula: "把时间划分成 30 分钟段, 标记每段的价格区间".into(),
@@ -2477,7 +2346,7 @@ fn more_volatility_volume() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/extra.rs".into(),
             code_ref: "src/indicators/extra.rs - 需扩展 (订单流)".into(),
-            
+
             category: "成交量分布".into(),
             name: "Footprint 足迹图".into(),
             formula: "每个价位显示 主动买入量/主动卖出量".into(),
@@ -2493,7 +2362,7 @@ fn more_volatility_volume() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs".into(),
             code_ref: "A 股特色".into(),
-            
+
             category: "成交量分布".into(),
             name: "筹码分布 / 持仓成本".into(),
             formula: "统计不同价位的持仓数量".into(),
@@ -2509,7 +2378,7 @@ fn more_volatility_volume() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/extra.rs".into(),
             code_ref: "src/indicators/extra.rs - 需扩展 (大单动向)".into(),
-            
+
             category: "成交量分布".into(),
             name: "DDX/DDY/DDZ".into(),
             formula: "DDX = 大单买入量; DDY = 买入单数差; DDZ = 大单强度".into(),
@@ -2525,7 +2394,7 @@ fn more_volatility_volume() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/volume.rs#symbol-klinger".into(),
             code_ref: "src/indicators/volume.rs::klinger".into(),
-            
+
             category: "成交量".into(),
             name: "Klinger Oscillator".into(),
             formula: "KO = EMA(Volume*sign(C-Cp), 34) - EMA(Volume*sign(C-Cp), 55)".into(),
@@ -2550,7 +2419,7 @@ fn more_breadth() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/breadth.rs#symbol-new_high_low_ratio".into(),
             code_ref: "src/indicators/breadth.rs::new_high_low_ratio".into(),
-            
+
             category: "市场宽度".into(),
             name: "新高 / 新低".into(),
             formula: "NH = 创 N 日新高的股票数; NL = 创 N 日新低的股票数".into(),
@@ -2566,7 +2435,7 @@ fn more_breadth() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/breadth.rs#symbol-tick_index".into(),
             code_ref: "src/indicators/breadth.rs::tick_index".into(),
-            
+
             category: "市场宽度".into(),
             name: "TICK 腾落指数".into(),
             formula: "TICK = 上涨股票数 - 下跌股票数".into(),
@@ -2582,7 +2451,7 @@ fn more_breadth() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/breadth.rs#symbol-breadth_thrust".into(),
             code_ref: "src/indicators/breadth.rs::breadth_thrust".into(),
-            
+
             category: "市场宽度".into(),
             name: "Breadth Thrust 广度冲量".into(),
             formula: "10 日内 NYSE AD 净值从 -0.2 跳到 +0.6".into(),
@@ -2598,7 +2467,7 @@ fn more_breadth() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/breadth.rs#symbol-bullish_percent_index".into(),
             code_ref: "src/indicators/breadth.rs::bullish_percent_index".into(),
-            
+
             category: "市场宽度".into(),
             name: "Bullish Percent Index 牛市百分比".into(),
             formula: "BPI = 用点数图(P&F)看 N 个股票中看涨信号的比例".into(),
@@ -2614,7 +2483,7 @@ fn more_breadth() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/breadth.rs#symbol-up_down_volume_ratio".into(),
             code_ref: "src/indicators/breadth.rs::up_down_volume_ratio".into(),
-            
+
             category: "市场宽度".into(),
             name: "上涨量 / 下跌量".into(),
             formula: "上涨股票的总成交量 vs 下跌股票的总成交量".into(),
@@ -2639,7 +2508,7 @@ fn shareholder_metrics() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/shareholder.rs".into(),
             code_ref: "src/indicators/shareholder.rs - 需 13F".into(),
-            
+
             category: "股东".into(),
             name: "机构持股比例".into(),
             formula: "机构持股 / 总股本 * 100%".into(),
@@ -2655,7 +2524,7 @@ fn shareholder_metrics() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/shareholder.rs".into(),
             code_ref: "src/indicators/shareholder.rs - SEC Form 4".into(),
-            
+
             category: "股东".into(),
             name: "内部人交易".into(),
             formula: "内部人买卖股票的方向和规模".into(),
@@ -2671,7 +2540,7 @@ fn shareholder_metrics() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/shareholder.rs#symbol-shares_per_holder".into(),
             code_ref: "src/indicators/shareholder.rs::shares_per_holder".into(),
-            
+
             category: "股东".into(),
             name: "股东户数 / 集中度".into(),
             formula: "户均持股 = 总股本 / 股东户数".into(),
@@ -2687,7 +2556,7 @@ fn shareholder_metrics() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/shareholder.rs#symbol-share_pledge_ratio".into(),
             code_ref: "src/indicators/shareholder.rs::share_pledge_ratio".into(),
-            
+
             category: "股东".into(),
             name: "股权质押比例".into(),
             formula: "质押股数 / 总股本 * 100%".into(),
@@ -2703,7 +2572,7 @@ fn shareholder_metrics() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/shareholder.rs#symbol-unlock_market_value".into(),
             code_ref: "src/indicators/shareholder.rs::unlock_market_value".into(),
-            
+
             category: "股东".into(),
             name: "解禁数量 / 解禁市值".into(),
             formula: "N 日后解禁股数 * 当前价 = 解禁市值".into(),
@@ -2719,7 +2588,7 @@ fn shareholder_metrics() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/shareholder.rs#symbol-buyback_ratio".into(),
             code_ref: "src/indicators/shareholder.rs::buyback_ratio".into(),
-            
+
             category: "股东".into(),
             name: "回购率 / 注销率".into(),
             formula: "回购股数 / 总股本 * 100%".into(),
@@ -2735,7 +2604,7 @@ fn shareholder_metrics() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/shareholder.rs#symbol-short_interest_ratio".into(),
             code_ref: "src/indicators/shareholder.rs::short_interest_ratio".into(),
-            
+
             category: "股东".into(),
             name: "做空比例 Short Interest".into(),
             formula: "Short Interest = 卖空股数 / 总流通股数 * 100%".into(),
@@ -2751,7 +2620,7 @@ fn shareholder_metrics() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/shareholder.rs#symbol-goodwill_to_equity".into(),
             code_ref: "src/indicators/shareholder.rs::goodwill_to_equity".into(),
-            
+
             category: "财务质量".into(),
             name: "商誉 / 无形资产占比".into(),
             formula: "(商誉 + 无形资产) / 净资产 * 100%".into(),
@@ -2767,7 +2636,7 @@ fn shareholder_metrics() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs#symbol-accrual_ratio".into(),
             code_ref: "src/indicators/fundamental.rs::accrual_ratio".into(),
-            
+
             category: "财务质量".into(),
             name: "应计比率 Accrual Ratio".into(),
             formula: "(净利润 - 经营性现金流) / 总资产".into(),
@@ -2783,7 +2652,7 @@ fn shareholder_metrics() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/shareholder.rs#symbol-beneish_m_score".into(),
             code_ref: "src/indicators/shareholder.rs::beneish_m_score".into(),
-            
+
             category: "财务质量".into(),
             name: "Beneish M-Score".into(),
             formula: "8 个财务比率的多元模型, > -1.78 警示".into(),
@@ -2808,12 +2677,12 @@ fn analyst_sentiment() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs".into(),
             code_ref: "src/indicators/fundamental.rs - 需外部分析师数据".into(),
-            
+
             category: "分析师".into(),
             name: "一致预期 Consensus".into(),
-            formula: "分析师对 EPS 的预测中位数".into(),
+            formula: "EPS 预测均值、中位数与标准差；另列收入、目标价均值和评级分布".into(),
             meaning: "市场对公司的平均预期。".into(),
-            signals: "实际 > 预期 -> 超预期 -> 通常上涨。".into(),
+            signals: "比较预测分布与已公布结果；超预期仍可能已被价格提前反映。".into(),
             pitfalls: "分析师群体容易过度乐观/悲观。".into(),
             implementation: "需分析师数据;PDF 第二十五章 1 节".into(),
             diagram: None,
@@ -2824,7 +2693,7 @@ fn analyst_sentiment() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs#symbol-CompanyFinancials".into(),
             code_ref: "src/indicators/fundamental.rs::CompanyFinancials::target_upside - 需外部目标价".into(),
-            
+
             category: "分析师".into(),
             name: "目标价上涨空间".into(),
             formula: "(目标价 - 现价) / 现价 * 100%".into(),
@@ -2840,7 +2709,7 @@ fn analyst_sentiment() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs".into(),
             code_ref: "src/indicators/fundamental.rs - 需外部分析师数据".into(),
-            
+
             category: "分析师".into(),
             name: "预测分歧".into(),
             formula: "EPS 预测的标准差 / 预测均值".into(),
@@ -2856,7 +2725,7 @@ fn analyst_sentiment() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs".into(),
             code_ref: "src/indicators/fundamental.rs - 需外部财报数据".into(),
-            
+
             category: "分析师".into(),
             name: "业绩超预期 Earnings Surprise".into(),
             formula: "(实际 - 预期) / |预期|".into(),
@@ -2872,7 +2741,7 @@ fn analyst_sentiment() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs".into(),
             code_ref: "src/indicators/fundamental.rs - 需外部分析师数据".into(),
-            
+
             category: "分析师".into(),
             name: "预测上调/下调 Revision".into(),
             formula: "上调分析师数 - 下调分析师数".into(),
@@ -2897,7 +2766,7 @@ fn more_options() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/options.rs#symbol-bs_price".into(),
             code_ref: "src/indicators/options.rs::bs_price - 多到期日".into(),
-            
+
             category: "期权".into(),
             name: "IV Term Structure 隐含波动率期限结构".into(),
             formula: "不同到期日 IV 的曲线".into(),
@@ -2913,7 +2782,7 @@ fn more_options() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/options.rs#symbol-bs_price".into(),
             code_ref: "src/indicators/options.rs::bs_price - 多 strike".into(),
-            
+
             category: "期权".into(),
             name: "Volatility Skew 波动率偏斜".into(),
             formula: "相同到期日, 不同 strike 的 IV 差异".into(),
@@ -2929,7 +2798,7 @@ fn more_options() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/options.rs#symbol-put_call_ratio".into(),
             code_ref: "src/indicators/options.rs::put_call_ratio".into(),
-            
+
             category: "期权".into(),
             name: "Put/Call Ratio".into(),
             formula: "PCR = Put 成交量 / Call 成交量".into(),
@@ -2945,7 +2814,7 @@ fn more_options() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/options.rs".into(),
             code_ref: "src/indicators/options.rs - 需扩展 OI".into(),
-            
+
             category: "期权".into(),
             name: "Max Pain 最大痛点".into(),
             formula: "让期权卖方总亏损最小的到期日行权价".into(),
@@ -2961,7 +2830,7 @@ fn more_options() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/options.rs".into(),
             code_ref: "src/indicators/options.rs - 需 OI".into(),
-            
+
             category: "期权".into(),
             name: "GEX / DEX Gamma/Delta Exposure".into(),
             formula: "所有期权 Gamma * OI * 100 * spot 的总和".into(),
@@ -2986,7 +2855,7 @@ fn industry_metrics() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs#symbol-CompanyFinancials".into(),
             code_ref: "src/indicators/fundamental.rs::CompanyFinancials::pe - 扩展".into(),
-            
+
             category: "行业".into(),
             name: "行业 PE 分位数".into(),
             formula: "(当前 PE - 行业历史最低 PE) / (行业历史最高 PE - 最低 PE)".into(),
@@ -3002,7 +2871,7 @@ fn industry_metrics() -> Vec<KnowledgeEntry> {
             related: vec![],
             code_url: "https://github.com/Sigma711/axiom/blob/main/src/indicators/fundamental.rs#symbol-CompanyFinancials".into(),
             code_ref: "src/indicators/fundamental.rs::CompanyFinancials::net_debt_to_ebitda".into(),
-            
+
             category: "行业".into(),
             name: "银行净息差 NIM".into(),
             formula: "NIM = 利息净收入 / 生息资产".into(),
@@ -3025,64 +2894,64 @@ fn more_risk_metrics() -> Vec<KnowledgeEntry> {
             id: "information_ratio".into(),            summary: "".into(),
             example: "".into(),
             related: vec![],
-            code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#symbol-compute_metrics".into(),
-            code_ref: "src/metrics.rs::compute_metrics".into(),
-            
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/practice/independent.rs#symbol-evaluate".into(),
+            code_ref: "src/practice/independent.rs::evaluate".into(),
+
             category: "风险-绩效".into(),
             name: "Information Ratio 信息比率".into(),
             formula: "IR = (策略收益 - 基准收益) / Tracking Error".into(),
             meaning: "主动管理能力的核心指标。".into(),
             signals: "IR > 0.5 优秀; > 1 顶级。".into(),
             pitfalls: "必须先有明确基准。".into(),
-            implementation: "src/metrics.rs::compute_metrics 包含".into(),
+            implementation: "src/practice/independent.rs::evaluate;显式传入对齐的策略和基准收益".into(),
             diagram: None,
         },
         KnowledgeEntry {
             id: "treynor".into(),            summary: "".into(),
             example: "".into(),
             related: vec![],
-            code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#symbol-compute_metrics".into(),
-            code_ref: "src/metrics.rs::compute_metrics".into(),
-            
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/practice/independent.rs#symbol-evaluate".into(),
+            code_ref: "src/practice/independent.rs::evaluate".into(),
+
             category: "风险-绩效".into(),
             name: "Treynor Ratio 特雷诺比率".into(),
             formula: "Treynor = (策略收益 - 无风险) / Beta".into(),
             meaning: "用 Beta 衡量系统风险的夏普变种。".into(),
             signals: "和 Sharpe 一起用。".into(),
             pitfalls: "Beta 本身不稳定。".into(),
-            implementation: "src/metrics.rs::compute_metrics 包含".into(),
+            implementation: "src/practice/independent.rs::evaluate;显式传入对齐的策略和基准收益".into(),
             diagram: None,
         },
         KnowledgeEntry {
             id: "tracking_error".into(),            summary: "".into(),
             example: "".into(),
             related: vec![],
-            code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#symbol-compute_metrics".into(),
-            code_ref: "src/metrics.rs::compute_metrics".into(),
-            
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/practice/independent.rs#symbol-evaluate".into(),
+            code_ref: "src/practice/independent.rs::evaluate".into(),
+
             category: "风险-绩效".into(),
             name: "Tracking Error 跟踪误差".into(),
             formula: "TE = std(策略收益 - 基准收益)".into(),
             meaning: "策略偏离基准的波动。".into(),
             signals: "TE 低 -> 指数化策略; TE 高 -> 主动策略。".into(),
             pitfalls: "TE 高不等于差, 要看 IR。".into(),
-            implementation: "src/metrics.rs::compute_metrics 包含".into(),
+            implementation: "src/practice/independent.rs::evaluate;显式传入对齐的策略和基准收益".into(),
             diagram: None,
         },
         KnowledgeEntry {
             id: "capture_ratio".into(),            summary: "".into(),
             example: "".into(),
             related: vec![],
-            code_url: "https://github.com/Sigma711/axiom/blob/main/src/metrics.rs#symbol-compute_metrics".into(),
-            code_ref: "src/metrics.rs::compute_metrics".into(),
-            
+            code_url: "https://github.com/Sigma711/axiom/blob/main/src/practice/independent.rs#symbol-evaluate".into(),
+            code_ref: "src/practice/independent.rs::evaluate".into(),
+
             category: "风险-绩效".into(),
             name: "上行/下行捕获率".into(),
             formula: "上行 = 基准上涨时策略涨幅 / 基准涨幅; 下行 = 基准下跌时策略跌幅 / 基准跌幅".into(),
             meaning: "策略在不同市场环境下的表现。".into(),
             signals: "上行 > 100% + 下行 < 100% -> 完美策略(极罕见)。".into(),
             pitfalls: "过于完美的捕获率常常是过拟合。".into(),
-            implementation: "src/metrics.rs::compute_metrics 包含".into(),
+            implementation: "src/practice/independent.rs::evaluate;显式传入对齐的策略和基准收益".into(),
             diagram: None,
         },
     ]

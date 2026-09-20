@@ -42,6 +42,10 @@ impl Default for PaperConfigP {
 /// 模拟盘的对外状态快照(给前端展示)
 #[derive(Debug, Clone, Serialize)]
 pub struct PaperSnapshot {
+    pub symbol: String,
+    pub source: String,
+    pub initial_capital: f64,
+    pub strategy: String,
     pub is_running: bool,
     pub current_bar: Option<Bar>,
     pub cash: f64,
@@ -51,7 +55,12 @@ pub struct PaperSnapshot {
     pub last_signal: Option<Signal>,
     pub last_fill: Option<Fill>,
     pub equity_curve: Vec<EquityPoint>,
+    /// 已处理的已收盘 K 线，供前端在同一账户语境中计算指标。
+    pub bars: Vec<Bar>,
+    /// 成交回报笔数（每次实际 fill 计一笔），与已完成交易数不同。
     pub trades_count: usize,
+    /// 从建仓到完全平仓的一笔完整交易数。
+    pub completed_trades_count: usize,
     pub log: Vec<PaperLogEntry>,
 }
 
@@ -73,15 +82,16 @@ pub struct PaperState {
     pub current_bar: Option<Bar>,
     pub last_signal: Option<Signal>,
     pub last_fill: Option<Fill>,
+    fills_count: usize,
+    pending_signal: Option<Signal>,
+    generation: u64,
     pub equity_curve: Vec<EquityPoint>,
+    bars: Vec<Bar>,
     pub log: Vec<PaperLogEntry>,
 }
 
 impl PaperState {
-    pub fn new(
-        config: PaperConfigP,
-        strategy: Box<dyn Strategy>,
-    ) -> Self {
+    pub fn new(config: PaperConfigP, strategy: Box<dyn Strategy>) -> Self {
         let broker = SimulatedBroker::new(
             BrokerConfig {
                 commission_rate: config.commission_rate,
@@ -117,82 +127,139 @@ impl PaperState {
             current_bar: None,
             last_signal: None,
             last_fill: None,
+            fills_count: 0,
+            pending_signal: None,
+            generation: 0,
             equity_curve: Vec::new(),
+            bars: Vec::new(),
             log: Vec::new(),
         }
     }
 
+    pub fn set_running(&mut self, running: bool) {
+        if self.is_running != running {
+            self.generation = self.generation.wrapping_add(1);
+        }
+        self.is_running = running;
+    }
+
+    pub fn replace_strategy(&mut self, strategy: Box<dyn Strategy>) {
+        self.strategy = strategy;
+        self.pending_signal = None;
+        self.generation = self.generation.wrapping_add(1);
+    }
+
     /// 处理一根新的 K 线:更新价格 → 策略判断 → 风控 → 下单 → 快照
     pub fn process_bar(&mut self, bar: Bar) -> anyhow::Result<()> {
+        // Live feeds overlap bars to recover a missed poll. A closed candle
+        // must update strategy and account state exactly once.
+        if self
+            .current_bar
+            .is_some_and(|current| bar.timestamp <= current.timestamp)
+        {
+            return Ok(());
+        }
+        crate::practice::validate_bars(&[bar]).map_err(anyhow::Error::msg)?;
         self.current_bar = Some(bar);
-        self.portfolio.broker.set_market_price(&self.config.symbol, bar.close);
-        self.broker.set_market_price(&self.config.symbol, bar.close);
+        self.bars.push(bar);
+        if self.bars.len() > 1_000 {
+            let drop = self.bars.len() - 1_000;
+            self.bars.drain(0..drop);
+        }
+        // Execute only the previous closed candle's decision at this open.
+        self.portfolio
+            .broker
+            .set_market_price(&self.config.symbol, bar.open);
+        self.broker.set_market_price(&self.config.symbol, bar.open);
+        let previous_signal = self.pending_signal.take();
+        let execution_signal = if let Some(reason) = self
+            .risk
+            .force_close_reason(&self.portfolio, &*self.portfolio.broker)
+        {
+            self.log(PaperLogLevel::Warn, format!("[风控] {}", reason));
+            Some(Signal {
+                timestamp: bar.timestamp,
+                side: crate::types::Side::Sell,
+                strength: 1.0,
+                reason: format!("[风控] {}", reason),
+                target_size: None,
+            })
+        } else {
+            previous_signal
+        };
+        if let Some(signal) = execution_signal {
+            if signal.side != crate::types::Side::Hold {
+                if let Some(order) =
+                    self.portfolio
+                        .on_signal(signal.side, bar.open, bar.timestamp, signal.strength)
+                {
+                    let (allowed, why) =
+                        self.risk
+                            .allow_order(&order, &self.portfolio, &*self.portfolio.broker);
+                    if allowed {
+                        let fill = self.portfolio.broker.place_order(order);
+                        if fill.size > 0.0 {
+                            self.fills_count += 1;
+                            self.last_fill = Some(fill.clone());
+                            self.portfolio.on_fill(&fill);
+                            self.log(
+                                PaperLogLevel::Fill,
+                                format!(
+                                    "成交: {} {} @ {:.2} (手续费 {:.2})",
+                                    fill.side, fill.size, fill.price, fill.commission
+                                ),
+                            );
+                        }
+                    } else {
+                        self.log(PaperLogLevel::Warn, format!("风控拒绝: {}", why));
+                    }
+                }
+            }
+        }
 
+        // Strategy sees the completed candle and can only schedule next open.
+        self.portfolio
+            .broker
+            .set_market_price(&self.config.symbol, bar.close);
+        self.broker.set_market_price(&self.config.symbol, bar.close);
         let signal = self.strategy.on_bar(&bar);
         self.last_signal = Some(signal.clone());
-        self.log(PaperLogLevel::Info,
-                 format!("信号: {} ({})", signal.side, signal.reason));
-
-        let mut order = None;
-
-        if let Some(reason) = self.risk.force_close_reason(&self.portfolio, &*self.portfolio.broker) {
-            if !self.portfolio.is_flat() {
-                order = self.portfolio.on_signal(
-                    crate::types::Side::Sell,
-                    bar.close,
-                    bar.timestamp,
-                    1.0,
-                );
-            }
-            self.log(PaperLogLevel::Warn, format!("[风控] {}", reason));
-        } else if signal.side != crate::types::Side::Hold {
-            order = self.portfolio.on_signal(
-                signal.side,
-                bar.close,
-                bar.timestamp,
-                signal.strength,
-            );
+        self.log(
+            PaperLogLevel::Info,
+            format!("信号: {} ({})", signal.side, signal.reason),
+        );
+        if signal.side != crate::types::Side::Hold {
+            self.pending_signal = Some(signal);
         }
 
-        if let Some(ref o) = order {
-            let (allowed, why) = self.risk.allow_order(o, &self.portfolio, &*self.portfolio.broker);
-            if !allowed {
-                self.log(PaperLogLevel::Warn, format!("风控拒绝: {}", why));
-                order = None;
-            }
-        }
-
-        if let Some(o) = order {
-            let fill = self.portfolio.broker.place_order(o);
-            if fill.size > 0.0 {
-                self.last_fill = Some(fill.clone());
-                self.portfolio.on_fill(&fill);
-                self.log(PaperLogLevel::Fill, format!(
-                    "成交: {} {} @ {:.2} (手续费 {:.2})",
-                    fill.side, fill.size, fill.price, fill.commission
-                ));
-            }
-        }
-
-        let price = self.portfolio.broker.get_market_price(&self.config.symbol)
-            .unwrap_or(bar.close);
         let pos = self.portfolio.position();
         self.equity_curve.push(EquityPoint {
             timestamp: bar.timestamp,
             cash: self.portfolio.broker.get_cash(),
-            position_value: pos.market_value(price),
+            position_value: pos.market_value(bar.close),
             equity: self.portfolio.equity(),
         });
-
         Ok(())
     }
 
     pub fn snapshot(&self) -> PaperSnapshot {
         let pos = self.portfolio.position();
-        let price = self.portfolio.broker.get_market_price(&self.config.symbol)
+        let price = self
+            .portfolio
+            .broker
+            .get_market_price(&self.config.symbol)
             .or_else(|| self.current_bar.map(|b| b.close))
             .unwrap_or(0.0);
         PaperSnapshot {
+            symbol: self.config.symbol.clone(),
+            source: if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
+                "synthetic"
+            } else {
+                "real"
+            }
+            .into(),
+            initial_capital: self.config.initial_capital,
+            strategy: self.strategy.name().into(),
             is_running: self.is_running,
             current_bar: self.current_bar,
             cash: self.portfolio.broker.get_cash(),
@@ -202,7 +269,9 @@ impl PaperState {
             last_signal: self.last_signal.clone(),
             last_fill: self.last_fill.clone(),
             equity_curve: self.equity_curve.clone(),
-            trades_count: self.portfolio.closed_trades().len(),
+            bars: self.bars.clone(),
+            trades_count: self.fills_count,
+            completed_trades_count: self.portfolio.closed_trades().len(),
             log: self.log.iter().rev().take(100).cloned().collect(),
         }
     }
@@ -240,14 +309,16 @@ impl PaperLogLevel {
 }
 
 /// 后台任务:定时拉数据 + 调用 process_bar
-pub async fn run_paper_loop<F: AsyncDataFeed>(
-    feed: Arc<F>,
-    state: Arc<RwLock<PaperState>>,
-) {
+pub async fn run_paper_loop<F: AsyncDataFeed>(feed: Arc<F>, state: Arc<RwLock<PaperState>>) {
     loop {
-        let (is_running, symbol, poll_secs) = {
+        let (is_running, symbol, poll_secs, generation) = {
             let s = state.read().await;
-            (s.is_running, s.config.symbol.clone(), s.config.poll_interval_seconds)
+            (
+                s.is_running,
+                s.config.symbol.clone(),
+                s.config.poll_interval_seconds,
+                s.generation,
+            )
         };
 
         if !is_running {
@@ -258,6 +329,9 @@ pub async fn run_paper_loop<F: AsyncDataFeed>(
         match feed.stream_live_async(&symbol).await {
             Ok(bars) if !bars.is_empty() => {
                 let mut s = state.write().await;
+                if !s.is_running || s.generation != generation {
+                    continue;
+                }
                 for bar in bars {
                     if let Err(e) = s.process_bar(bar) {
                         s.log(PaperLogLevel::Error, format!("处理出错: {}", e));
@@ -272,5 +346,30 @@ pub async fn run_paper_loop<F: AsyncDataFeed>(
         }
 
         tokio::time::sleep(std::time::Duration::from_secs(poll_secs)).await;
+    }
+}
+/// Deterministic replay for offline demonstrations and real-browser CI.
+/// This is visibly labeled synthetic in every snapshot.
+pub async fn run_offline_paper_loop(state: Arc<RwLock<PaperState>>) {
+    use crate::data::{DataFeed, SyntheticFeed};
+    use chrono::TimeZone;
+    let bars = SyntheticFeed::default()
+        .fetch_historical(
+            "OFFLINE",
+            Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+            5000,
+        )
+        .expect("valid synthetic fixture");
+    let mut cursor = 0;
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
+    loop {
+        interval.tick().await;
+        let mut s = state.write().await;
+        if s.is_running && cursor < bars.len() {
+            if let Err(e) = s.process_bar(bars[cursor]) {
+                s.log(PaperLogLevel::Error, e.to_string());
+            }
+            cursor += 1;
+        }
     }
 }

@@ -1,0 +1,9 @@
+{"concepts":[
+{"id":"book_chart_heikin_ashi","name":"Heikin-Ashi 平均K线","formula":"HA收盘=(O+H+L+C)/4；HA开盘=(前HA开盘+前HA收盘)/2","example":"首根 OHLC(10,12,9,11) 的 HA 收盘为 10.5。","boundary":"使用已收盘 OHLC；不从 OHLC 推断逐笔路径。"},
+{"id":"book_chart_renko","name":"Renko 固定砖","formula":"收盘价每跨越一个固定砖宽生成一砖","example":"价格 10→12.1、砖宽 1，生成两块向上砖。","boundary":"close-only 砖图不表示盘中触及顺序。"},
+{"id":"book_chart_point_figure","name":"点数图 P&F","formula":"固定箱格，反转须达到指定箱格数","example":"箱格 1、反转 3 时，价格反向移动 3 才换列。","boundary":"仅由顺序价格输入重建。"},
+{"id":"book_chart_kagi","name":"Kagi 线","formula":"价格反向达到反转幅度才改变线方向","example":"上行到 12 后回落 1，反转幅度 1 时转为下行。","boundary":"不从 OHLC 假装识别盘中反转。"},
+{"id":"book_chart_three_line_break","name":"三线突破","formula":"同向越过上一线极值；反向须越过最近三条线的另一侧极值","example":"下行最近三线的最高为 10，收盘高于 10 才反转。","boundary":"只处理提供的已收盘价格序列。"},
+{"id":"book_chart_range_bars","name":"Range Bars 区间K线","formula":"每根完成条覆盖固定价格区间","example":"成交价格从 10 到 11、区间 1，完成一根区间条。","boundary":"必须提供有序成交价；OHLC 无法还原成交路径。"},
+{"id":"book_chart_tick_bars","name":"Tick Bars 成交笔数K线","formula":"每固定笔数成交组成一根K线","example":"每 3 笔成交组成一根条。","boundary":"必须提供有序逐笔成交价；不把OHLC当作逐笔。"}
+]}

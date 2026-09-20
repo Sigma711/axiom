@@ -12,8 +12,9 @@
 //!   POST /api/paper/strategy    → 切换策略
 //!   GET  /api/paper/ws          → WebSocket:实时推送模拟盘状态
 
+use crate::api_validation::{self as validate, ApiError};
 use crate::app_state::AppState;
-use crate::data::{AsyncDataFeed, DataFeed, HttpFeed, SyntheticFeed};
+use crate::data::{AsyncDataFeed, DataFeed, SyntheticFeed};
 use crate::engine::{BacktestEngine, EngineConfig};
 use crate::metrics::compute_metrics;
 use crate::paper::PaperSnapshot;
@@ -30,15 +31,53 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use chrono::{Duration, Utc};
+use chrono::{Duration, TimeZone, Timelike, Utc};
 use futures::{SinkExt, StreamExt};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::collections::HashMap;
 use std::sync::OnceLock;
 use tokio::sync::RwLock as TokioRwLock;
+
+async fn market_bars(
+    state: &AppState,
+    symbol: &str,
+    source: &str,
+    limit: usize,
+) -> Result<Vec<Bar>, ApiError> {
+    validate::market(symbol, source, limit, 5000)?;
+    let since = if source == "synthetic" {
+        Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap()
+    } else {
+        Utc::now()
+            .with_minute(0)
+            .unwrap()
+            .with_second(0)
+            .unwrap()
+            .with_nanosecond(0)
+            .unwrap()
+            - Duration::hours(limit as i64)
+    };
+    let bars = if source == "synthetic" {
+        SyntheticFeed::default().fetch_historical(symbol, since, limit)
+    } else {
+        if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Live market data is disabled in offline mode; select synthetic data".into(),
+            ));
+        }
+        state
+            .feed
+            .fetch_historical_async(symbol, since, limit)
+            .await
+    }
+    .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+    validate::bars(&bars)?;
+    Ok(bars)
+}
 
 // -----------------------------------------------------------------------------
 // 路由器
@@ -48,6 +87,10 @@ pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/", get(serve_index))
         .route("/static/*file", get(serve_static))
+        .nest_service(
+            "/assets",
+            tower_http::services::ServeDir::new("static/assets"),
+        )
         .route("/api/config", get(get_config))
         .route("/api/strategies", get(get_strategies))
         .route("/api/data", get(get_data))
@@ -58,10 +101,16 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/paper/strategy", post(post_paper_strategy))
         .route("/api/paper/ws", get(ws_paper))
         .route("/api/knowledge", get(get_knowledge))
+        .route("/api/practice", get(get_practice).post(post_practice))
+        .route(
+            "/api/knowledge/coverage",
+            get(|| async { Json(crate::book_sources::coverage()) }),
+        )
         .route("/api/patterns", get(get_patterns))
         .route("/api/heikin_ashi", get(get_heikin_ashi))
         .route("/api/indicators", get(get_indicators))
         .route("/api/code_loc", get(get_code_loc))
+        .route("/api/code/source", get(get_code_source))
         .route("/api/symbols", get(get_symbols))
         .with_state(state)
 }
@@ -91,15 +140,14 @@ async fn serve_index() -> Response {
     }
 }
 
-async fn serve_static(
-    axum::extract::Path(file): axum::extract::Path<String>,
-) -> Response {
-    // 修复: 改用 std::fs::read + 手动拼接
-    let mut path = format!("static/{}", file);
-    if file.starts_with('/') {
-        path = format!("static{}", file);
+async fn serve_static(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
+    if std::path::Path::new(&file)
+        .components()
+        .any(|c| !matches!(c, std::path::Component::Normal(_)))
+    {
+        return (StatusCode::NOT_FOUND, "Not found").into_response();
     }
-    let path_buf = PathBuf::from(&path);
+    let path_buf = PathBuf::from("static").join(&file);
     match tokio::fs::read(&path_buf).await {
         Ok(content) => {
             let mime = if file.ends_with(".css") {
@@ -117,12 +165,17 @@ async fn serve_static(
             } else {
                 "application/octet-stream"
             };
-            (StatusCode::OK, [
-                ("content-type", mime),
-                ("cache-control", "no-cache, no-store, must-revalidate"),
-                ("pragma", "no-cache"),
-                ("expires", "0"),
-            ], content).into_response()
+            (
+                StatusCode::OK,
+                [
+                    ("content-type", mime),
+                    ("cache-control", "no-cache, no-store, must-revalidate"),
+                    ("pragma", "no-cache"),
+                    ("expires", "0"),
+                ],
+                content,
+            )
+                .into_response()
         }
         Err(_) => (StatusCode::NOT_FOUND, "Not found").into_response(),
     }
@@ -280,40 +333,32 @@ struct DataQuery {
     symbol: Option<String>,
     limit: Option<usize>,
     source: Option<String>, // "real" / "synthetic"
-    chart: Option<String>,   // "candle" (默认) / "heikin_ashi"
 }
 
 async fn get_data(
     State(state): State<Arc<AppState>>,
     axum::extract::Query(q): axum::extract::Query<DataQuery>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
-    let symbol = q.symbol.unwrap_or_else(|| state.config.trading.symbol.clone());
-    let limit = q.limit.unwrap_or(200).min(2000);
+    let symbol = q
+        .symbol
+        .unwrap_or_else(|| state.config.trading.symbol.clone());
+    let limit = q.limit.unwrap_or(200);
     let source = q.source.unwrap_or_else(|| "real".to_string());
 
-    let since = Utc::now() - Duration::days(state.config.backtest.lookback_days as i64);
-
-    let bars: Vec<Bar> = if source == "synthetic" {
-        let feed = SyntheticFeed::default();
-        feed.fetch_historical(&symbol, since, limit)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    } else {
-        let feed = HttpFeed::new(state.data_cache_dir.clone());
-        feed.fetch_historical_async(&symbol, since, limit).await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    };
+    let bars = market_bars(&state, &symbol, &source, limit).await?;
 
     let json_bars: Vec<Value> = bars
         .iter()
-        .map(|b| json!({
-            "timestamp": b.timestamp.to_rfc3339(),
-            "open": b.open,
-            "high": b.high,
-            "low": b.low,
-            "close": b.close,
-            "volume": b.volume,
-            "chart_type": "candle",
-        }))
+        .map(|b| {
+            json!({
+                "timestamp": b.timestamp.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true),
+                "open": b.open,
+                "high": b.high,
+                "low": b.low,
+                "close": b.close,
+                "volume": b.volume,
+            })
+        })
         .collect();
 
     Ok(Json(json!({
@@ -330,6 +375,7 @@ async fn get_data(
 
 #[derive(Deserialize)]
 struct BacktestRequest {
+    bars: Option<Vec<Bar>>,
     strategy: String,
     params: Option<std::collections::HashMap<String, f64>>,
     symbol: Option<String>,
@@ -347,25 +393,65 @@ async fn post_backtest(
     State(state): State<Arc<AppState>>,
     Json(req): Json<BacktestRequest>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
+    validate::bounded(
+        "initial_capital",
+        req.initial_capital
+            .unwrap_or(state.config.trading.initial_capital),
+        f64::MIN_POSITIVE,
+        1e15,
+    )?;
+    validate::bounded(
+        "commission_rate",
+        req.commission_rate
+            .unwrap_or(state.config.trading.commission_rate),
+        0.0,
+        0.5,
+    )?;
+    validate::bounded(
+        "slippage_rate",
+        req.slippage_rate
+            .unwrap_or(state.config.trading.slippage_rate),
+        0.0,
+        0.5,
+    )?;
+    validate::bounded(
+        "stop_loss_pct",
+        req.stop_loss_pct.unwrap_or(state.config.risk.stop_loss_pct),
+        0.0,
+        1.0,
+    )?;
+    validate::bounded(
+        "take_profit_pct",
+        req.take_profit_pct
+            .unwrap_or(state.config.risk.take_profit_pct),
+        0.0,
+        100.0,
+    )?;
+    validate::bounded(
+        "max_position_pct",
+        req.max_position_pct
+            .unwrap_or(state.config.risk.max_position_pct),
+        0.0,
+        1.0,
+    )?;
     // 1. 构造策略
     let mut strategy = make_strategy(&req.strategy, req.params.as_ref())
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
 
     // 2. 拉数据
-    let symbol = req.symbol.clone()
+    let symbol = req
+        .symbol
+        .clone()
         .unwrap_or_else(|| state.config.trading.symbol.clone());
-    let limit = req.limit.unwrap_or(500).min(5000);
+    let limit = req.limit.unwrap_or(500);
     let source = req.source.unwrap_or_else(|| "real".to_string());
 
-    let since = Utc::now() - Duration::days(state.config.backtest.lookback_days as i64);
-    let bars = if source == "synthetic" {
-        SyntheticFeed::default()
-            .fetch_historical(&symbol, since, limit)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    validate::market(&symbol, &source, limit, 5000)?;
+    let bars = if let Some(bars) = req.bars {
+        validate::bars(&bars)?;
+        bars
     } else {
-        let feed = HttpFeed::new(state.data_cache_dir.clone());
-        feed.fetch_historical_async(&symbol, since, limit).await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        market_bars(&state, &symbol, &source, limit).await?
     };
 
     if bars.is_empty() {
@@ -375,14 +461,24 @@ async fn post_backtest(
     // 3. 配置引擎
     let engine_cfg = EngineConfig {
         symbol: symbol.clone(),
-        initial_capital: req.initial_capital.unwrap_or(state.config.trading.initial_capital),
-        commission_rate: req.commission_rate.unwrap_or(state.config.trading.commission_rate),
-        slippage_rate: req.slippage_rate.unwrap_or(state.config.trading.slippage_rate),
+        initial_capital: req
+            .initial_capital
+            .unwrap_or(state.config.trading.initial_capital),
+        commission_rate: req
+            .commission_rate
+            .unwrap_or(state.config.trading.commission_rate),
+        slippage_rate: req
+            .slippage_rate
+            .unwrap_or(state.config.trading.slippage_rate),
     };
     let risk_cfg = RiskConfig {
         stop_loss_pct: req.stop_loss_pct.unwrap_or(state.config.risk.stop_loss_pct),
-        take_profit_pct: req.take_profit_pct.unwrap_or(state.config.risk.take_profit_pct),
-        max_position_pct: req.max_position_pct.unwrap_or(state.config.risk.max_position_pct),
+        take_profit_pct: req
+            .take_profit_pct
+            .unwrap_or(state.config.risk.take_profit_pct),
+        max_position_pct: req
+            .max_position_pct
+            .unwrap_or(state.config.risk.max_position_pct),
     };
 
     // 4. 跑回测
@@ -391,55 +487,76 @@ async fn post_backtest(
     result.metrics = compute_metrics(&result);
 
     // 5. 序列化成前端友好格式
-    let equity_curve: Vec<Value> = result.equity_curve.iter().map(|p| json!({
-        "timestamp": p.timestamp.to_rfc3339(),
-        "cash": p.cash,
-        "position_value": p.position_value,
-        "equity": p.equity,
-    })).collect();
+    let equity_curve: Vec<Value> = result
+        .equity_curve
+        .iter()
+        .map(|p| {
+            json!({
+                "timestamp": p.timestamp.to_rfc3339(),
+                "cash": p.cash,
+                "position_value": p.position_value,
+                "equity": p.equity,
+            })
+        })
+        .collect();
 
-    let price_series: Vec<Value> = result.equity_curve.iter().map(|p| json!({
-        "timestamp": p.timestamp.to_rfc3339(),
-        "price": p.equity - p.cash + p.position_value, // 当前价 = (equity - cash)/size 近似
-    })).collect();
-    let _ = price_series; // 暂未直接使用
+    let trades: Vec<Value> = result
+        .trades
+        .iter()
+        .map(|t| {
+            json!({
+                "symbol": t.symbol,
+                "side": format!("{:?}", t.side).to_uppercase(),
+                "entry_time": t.entry_time.to_rfc3339(),
+                "exit_time": t.exit_time.map(|x| x.to_rfc3339()),
+                "entry_price": t.entry_price,
+                "exit_price": t.exit_price,
+                "size": t.size,
+                "pnl": t.pnl(),
+                "pnl_pct": t.pnl_pct(),
+                "entry_commission": t.entry_commission,
+                "exit_commission": t.exit_commission,
+                "commission": t.total_commission(),
+            })
+        })
+        .collect();
 
-    let trades: Vec<Value> = result.trades.iter().map(|t| json!({
-        "symbol": t.symbol,
-        "side": format!("{:?}", t.side).to_uppercase(),
-        "entry_time": t.entry_time.to_rfc3339(),
-        "exit_time": t.exit_time.map(|x| x.to_rfc3339()),
-        "entry_price": t.entry_price,
-        "exit_price": t.exit_price,
-        "size": t.size,
-        "pnl": t.pnl(),
-        "pnl_pct": t.pnl_pct() * 100.0,
-        "commission": t.total_commission(),
-    })).collect();
+    let signals: Vec<Value> = result
+        .signals
+        .iter()
+        .enumerate()
+        .filter_map(|(i, s)| {
+            if s.side != Side::Hold {
+                Some(json!({
+                    "i": i,
+                    "timestamp": s.timestamp.to_rfc3339(),
+                    "side": format!("{:?}", s.side).to_uppercase(),
+                    "strength": s.strength,
+                    "reason": s.reason,
+                }))
+            } else {
+                None
+            }
+        })
+        .collect();
 
-    let signals: Vec<Value> = result.signals.iter().enumerate().filter_map(|(i, s)| {
-        if s.side != Side::Hold {
-            Some(json!({
-                "i": i,
-                "timestamp": s.timestamp.to_rfc3339(),
-                "side": format!("{:?}", s.side).to_uppercase(),
-                "strength": s.strength,
-                "reason": s.reason,
-            }))
-        } else {
-            None
-        }
-    }).collect();
-
-    let fills: Vec<Value> = result.fills.iter().map(|f| json!({
-        "timestamp": f.timestamp.to_rfc3339(),
-        "side": format!("{:?}", f.side).to_uppercase(),
-        "size": f.size,
-        "price": f.price,
-        "commission": f.commission,
-    })).collect();
+    let fills: Vec<Value> = result
+        .fills
+        .iter()
+        .map(|f| {
+            json!({
+                "timestamp": f.timestamp.to_rfc3339(),
+                "side": format!("{:?}", f.side).to_uppercase(),
+                "size": f.size,
+                "price": f.price,
+                "commission": f.commission,
+            })
+        })
+        .collect();
 
     Ok(Json(json!({
+        "bars": bars,
+        "source": source,
         "config": result.config,
         "metrics": result.metrics,
         "equity_curve": equity_curve,
@@ -454,6 +571,7 @@ fn make_strategy(
     params: Option<&std::collections::HashMap<String, f64>>,
 ) -> anyhow::Result<Box<dyn crate::strategy::Strategy>> {
     let p = params.cloned().unwrap_or_default();
+    validate::strategy(name, &p)?;
     let kind = match name {
         "buy_and_hold" => StrategyKind::BuyAndHold,
         "sma_cross" => {
@@ -465,12 +583,20 @@ fn make_strategy(
             let period = p.get("period").copied().unwrap_or(14.0) as usize;
             let overbought = p.get("overbought").copied().unwrap_or(70.0);
             let oversold = p.get("oversold").copied().unwrap_or(30.0);
-            StrategyKind::Rsi { period, overbought, oversold }
+            StrategyKind::Rsi {
+                period,
+                overbought,
+                oversold,
+            }
         }
         "random" => {
             let buy_prob = p.get("buy_prob").copied().unwrap_or(0.05);
             let sell_prob = p.get("sell_prob").copied().unwrap_or(0.05);
-            StrategyKind::Random { seed: 42, buy_prob, sell_prob }
+            StrategyKind::Random {
+                seed: 42,
+                buy_prob,
+                sell_prob,
+            }
         }
         "macd" => {
             let fast = p.get("fast").copied().unwrap_or(12.0) as usize;
@@ -491,12 +617,18 @@ fn make_strategy(
         "donchian_breakout" => {
             let entry_period = p.get("entry_period").copied().unwrap_or(20.0) as usize;
             let exit_period = p.get("exit_period").copied().unwrap_or(10.0) as usize;
-            StrategyKind::DonchianBreakout { entry_period, exit_period }
+            StrategyKind::DonchianBreakout {
+                entry_period,
+                exit_period,
+            }
         }
         "vwap_reversion" => {
             let period = p.get("period").copied().unwrap_or(20.0) as usize;
             let threshold_pct = p.get("threshold_pct").copied().unwrap_or(1.5);
-            StrategyKind::VwapReversion { period, threshold_pct }
+            StrategyKind::VwapReversion {
+                period,
+                threshold_pct,
+            }
         }
         "kdj" => {
             let n = p.get("n").copied().unwrap_or(9.0) as usize;
@@ -509,7 +641,12 @@ fn make_strategy(
             let kijun = p.get("kijun").copied().unwrap_or(26.0) as usize;
             let senkou_b = p.get("senkou_b").copied().unwrap_or(52.0) as usize;
             let displacement = p.get("displacement").copied().unwrap_or(26.0) as usize;
-            StrategyKind::Ichimoku { tenkan, kijun, senkou_b, displacement }
+            StrategyKind::Ichimoku {
+                tenkan,
+                kijun,
+                senkou_b,
+                displacement,
+            }
         }
         "ppo" => {
             let fast = p.get("fast").copied().unwrap_or(12.0) as usize;
@@ -534,27 +671,21 @@ fn make_strategy(
 // 模拟盘 API
 // -----------------------------------------------------------------------------
 
-async fn get_paper_snapshot(
-    State(state): State<Arc<AppState>>,
-) -> Json<PaperSnapshot> {
+async fn get_paper_snapshot(State(state): State<Arc<AppState>>) -> Json<PaperSnapshot> {
     let s = state.paper_state.read().await;
     Json(s.snapshot())
 }
 
-async fn post_paper_start(
-    State(state): State<Arc<AppState>>,
-) -> Json<Value> {
+async fn post_paper_start(State(state): State<Arc<AppState>>) -> Json<Value> {
     let mut s = state.paper_state.write().await;
-    s.is_running = true;
+    s.set_running(true);
     s.log(crate::paper::PaperLogLevel::Info, "模拟盘已启动".into());
     Json(json!({"status": "started"}))
 }
 
-async fn post_paper_stop(
-    State(state): State<Arc<AppState>>,
-) -> Json<Value> {
+async fn post_paper_stop(State(state): State<Arc<AppState>>) -> Json<Value> {
     let mut s = state.paper_state.write().await;
-    s.is_running = false;
+    s.set_running(false);
     s.log(crate::paper::PaperLogLevel::Info, "模拟盘已停止".into());
     Json(json!({"status": "stopped"}))
 }
@@ -572,9 +703,11 @@ async fn post_paper_strategy(
     let strategy = make_strategy(&req.strategy, req.params.as_ref())
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     let mut s = state.paper_state.write().await;
-    s.strategy = strategy;
-    s.log(crate::paper::PaperLogLevel::Info,
-          format!("策略已切换为: {}", req.strategy));
+    s.replace_strategy(strategy);
+    s.log(
+        crate::paper::PaperLogLevel::Info,
+        format!("策略已切换为: {}", req.strategy),
+    );
     Ok(Json(json!({"status": "ok", "strategy": req.strategy})))
 }
 
@@ -593,31 +726,28 @@ async fn get_patterns(
     State(state): State<Arc<AppState>>,
     axum::extract::Query(q): axum::extract::Query<PatternsQuery>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
-    let symbol = q.symbol.unwrap_or_else(|| state.config.trading.symbol.clone());
-    let limit = q.limit.unwrap_or(100).min(500);
+    let symbol = q
+        .symbol
+        .unwrap_or_else(|| state.config.trading.symbol.clone());
+    let limit = q.limit.unwrap_or(100);
     let source = q.source.unwrap_or_else(|| "real".to_string());
-    let since = Utc::now() - Duration::days(30);
-
-    let bars: Vec<Bar> = if source == "synthetic" {
-        SyntheticFeed::default()
-            .fetch_historical(&symbol, since, limit)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    } else {
-        HttpFeed::new(state.data_cache_dir.clone())
-            .fetch_historical_async(&symbol, since, limit).await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    };
+    let bars = market_bars(&state, &symbol, &source, limit).await?;
 
     use crate::indicators::extra::detect_pattern;
-    let patterns: Vec<Value> = bars.iter().rev().take(20).map(|bar| {
-        let p = detect_pattern(bar);
-        json!({
-            "timestamp": bar.timestamp.to_rfc3339(),
-            "close": bar.close,
-            "pattern": p.name_zh(),
-            "pattern_code": format!("{:?}", p),
+    let patterns: Vec<Value> = bars
+        .iter()
+        .rev()
+        .take(20)
+        .map(|bar| {
+            let p = detect_pattern(bar);
+            json!({
+                "timestamp": bar.timestamp.to_rfc3339(),
+                "close": bar.close,
+                "pattern": p.name_zh(),
+                "pattern_code": format!("{:?}", p),
+            })
         })
-    }).collect();
+        .collect();
 
     Ok(Json(json!({ "symbol": symbol, "patterns": patterns })))
 }
@@ -626,28 +756,27 @@ async fn get_heikin_ashi(
     State(state): State<Arc<AppState>>,
     axum::extract::Query(q): axum::extract::Query<PatternsQuery>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
-    let symbol = q.symbol.unwrap_or_else(|| state.config.trading.symbol.clone());
-    let limit = q.limit.unwrap_or(200).min(1000);
+    let symbol = q
+        .symbol
+        .unwrap_or_else(|| state.config.trading.symbol.clone());
+    let limit = q.limit.unwrap_or(200);
     let source = q.source.unwrap_or_else(|| "real".to_string());
-    let since = Utc::now() - Duration::days(state.config.backtest.lookback_days as i64);
-
-    let bars: Vec<Bar> = if source == "synthetic" {
-        SyntheticFeed::default()
-            .fetch_historical(&symbol, since, limit)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    } else {
-        HttpFeed::new(state.data_cache_dir.clone())
-            .fetch_historical_async(&symbol, since, limit).await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    };
+    let bars = market_bars(&state, &symbol, &source, limit).await?;
 
     let ha = crate::indicators::extra::heikin_ashi(&bars);
-    let json_bars: Vec<Value> = ha.iter().map(|b| json!({
-        "timestamp": b.timestamp.to_rfc3339(),
-        "open": b.open, "high": b.high, "low": b.low, "close": b.close,
-    })).collect();
+    let json_bars: Vec<Value> = ha
+        .iter()
+        .map(|b| {
+            json!({
+                "timestamp": b.timestamp.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true),
+                "open": b.open, "high": b.high, "low": b.low, "close": b.close,
+            })
+        })
+        .collect();
 
-    Ok(Json(json!({ "symbol": symbol, "bars": json_bars, "chart": "heikin_ashi" })))
+    Ok(Json(
+        json!({ "symbol": symbol, "bars": json_bars, "chart": "heikin_ashi" }),
+    ))
 }
 
 // -----------------------------------------------------------------------------
@@ -659,9 +788,11 @@ async fn get_knowledge() -> Json<Value> {
     let entries = knowledge::all_entries();
     let total = entries.len();
     // 按 category 分组
-    let mut grouped: std::collections::BTreeMap<String, Vec<Value>> = std::collections::BTreeMap::new();
+    let mut grouped: std::collections::BTreeMap<String, Vec<Value>> =
+        std::collections::BTreeMap::new();
     for e in entries {
-        let val = serde_json::to_value(&e).unwrap_or_default();
+        let mut val = serde_json::to_value(&e).unwrap_or_default();
+        val["source_refs"] = json!(crate::book_sources::for_concept(&e.id));
         grouped.entry(e.category.clone()).or_default().push(val);
     }
     Json(json!({
@@ -686,41 +817,23 @@ async fn get_indicators(
     State(state): State<Arc<AppState>>,
     axum::extract::Query(q): axum::extract::Query<IndicatorQuery>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
-    let symbol = q.symbol.unwrap_or_else(|| state.config.trading.symbol.clone());
-    let limit = q.limit.unwrap_or(200).min(2000);
+    let symbol = q
+        .symbol
+        .unwrap_or_else(|| state.config.trading.symbol.clone());
+    let limit = q.limit.unwrap_or(200);
     let source = q.source.unwrap_or_else(|| "real".to_string());
-    let since = Utc::now() - Duration::days(state.config.backtest.lookback_days as i64);
-
-    let bars = if source == "synthetic" {
-        SyntheticFeed::default()
-            .fetch_historical(&symbol, since, limit)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    } else {
-        HttpFeed::new(state.data_cache_dir.clone())
-            .fetch_historical_async(&symbol, since, limit)
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    };
+    let bars = market_bars(&state, &symbol, &source, limit).await?;
 
     let closes: Vec<f64> = bars.iter().map(|b| b.close).collect();
-    let requested_str = q.indicators
+    let requested_str = q
+        .indicators
         .unwrap_or_else(|| "sma_20,ema_50,rsi_14".to_string());
     let requested: Vec<&str> = requested_str.split(',').map(|s| s.trim()).collect();
 
     let mut series: HashMap<String, Vec<Option<f64>>> = HashMap::new();
 
     for ind in requested {
-        let parts: Vec<&str> = ind.split('_').collect();
-        if parts.is_empty() { continue; }
-        let name = parts[0];
-        let period: usize = parts.get(1)
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(match name {
-                "sma" | "ema" | "rsi" | "vwma" => 14,
-                "bbands" => 20,
-                "macd" => 12,
-                _ => 14,
-            });
+        let (name, period) = validate::indicator(ind)?;
 
         match name {
             "sma" => {
@@ -730,7 +843,10 @@ async fn get_indicators(
                 series.insert(ind.to_string(), crate::indicators::ma::ema(&closes, period));
             }
             "rsi" => {
-                series.insert(ind.to_string(), crate::indicators::momentum::rsi(&closes, period));
+                series.insert(
+                    ind.to_string(),
+                    crate::indicators::momentum::rsi(&closes, period),
+                );
             }
             "bbands" => {
                 let bb = crate::indicators::volatility::bollinger_bands(&closes, period, 2.0);
@@ -747,14 +863,29 @@ async fn get_indicators(
             "vwap" => {
                 series.insert(ind.to_string(), crate::indicators::volume::vwap(&bars));
             }
+            "vwma" => {
+                series.insert(ind.to_string(), crate::indicators::ma::vwma(&bars, period));
+            }
+            "atr_percent" => {
+                series.insert(
+                    ind.to_string(),
+                    crate::indicators::volatility::atr_percent(&bars, period),
+                );
+            }
             "atr" => {
-                series.insert(ind.to_string(), crate::indicators::volatility::atr(&bars, period));
+                series.insert(
+                    ind.to_string(),
+                    crate::indicators::volatility::atr(&bars, period),
+                );
             }
             "obv" => {
                 series.insert(ind.to_string(), crate::indicators::volume::obv(&bars));
             }
-            "zscore" => {
-                series.insert(ind.to_string(), crate::indicators::extra::zscore(&closes, 20));
+            "zscore" | "z_score" => {
+                series.insert(
+                    ind.to_string(),
+                    crate::indicators::extra::zscore(&closes, period),
+                );
             }
             "ichimoku" => {
                 let ich = crate::indicators::trend::ichimoku(&bars, 9, 26, 52, 26);
@@ -770,19 +901,25 @@ async fn get_indicators(
                 series.insert("kdj_d".into(), k.d);
                 series.insert("kdj_j".into(), k.j);
             }
-            "stoch" => {
-                let s = crate::indicators::momentum::stochastic(&bars, 14, 3, 3);
+            "stoch" | "stochastic" => {
+                let s = crate::indicators::momentum::stochastic(&bars, period, 3, 3);
                 series.insert("stoch_k".into(), s.k);
                 series.insert("stoch_d".into(), s.d);
             }
             "williams_r" => {
-                series.insert(ind.to_string(), crate::indicators::momentum::williams_r(&bars, 14));
+                series.insert(
+                    ind.to_string(),
+                    crate::indicators::momentum::williams_r(&bars, period),
+                );
             }
             "cci" => {
-                series.insert(ind.to_string(), crate::indicators::momentum::cci(&bars, 20));
+                series.insert(
+                    ind.to_string(),
+                    crate::indicators::momentum::cci(&bars, period),
+                );
             }
-            "adx" => {
-                let d = crate::indicators::trend::dmi(&bars, 14);
+            "adx" | "dmi_adx" => {
+                let d = crate::indicators::trend::dmi(&bars, period);
                 series.insert("adx_plus_di".into(), d.plus_di);
                 series.insert("adx_minus_di".into(), d.minus_di);
                 series.insert("adx_adx".into(), d.adx);
@@ -791,25 +928,26 @@ async fn get_indicators(
                 series.insert(ind.to_string(), crate::indicators::ma::bbi(&bars));
             }
             "alligator" => {
-                let r = crate::indicators::ma::rma(&closes, 13);
-                let e = crate::indicators::ma::ema(&closes, 8);
-                series.insert("alligator_jaw".into(), r);
-                series.insert("alligator_teeth".into(), e);
-                series.insert("alligator_lips".into(), crate::indicators::ma::ema(&closes, 5));
+                let a = crate::indicators::ma::alligator(&bars);
+                series.insert("alligator_jaw".into(), a.jaw);
+                series.insert("alligator_teeth".into(), a.teeth);
+                series.insert("alligator_lips".into(), a.lips);
             }
             "ppo" => {
                 let closes_f = closes.clone();
                 let n = closes_f.len();
                 let ema_f = crate::indicators::ma::ema(&closes_f, 12);
                 let ema_s = crate::indicators::ma::ema(&closes_f, 26);
-                let ppo: Vec<Option<f64>> = (0..n).map(|i| match (ema_f[i], ema_s[i]) {
-                    (Some(f), Some(s)) if s != 0.0 => Some((f - s) / s * 100.0),
-                    _ => None,
-                }).collect();
+                let ppo: Vec<Option<f64>> = (0..n)
+                    .map(|i| match (ema_f[i], ema_s[i]) {
+                        (Some(f), Some(s)) if s != 0.0 => Some((f - s) / s * 100.0),
+                        _ => None,
+                    })
+                    .collect();
                 series.insert("ppo".into(), ppo);
             }
             "vortex" => {
-                let v = crate::indicators::trend::vortex(&bars, 14);
+                let v = crate::indicators::trend::vortex(&bars, period);
                 series.insert("vortex_plus".into(), v.plus);
                 series.insert("vortex_minus".into(), v.minus);
             }
@@ -818,18 +956,29 @@ async fn get_indicators(
     }
 
     // 同时返回原始 K 线
-    let json_bars: Vec<Value> = bars.iter().map(|b| json!({
-        "timestamp": b.timestamp.to_rfc3339(),
-        "open": b.open, "high": b.high, "low": b.low, "close": b.close,
-        "volume": b.volume,
-    })).collect();
+    let json_bars: Vec<Value> = bars
+        .iter()
+        .map(|b| {
+            json!({
+                "timestamp": b.timestamp.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true),
+                "open": b.open, "high": b.high, "low": b.low, "close": b.close,
+                "volume": b.volume,
+            })
+        })
+        .collect();
 
     // 把指标序列转成 (timestamp, value) 对, 便于前端画图
-    let indicator_output: HashMap<String, Vec<Option<Value>>> = series.iter()
+    let indicator_output: HashMap<String, Vec<Option<Value>>> = series
+        .iter()
         .map(|(k, v)| {
-            let pairs: Vec<Option<Value>> = v.iter().enumerate().map(|(i, val)| {
-                val.map(|x| json!({"x": bars[i].timestamp.to_rfc3339(), "y": x}))
-            }).collect();
+            let pairs: Vec<Option<Value>> = v
+                .iter()
+                .enumerate()
+                .map(|(i, val)| {
+                    val.filter(|x| x.is_finite())
+                        .map(|x| json!({"x": bars[i].timestamp.to_rfc3339(), "y": x}))
+                })
+                .collect();
             (k.clone(), pairs)
         })
         .collect();
@@ -838,6 +987,7 @@ async fn get_indicators(
         "symbol": symbol,
         "bars": json_bars,
         "indicators": indicator_output,
+        "source": source,
     })))
 }
 
@@ -863,8 +1013,6 @@ struct BinanceSymbol {
     status: String,
     #[serde(rename = "quoteAsset")]
     quote_asset: String,
-    #[serde(rename = "baseAsset")]
-    base_asset: String,
     #[serde(rename = "isSpotTradingAllowed")]
     is_spot_trading_allowed: Option<bool>,
 }
@@ -883,27 +1031,33 @@ async fn fetch_symbols_from_binance() -> anyhow::Result<Vec<String>> {
     // 获取所有交易对
     let exchange_info: serde_json::Value = client
         .get("https://api.binance.com/api/v3/exchangeInfo")
-        .send().await?
-        .json().await?;
-    let raw_symbols: Vec<BinanceSymbol> = serde_json::from_value(
-        exchange_info["symbols"].clone()
-    )?;
+        .send()
+        .await?
+        .json()
+        .await?;
+    let raw_symbols: Vec<BinanceSymbol> = serde_json::from_value(exchange_info["symbols"].clone())?;
     // 获取 24h 成交量排序
     let tickers: Vec<BinanceTicker> = client
         .get("https://api.binance.com/api/v3/ticker/24hr")
-        .send().await?
-        .json().await?;
+        .send()
+        .await?
+        .json()
+        .await?;
     // 过滤 USDT 现货可交易对,按成交量排序
-    let mut pairs: Vec<(String, f64)> = raw_symbols.into_iter()
-        .filter(|s| s.status == "TRADING"
-                  && s.is_spot_trading_allowed.unwrap_or(false)
-                  && s.quote_asset == "USDT")
-        .filter_map(|s| {
-            let vol = tickers.iter()
+    let mut pairs: Vec<(String, f64)> = raw_symbols
+        .into_iter()
+        .filter(|s| {
+            s.status == "TRADING"
+                && s.is_spot_trading_allowed.unwrap_or(false)
+                && s.quote_asset == "USDT"
+        })
+        .map(|s| {
+            let vol = tickers
+                .iter()
                 .find(|t| t.symbol == s.symbol)
                 .and_then(|t| t.quote_volume.parse::<f64>().ok())
                 .unwrap_or(0.0);
-            Some((s.symbol, vol))
+            (s.symbol, vol)
         })
         .collect();
     pairs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
@@ -911,6 +1065,9 @@ async fn fetch_symbols_from_binance() -> anyhow::Result<Vec<String>> {
 }
 
 async fn get_cached_symbols() -> Vec<String> {
+    if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
+        return vec!["BTCUSDT".into(), "ETHUSDT".into()];
+    }
     // 检查缓存 (5 分钟过期)
     {
         let cache = symbols_cache().read().await;
@@ -941,13 +1098,40 @@ async fn get_cached_symbols() -> Vec<String> {
 
 fn default_symbols() -> Vec<String> {
     vec![
-        "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT",
-        "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "MATICUSDT", "DOTUSDT",
-        "LINKUSDT", "TRXUSDT", "LTCUSDT", "BCHUSDT", "ATOMUSDT",
-        "NEARUSDT", "APTUSDT", "OPUSDT", "ARBUSDT", "INJUSDT",
-        "SUIUSDT", "SEIUSDT", "TIAUSDT", "WLDUSDT", "PEPEUSDT",
-        "SHIBUSDT", "FILUSDT", "ICPUSDT", "STXUSDT", "RNDRUSDT",
-    ].into_iter().map(String::from).collect()
+        "BTCUSDT",
+        "ETHUSDT",
+        "SOLUSDT",
+        "BNBUSDT",
+        "XRPUSDT",
+        "DOGEUSDT",
+        "ADAUSDT",
+        "AVAXUSDT",
+        "MATICUSDT",
+        "DOTUSDT",
+        "LINKUSDT",
+        "TRXUSDT",
+        "LTCUSDT",
+        "BCHUSDT",
+        "ATOMUSDT",
+        "NEARUSDT",
+        "APTUSDT",
+        "OPUSDT",
+        "ARBUSDT",
+        "INJUSDT",
+        "SUIUSDT",
+        "SEIUSDT",
+        "TIAUSDT",
+        "WLDUSDT",
+        "PEPEUSDT",
+        "SHIBUSDT",
+        "FILUSDT",
+        "ICPUSDT",
+        "STXUSDT",
+        "RNDRUSDT",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect()
 }
 
 async fn get_symbols() -> Json<Value> {
@@ -963,10 +1147,7 @@ async fn get_symbols() -> Json<Value> {
 // WebSocket:实时推送模拟盘状态
 // -----------------------------------------------------------------------------
 
-async fn ws_paper(
-    ws: WebSocketUpgrade,
-    State(state): State<Arc<AppState>>,
-) -> Response {
+async fn ws_paper(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> Response {
     ws.on_upgrade(move |socket| ws_paper_loop(socket, state))
 }
 
@@ -975,18 +1156,18 @@ async fn ws_paper_loop(socket: WebSocket, state: Arc<AppState>) {
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(2));
 
     loop {
-        interval.tick().await;
-        let snapshot = {
-            let s = state.paper_state.read().await;
-            s.snapshot()
-        };
-        let msg = serde_json::to_string(&snapshot).unwrap_or_default();
-        if sender.send(Message::Text(msg)).await.is_err() {
-            break;
-        }
-        // 监听客户端关闭
-        if let Some(Ok(Message::Close(_))) = receiver.next().await {
-            break;
+        tokio::select! {
+            _ = interval.tick() => {
+                let snapshot = state.paper_state.read().await.snapshot();
+                if sender.send(Message::Text(serde_json::to_string(&snapshot).unwrap_or_default())).await.is_err() { break; }
+            }
+            message = receiver.next() => {
+                match message {
+                    Some(Ok(Message::Ping(data))) => { let sent = sender.send(Message::Pong(data)).await; if sent.is_err() { break; } }
+                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
+                    _ => {}
+                }
+            }
         }
     }
 }
@@ -995,91 +1176,153 @@ async fn ws_paper_loop(socket: WebSocket, state: Arc<AppState>) {
 // 返回符号当前所在行号 (行级跳转)
 // -----------------------------------------------------------------------------
 
-#[derive(Deserialize)]
-struct CodeLocQuery {
-    ref_: Option<String>,
-}
-
 async fn get_code_loc(
     axum::extract::Query(q): axum::extract::Query<HashMap<String, String>>,
 ) -> Json<Value> {
-    let raw = q.get("ref").cloned().unwrap_or_default();
-    // 不允许任意路径 — 必须是 src/ 开头
-    if !raw.starts_with("src/") {
-        return Json(json!({
-            "ok": false,
-            "error": "ref 必须以 src/ 开头",
-            "line": null,
-            "url": null,
-        }));
-    }
-    // 解析 path::symbol
-    let parts: Vec<&str> = raw.split("::").collect();
-    if parts.len() < 2 {
-        return Json(json!({
-            "ok": false,
-            "error": "格式必须是 src/path.rs::symbol",
-            "line": null,
-            "url": null,
-        }));
-    }
-    let path = parts[0];
-    let sym = parts[1];
-    let line = locate_symbol(path, sym);
-    let url = match line {
-        Some(n) => json!({
-            "ok": true,
-            "ref": raw,
-            "path": path,
-            "symbol": sym,
-            "line": n,
-            "url": format!("https://github.com/Sigma711/axiom/blob/main/{}#L{}", path, n),
-        }),
-        None => json!({
-            "ok": false,
-            "ref": raw,
-            "path": path,
-            "symbol": sym,
-            "line": null,
-            "url": null,
-            "error": format!("符号 {} 不存在于 {}", sym, path),
-        }),
-    };
-    Json(url)
-}
-
-/// 在文件中定位符号 (fn / struct / enum) 的行号
-fn locate_symbol(path: &str, sym: &str) -> Option<usize> {
-    let content = std::fs::read_to_string(path).ok()?;
-    for (i, line) in content.lines().enumerate() {
-        let trimmed = line.trim_start();
-        // 匹配 pub fn / fn / pub struct / struct / pub enum / enum / pub const / const
-        let patterns = [
-            format!("pub fn {} ", sym),
-            format!("pub fn {}(", sym),
-            format!("pub fn {}<", sym),
-            format!("pub fn {}\t", sym),
-            format!("fn {} ", sym),
-            format!("fn {}(", sym),
-            format!("pub struct {} ", sym),
-            format!("pub struct {}{{", sym),
-            format!("struct {} ", sym),
-            format!("pub enum {} ", sym),
-            format!("enum {} ", sym),
-            format!("pub const {} ", sym),
-            format!("const {} ", sym),
-        ];
-        if patterns.iter().any(|p| trimmed.starts_with(p)) {
-            return Some(i + 1);
+    let reference = q.get("ref").map(String::as_str).unwrap_or("");
+    match crate::code_links::resolve(reference) {
+        Some(location) => {
+            let mut value = json!(location);
+            value["ok"] = json!(true);
+            value["ref"] = json!(reference);
+            Json(value)
         }
+        None => Json(
+            json!({"ok":false,"ref":reference,"line":null,"url":null,"error":"该实现引用不存在于当前构建，请检查知识条目与实现是否一起更新。"}),
+        ),
     }
-    None
 }
 
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
 
-/// 测试辅助: 解析 "src/path::sym" 格式
-pub fn locate_symbol_for_test(ref_str: &str) -> Option<usize> {
-    let parts: Vec<&str> = ref_str.split("::").collect();
-    if parts.len() < 2 { return None; }
-    locate_symbol(parts[0], parts[1])
+async fn get_code_source(
+    axum::extract::Query(q): axum::extract::Query<HashMap<String, String>>,
+) -> Response {
+    let path = q.get("path").map(String::as_str).unwrap_or("");
+    let Some(source) = crate::code_links::source(path) else {
+        return (StatusCode::NOT_FOUND, "当前构建中没有该源码文件").into_response();
+    };
+    let line = q
+        .get("line")
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(1);
+    let end = q
+        .get("end_line")
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(line);
+    let title = html_escape(path);
+    let mut rows = String::new();
+    use std::fmt::Write;
+    for (i, source_line) in source.lines().enumerate() {
+        let n = i + 1;
+        let class = if n >= line && n <= end {
+            "selected"
+        } else {
+            ""
+        };
+        let _=writeln!(rows,"<span id=\"L{n}\" class=\"row {class}\"><a href=\"#L{n}\" class=\"line\" aria-label=\"第{n}行\">{n}</a><code>{}</code></span>",html_escape(source_line));
+    }
+    let revision = crate::code_links::revision().unwrap_or("本地构建");
+    let state = if crate::code_links::is_dirty() {
+        "含本地改动 · 展示与正在运行的程序完全一致的源码快照"
+    } else {
+        "已提交 · 固定版本源码快照"
+    };
+    let html = format!(
+        r##"<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{title} · AXIOM 实现</title><style>
+    :root{{color-scheme:light dark;--bg:#f5f7fa;--fg:#202d3c;--muted:#576579;--selection:#dceafe;--border:#c4ccda}}@media(prefers-color-scheme:dark){{:root{{--bg:#151c25;--fg:#dbe4ef;--muted:#aab9cb;--selection:#243b56;--border:#44556d}}}}*{{box-sizing:border-box}}body{{margin:0;background:var(--bg);color:var(--fg);font:14px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace}}header{{padding:20px 28px;border-bottom:1px solid var(--border)}}h1{{font-size:20px;margin:0 0 8px}}p{{margin:3px 0;color:var(--muted)}}pre{{margin:0;padding:18px 0;overflow:auto}}.row{{display:flex;min-width:max-content;scroll-margin-top:12px}}.line{{width:76px;flex:none;padding-right:22px;text-align:right;color:var(--muted);text-decoration:none;user-select:none}}code{{white-space:pre;padding-right:24px}}.selected,:target{{background:var(--selection)}}a:focus-visible{{outline:2px solid currentColor}}
+    </style></head><body><header><h1>{title}</h1><p>第 {line}–{end} 行 · {state}</p><p>版本 {revision} · 行号来自构建时的 Rust 语法树</p></header><pre aria-label="实现源码">{rows}</pre></body></html>"##
+    );
+    (
+        [
+            ("content-type", "text/html; charset=utf-8"),
+            (
+                "content-security-policy",
+                "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'self'",
+            ),
+            ("x-content-type-options", "nosniff"),
+        ],
+        html,
+    )
+        .into_response()
+}
+
+/// Compatibility seam for existing symbol-location tests.
+pub fn locate_symbol_for_test(reference: &str) -> Option<usize> {
+    crate::code_links::resolve(reference).map(|location| location.line)
+}
+
+async fn get_practice() -> Json<Value> {
+    let concepts = crate::practice::catalog();
+    Json(
+        json!({"total":concepts.len(),"concepts":concepts,"modules":["data","backtest","paper","compare"]}),
+    )
+}
+
+#[derive(Deserialize)]
+struct PracticeRequest {
+    concept_id: String,
+    module: String,
+    symbol: Option<String>,
+    source: Option<String>,
+    limit: Option<usize>,
+    bars: Option<Vec<Bar>>,
+    #[serde(default = "empty_inputs")]
+    inputs: Value,
+}
+
+async fn post_practice(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<PracticeRequest>,
+) -> Result<Json<Value>, ApiError> {
+    if !["data", "backtest", "paper", "compare"].contains(&req.module.as_str()) {
+        return Err(validate::bad("invalid practice module"));
+    }
+    let symbol = req
+        .symbol
+        .unwrap_or_else(|| state.config.trading.symbol.clone());
+    let source = req.source.unwrap_or_else(|| "synthetic".into());
+    let limit = req.limit.unwrap_or(200);
+    validate::market(&symbol, &source, limit, 5000)?;
+    let registry = crate::practice::catalog();
+    let concept = registry
+        .iter()
+        .find(|c| c.id == req.concept_id)
+        .ok_or_else(|| validate::bad("未知概念"))?;
+    let independent = concept.input_kind != "market_bars";
+    let context = if independent {
+        "explicit_teaching_inputs"
+    } else if req.bars.is_some() {
+        "module_snapshot"
+    } else {
+        "selected_dataset"
+    };
+    let bars = if let Some(bars) = req.bars {
+        if !bars.is_empty() {
+            validate::bars(&bars)?;
+        }
+        bars
+    } else if independent {
+        Vec::new()
+    } else {
+        market_bars(&state, &symbol, &source, limit).await?
+    };
+    let mut result =
+        crate::practice::evaluate(&req.concept_id, &bars, &req.inputs).map_err(validate::bad)?;
+    result["module"] = json!(req.module);
+    result["symbol"] = json!(symbol);
+    result["source"] = json!(source);
+    result["context"] = json!(context);
+    result["bars"] = json!(bars);
+    Ok(Json(result))
+}
+
+fn empty_inputs() -> Value {
+    json!({})
 }

@@ -118,9 +118,12 @@ impl DataFeed for SyntheticFeed {
 
     fn stream_live(&self, symbol: &str) -> Result<Vec<Bar>> {
         let now = Utc::now()
-            .with_minute(0).unwrap()
-            .with_second(0).unwrap()
-            .with_nanosecond(0).unwrap();
+            .with_minute(0)
+            .unwrap()
+            .with_second(0)
+            .unwrap()
+            .with_nanosecond(0)
+            .unwrap();
         self.fetch_historical(symbol, now, 1)
     }
 }
@@ -141,30 +144,49 @@ impl CsvFeed {
     }
 
     fn path(&self, symbol: &str, timeframe: &str) -> PathBuf {
-        let safe = symbol.replace('/', "_");
-        self.cache_dir.join(format!("{}_{}.csv", safe, timeframe))
+        let safe = |value: &str| {
+            value
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() || c == '-' {
+                        c
+                    } else {
+                        '_'
+                    }
+                })
+                .collect::<String>()
+        };
+        self.cache_dir
+            .join(format!("{}_{}.csv", safe(symbol), safe(timeframe)))
     }
 
     pub fn save(&self, symbol: &str, timeframe: &str, bars: &[Bar]) -> Result<PathBuf> {
         let path = self.path(symbol, timeframe);
-        let mut f = File::create(&path)
-            .with_context(|| format!("创建文件失败: {:?}", path))?;
+        crate::practice::validate_bars(bars).map_err(anyhow::Error::msg)?;
+        let temp = path.with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
+        let mut f = File::create(&temp).with_context(|| format!("创建文件失败: {:?}", path))?;
         writeln!(f, "timestamp,open,high,low,close,volume")?;
         for b in bars {
             writeln!(
                 f,
                 "{},{},{},{},{},{}",
                 b.timestamp.to_rfc3339(),
-                b.open, b.high, b.low, b.close, b.volume
+                b.open,
+                b.high,
+                b.low,
+                b.close,
+                b.volume
             )?;
         }
+        f.sync_all()?;
+        drop(f);
+        std::fs::rename(&temp, &path)?;
         Ok(path)
     }
 
     pub fn load(&self, symbol: &str, timeframe: &str) -> Result<Vec<Bar>> {
         let path = self.path(symbol, timeframe);
-        let f = File::open(&path)
-            .with_context(|| format!("打开文件失败: {:?}", path))?;
+        let f = File::open(&path).with_context(|| format!("打开文件失败: {:?}", path))?;
         let reader = BufReader::new(f);
         let mut rdr = csv::ReaderBuilder::new()
             .has_headers(true)
@@ -172,8 +194,11 @@ impl CsvFeed {
         let mut bars = Vec::new();
         for result in rdr.records() {
             let record = result?;
-            let ts = DateTime::parse_from_rfc3339(&record[0])?
-                .with_timezone(&Utc);
+            anyhow::ensure!(
+                record.len() == 6,
+                "CSV must contain timestamp/open/high/low/close/volume"
+            );
+            let ts = DateTime::parse_from_rfc3339(&record[0])?.with_timezone(&Utc);
             bars.push(Bar {
                 timestamp: ts,
                 open: record[1].parse()?,
@@ -183,6 +208,7 @@ impl CsvFeed {
                 volume: record[5].parse()?,
             });
         }
+        crate::practice::validate_bars(&bars).map_err(anyhow::Error::msg)?;
         Ok(bars)
     }
 }
@@ -224,8 +250,12 @@ fn parse_binance_kline(v: &serde_json::Value) -> Option<Bar> {
     let close: f64 = arr.get(4)?.as_str()?.parse().ok()?;
     let volume: f64 = arr.get(5)?.as_str()?.parse().ok()?;
     Some(Bar {
-        timestamp: Utc.timestamp_millis_opt(ts).single().unwrap_or_else(Utc::now),
-        open, high, low, close, volume,
+        timestamp: Utc.timestamp_millis_opt(ts).single()?,
+        open,
+        high,
+        low,
+        close,
+        volume,
     })
 }
 
@@ -253,33 +283,60 @@ impl HttpFeed {
         since: DateTime<Utc>,
         limit: usize,
     ) -> Result<Vec<Bar>> {
-        let since_ms = since.timestamp_millis();
-        let url = format!(
-            "{}/api/v3/klines?symbol={}&interval=1h&startTime={}&limit={}",
-            self.base_url,
-            symbol.replace('/', ""),
-            since_ms,
-            limit.min(1000)
+        anyhow::ensure!(
+            (1..=5000).contains(&limit),
+            "limit must be between 1 and 5000"
         );
-
-        let body = self.client
-            .get(&url)
-            .send()
-            .await
-            .with_context(|| format!("HTTP 请求失败: {}", url))?
-            .error_for_status()
-            .with_context(|| "HTTP 状态码错误")?
-            .text()
-            .await
-            .with_context(|| "读取响应失败")?;
-
-        let raw: serde_json::Value = serde_json::from_str(&body)
-            .with_context(|| "解析响应失败 (Binance 返回的不是预期 JSON 数组)")?;
-
-        let bars: Vec<Bar> = raw
-            .as_array()
-            .map(|arr| arr.iter().filter_map(parse_binance_kline).collect())
-            .unwrap_or_default();
+        let mut cursor = since.timestamp_millis();
+        let mut bars = Vec::with_capacity(limit);
+        let now = Utc::now();
+        while bars.len() < limit {
+            let batch_limit = (limit - bars.len()).min(1000);
+            let raw: serde_json::Value = self
+                .client
+                .get(format!("{}/api/v3/klines", self.base_url))
+                .query(&[
+                    ("symbol", symbol.replace('/', "")),
+                    ("interval", "1h".into()),
+                    ("startTime", cursor.to_string()),
+                    ("limit", batch_limit.to_string()),
+                ])
+                .send()
+                .await
+                .context("market request failed")?
+                .error_for_status()
+                .context("market returned HTTP error")?
+                .json()
+                .await
+                .context("invalid market JSON")?;
+            let rows = raw
+                .as_array()
+                .context("market response must be a kline array")?;
+            if rows.is_empty() {
+                break;
+            }
+            let parsed: Vec<Bar> = rows
+                .iter()
+                .map(|row| parse_binance_kline(row).context("invalid kline fields"))
+                .collect::<Result<_>>()?;
+            crate::practice::validate_bars(&parsed).map_err(anyhow::Error::msg)?;
+            anyhow::ensure!(
+                parsed[0].timestamp.timestamp_millis() >= cursor,
+                "market pagination moved backwards"
+            );
+            let last = parsed.last().unwrap().timestamp;
+            cursor = last.timestamp_millis() + 3_600_000;
+            bars.extend(
+                parsed
+                    .into_iter()
+                    .filter(|bar| bar.timestamp + Duration::hours(1) <= now),
+            );
+            if rows.len() < batch_limit || last + Duration::hours(1) > now {
+                break;
+            }
+        }
+        bars.truncate(limit);
+        crate::practice::validate_bars(&bars).map_err(anyhow::Error::msg)?;
         Ok(bars)
     }
 }
@@ -296,7 +353,7 @@ impl AsyncDataFeed for HttpFeed {
         if let Ok(cached) = self.csv.load(symbol, "1h") {
             let cached_after: Vec<Bar> = cached
                 .iter()
-                .filter(|b| b.timestamp >= since)
+                .filter(|b| b.timestamp >= since && b.timestamp + Duration::hours(1) <= Utc::now())
                 .cloned()
                 .collect();
             if cached_after.len() >= limit {
@@ -308,12 +365,10 @@ impl AsyncDataFeed for HttpFeed {
         let bars = self.fetch_remote(symbol, since, limit).await?;
 
         // 3. 写回缓存
-        let mut merged = if let Ok(existing) = self.csv.load(symbol, "1h") {
-            existing
-        } else {
-            Vec::new()
-        };
-        merged.extend(bars.iter().cloned());
+        let mut merged = self.csv.load(symbol, "1h").unwrap_or_default();
+        let incoming: std::collections::BTreeSet<_> = bars.iter().map(|b| b.timestamp).collect();
+        merged.retain(|b| !incoming.contains(&b.timestamp));
+        merged.extend(bars.iter().copied());
         merged.sort_by_key(|b| b.timestamp);
         merged.dedup_by_key(|b| b.timestamp);
         self.csv.save(symbol, "1h", &merged).ok();
@@ -322,7 +377,15 @@ impl AsyncDataFeed for HttpFeed {
     }
 
     async fn stream_live_async(&self, symbol: &str) -> Result<Vec<Bar>> {
-        let since = Utc::now() - Duration::hours(2);
-        self.fetch_historical_async(symbol, since, 2).await
+        let now = Utc::now();
+        // Avoid replaying cached history as live events. Binance includes the
+        // current unfinished 1h candle, which must not drive a strategy yet.
+        let mut bars = self
+            .fetch_remote(symbol, now - Duration::hours(3), 3)
+            .await?;
+        bars.retain(|bar| bar.timestamp + Duration::hours(1) <= now);
+        bars.sort_by_key(|bar| bar.timestamp);
+        bars.dedup_by_key(|bar| bar.timestamp);
+        Ok(bars)
     }
 }

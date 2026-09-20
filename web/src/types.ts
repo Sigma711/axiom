@@ -15,6 +15,10 @@ export interface KnowledgeEntry {
   related: string[];
   code_url: string;
   implementation: string;
+  code_ref?: string;
+  source_refs?: Array<{ source_id: string; title: string; pdf_page: number }>;
+  /** Optional teaching inputs supplied by newer knowledge payloads. */
+  inputs?: PracticeConcept['inputs'];
 }
 
 export interface KnowledgeResponse {
@@ -71,10 +75,14 @@ export interface BacktestResult {
   trades: Trade[];
   signals: Array<{ i: number; timestamp: string; side: string; strength: number; reason: string }>;
   fills: Array<{ timestamp: string; side: string; size: number; price: number; commission: number }>;
-  metrics: Record<string, number | null>;
+  metrics: Record<string, number | null | Record<string, string>>;
+  bars?: Bar[];
 }
 
 export interface PaperSnapshot {
+  symbol?: string;
+  source?: SourceType;
+  initial_capital?: number;
   is_running: boolean;
   current_bar: Bar | null;
   cash: number;
@@ -86,6 +94,7 @@ export interface PaperSnapshot {
   equity_curve: EquityPoint[];
   trades_count: number;
   log: Array<{ timestamp: string; level: string; message: string }>;
+  bars?: Bar[];
 }
 
 export interface CustomStrategy {
@@ -97,3 +106,28 @@ export interface CustomStrategy {
 
 export type ChartType = 'candle' | 'heikin_ashi';
 export type SourceType = 'real' | 'synthetic';
+
+export interface PracticeConcept {
+  id: string;
+  name: string;
+  category: string;
+  input_kind: 'market_bars' | 'independent_inputs' | 'manual_annotation';
+  inputs: Array<{ key: string; label: string; default: unknown }>;
+  notes: string;
+}
+
+export interface PracticeResult {
+  concept_id: string;
+  status: 'computed' | 'undefined';
+  reason: string | null;
+  input_kind: PracticeConcept['input_kind'];
+  provenance: 'provided_market_bars' | 'editable_teaching_inputs';
+  values: Record<string, number | null>;
+  units?: Record<string, string>;
+  series: Array<{ name: string; values: Array<number | null> }>;
+  notes: string[];
+  module: string;
+  source: string;
+  symbol: string;
+  bars: Bar[];
+}

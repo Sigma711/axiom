@@ -6,6 +6,8 @@ import type {
   PaperSnapshot,
   Bar,
   SourceType,
+  PracticeConcept,
+  PracticeResult,
 } from './types';
 
 const BASE = '';  // 同源
@@ -47,16 +49,23 @@ export const api = {
   getHeikinAshi: (symbol: string, limit: number, source: SourceType) =>
     call<{ symbol: string; bars: Bar[]; chart: string }>(
       'GET', `/api/heikin_ashi?symbol=${encodeURIComponent(symbol)}&limit=${limit}&source=${source}`),
+  getCodeLocation: (ref: string) => call<Record<string, unknown>>('GET', `/api/code_loc?ref=${encodeURIComponent(ref)}`),
   runBacktest: (req: {
     strategy: string; params?: Record<string, number>;
     symbol: string; source: SourceType; limit: number; initial_capital: number;
     stop_loss_pct?: number; take_profit_pct?: number; max_position_pct?: number;
+    bars?: Bar[];
   }) => call<BacktestResult>('POST', '/api/backtest', req),
   paperSnapshot: () => call<PaperSnapshot>('GET', '/api/paper/snapshot'),
   paperStart: () => call<{ status: string }>('POST', '/api/paper/start'),
   paperStop: () => call<{ status: string }>('POST', '/api/paper/stop'),
   paperStrategy: (strategy: string) =>
     call<{ status: string; strategy: string }>('POST', '/api/paper/strategy', { strategy }),
+  listPractice: () => call<{ concepts: PracticeConcept[]; modules: string[]; total: number }>('GET', '/api/practice'),
+  runPractice: (req: {
+    concept_id: string; module: 'data' | 'backtest' | 'paper' | 'compare'; symbol: string; source: SourceType; limit: number;
+    inputs: Record<string, unknown>; bars?: Bar[];
+  }) => call<PracticeResult>('POST', '/api/practice', req),
 };
 
 // 工具函数

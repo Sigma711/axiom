@@ -8,7 +8,7 @@ license = "MIT"
 [dependencies]
 # Web 框架
 axum = { version = "0.7", features = ["ws", "macros"] }
-tower = "0.5"
+tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["fs", "trace"] }
 
 # 异步与 HTTP
@@ -19,7 +19,7 @@ futures = "0.3"
 
 # 序列化
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["float_roundtrip"] }
 serde_yaml = "0.9"
 
 # 数据处理
@@ -37,7 +37,11 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
+syn = { version = "2", features = ["full", "visit"] }
+proc-macro2 = { version = "1", features = ["span-locations"] }
+quote = "1"
 approx = "0.5"
+tokio-tungstenite = "0.24"
 
 [[bin]]
 name = "axiom"
@@ -49,3 +53,9 @@ lto = "thin"
 codegen-units = 1
 strip = true
 
+
+[build-dependencies]
+syn = { version = "2", features = ["full", "visit"] }
+proc-macro2 = { version = "1", features = ["span-locations"] }
+quote = "1"
+serde_json = "1"

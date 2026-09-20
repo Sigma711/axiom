@@ -38,6 +38,10 @@ pub trait Broker: Send + Sync {
     fn place_order(&mut self, order: Order) -> Fill;
     fn get_position(&self, symbol: &str) -> Position;
     fn get_cash(&self) -> f64;
+    /// Includes predictable execution costs for cash-safe position sizing.
+    fn buy_cost_per_unit(&self, price: f64) -> f64 {
+        price
+    }
     fn set_market_price(&mut self, symbol: &str, price: f64);
     fn get_market_price(&self, symbol: &str) -> Option<f64>;
     fn trade_log(&self) -> Vec<(DateTime<Utc>, String, f64)>;
@@ -74,20 +78,26 @@ impl SimulatedBroker {
     /// 计算成交价:市价单按中间价 ± 滑点成交;限价单仅在价格触及限价时成交。
     fn resolve_fill_price(&self, order: &Order) -> Option<f64> {
         let mid = *self.last_price.get(&order.symbol)?;
+        if !mid.is_finite() || mid <= 0.0 {
+            return None;
+        }
         match order.order_type {
             OrderType::Market => {
                 let slip = mid * self.config.slippage_rate;
                 Some(match order.side {
-                    Side::Buy => mid + slip,   // 买得更贵一点
-                    Side::Sell => mid - slip,  // 卖得更便宜一点
+                    Side::Buy => mid + slip,  // 买得更贵一点
+                    Side::Sell => mid - slip, // 卖得更便宜一点
                     Side::Hold => return None,
                 })
             }
             OrderType::Limit => {
                 let limit = order.price?;
+                if !limit.is_finite() || limit <= 0.0 {
+                    return None;
+                }
                 match order.side {
-                    Side::Buy if mid <= limit => Some(limit),
-                    Side::Sell if mid >= limit => Some(limit),
+                    Side::Buy if mid <= limit => Some(mid),
+                    Side::Sell if mid >= limit => Some(mid),
                     _ => None,
                 }
             }
@@ -95,41 +105,40 @@ impl SimulatedBroker {
     }
 
     /// 把成交应用到账户上(更新现金和持仓)
-    fn apply_fill(&mut self, symbol: &str, side: Side, size: f64,
-                  price: f64, commission: f64) {
-        let pos = self.positions.entry(symbol.to_string())
-            .or_insert_with(|| Position { symbol: symbol.to_string(), ..Default::default() });
-        match side {
-            Side::Buy => {
-                self.cash -= price * size + commission;
-                let new_size = pos.size + size;
-                if new_size.abs() < 1e-9 {
-                    pos.size = 0.0;
-                    pos.avg_entry_price = 0.0;
-                } else {
-                    pos.avg_entry_price =
-                        (pos.avg_entry_price * pos.size + price * size) / new_size;
-                    pos.size = new_size;
-                }
+    fn apply_fill(&mut self, symbol: &str, side: Side, size: f64, price: f64, commission: f64) {
+        let pos = self
+            .positions
+            .entry(symbol.to_string())
+            .or_insert_with(|| Position {
+                symbol: symbol.to_string(),
+                ..Default::default()
+            });
+        let delta = match side {
+            Side::Buy => size,
+            Side::Sell => -size,
+            Side::Hold => return,
+        };
+        self.cash -= delta * price + commission;
+        let old_size = pos.size;
+        let new_size = old_size + delta;
+        if old_size == 0.0 || old_size.signum() == delta.signum() {
+            let execution_basis = price + delta.signum() * commission / size;
+            pos.avg_entry_price =
+                (old_size.abs() * pos.avg_entry_price + size * execution_basis) / new_size.abs();
+        } else {
+            let closing_size = old_size.abs().min(size);
+            let closing_fee = commission * closing_size / size;
+            pos.realized_pnl +=
+                (price - pos.avg_entry_price) * closing_size * old_size.signum() - closing_fee;
+            if new_size.abs() < 1e-9 {
+                pos.avg_entry_price = 0.0;
+            } else if new_size.signum() != old_size.signum() {
+                // Only the opening portion contributes to the new cost basis.
+                pos.avg_entry_price =
+                    price + new_size.signum() * (commission - closing_fee) / new_size.abs();
             }
-            Side::Sell => {
-                self.cash += price * size - commission;
-                let realized = (price - pos.avg_entry_price) * size - commission;
-                pos.realized_pnl += realized;
-                let new_size = pos.size - size;
-                if new_size.abs() < 1e-9 {
-                    pos.size = 0.0;
-                    pos.avg_entry_price = 0.0;
-                } else {
-                    pos.size = new_size;
-                    // 如果从多头翻空头,avg price 重置
-                    if (pos.size > 0.0) != (new_size > 0.0) {
-                        pos.avg_entry_price = price;
-                    }
-                }
-            }
-            Side::Hold => {}
         }
+        pos.size = if new_size.abs() < 1e-9 { 0.0 } else { new_size };
     }
 
     fn log(&mut self, ts: DateTime<Utc>, msg: String) {
@@ -138,7 +147,28 @@ impl SimulatedBroker {
 }
 
 impl Broker for SimulatedBroker {
+    fn buy_cost_per_unit(&self, price: f64) -> f64 {
+        price * (1.0 + self.config.slippage_rate) * (1.0 + self.config.commission_rate)
+    }
     fn place_order(&mut self, order: Order) -> Fill {
+        if !order.size.is_finite()
+            || order.size <= 0.0
+            || !self.config.commission_rate.is_finite()
+            || !(0.0..1.0).contains(&self.config.commission_rate)
+            || !self.config.slippage_rate.is_finite()
+            || !(0.0..1.0).contains(&self.config.slippage_rate)
+            || !self.cash.is_finite()
+        {
+            return Fill {
+                order_id: order.id,
+                timestamp: order.timestamp,
+                symbol: order.symbol,
+                side: order.side,
+                size: 0.0,
+                price: 0.0,
+                commission: 0.0,
+            };
+        }
         let fill_price = match self.resolve_fill_price(&order) {
             Some(p) => p,
             None => {
@@ -159,8 +189,7 @@ impl Broker for SimulatedBroker {
             Side::Buy => {
                 let cost = fill_price * order.size * (1.0 + self.config.commission_rate);
                 if cost > self.cash + 1e-9 {
-                    self.log(order.timestamp,
-                             format!("资金不足,订单 {} 失败", order.id));
+                    self.log(order.timestamp, format!("资金不足,订单 {} 失败", order.id));
                     return Fill {
                         order_id: order.id,
                         timestamp: order.timestamp,
@@ -175,10 +204,13 @@ impl Broker for SimulatedBroker {
             Side::Sell => {
                 let pos = self.get_position(&order.symbol);
                 if pos.size < order.size && !self.config.allow_short {
-                    self.log(order.timestamp, format!(
-                        "持仓不足,订单 {} 失败(想要卖 {},只有 {})",
-                        order.id, order.size, pos.size
-                    ));
+                    self.log(
+                        order.timestamp,
+                        format!(
+                            "持仓不足,订单 {} 失败(想要卖 {},只有 {})",
+                            order.id, order.size, pos.size
+                        ),
+                    );
                     return Fill {
                         order_id: order.id,
                         timestamp: order.timestamp,
@@ -204,7 +236,13 @@ impl Broker for SimulatedBroker {
         }
 
         let commission = fill_price * order.size * self.config.commission_rate;
-        self.apply_fill(&order.symbol, order.side, order.size, fill_price, commission);
+        self.apply_fill(
+            &order.symbol,
+            order.side,
+            order.size,
+            fill_price,
+            commission,
+        );
 
         Fill {
             order_id: order.id,
@@ -218,12 +256,15 @@ impl Broker for SimulatedBroker {
     }
 
     fn get_position(&self, symbol: &str) -> Position {
-        self.positions.get(symbol).cloned().unwrap_or_else(|| Position {
-            symbol: symbol.to_string(),
-            size: 0.0,
-            avg_entry_price: 0.0,
-            realized_pnl: 0.0,
-        })
+        self.positions
+            .get(symbol)
+            .cloned()
+            .unwrap_or_else(|| Position {
+                symbol: symbol.to_string(),
+                size: 0.0,
+                avg_entry_price: 0.0,
+                realized_pnl: 0.0,
+            })
     }
 
     fn get_cash(&self) -> f64 {

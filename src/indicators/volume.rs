@@ -2,7 +2,6 @@
 //!
 //! PDF 章节:第三部分-十八、成交量与资金指标,十九、成交量分布与筹码结构
 
-use crate::indicators::ma::rma;
 use crate::types::Bar;
 
 /// OBV —— On Balance Volume
@@ -10,7 +9,9 @@ use crate::types::Bar;
 pub fn obv(bars: &[Bar]) -> Vec<Option<f64>> {
     let n = bars.len();
     let mut out = vec![None; n];
-    if n == 0 { return out; }
+    if n == 0 {
+        return out;
+    }
     out[0] = Some(bars[0].volume);
     for i in 1..n {
         let prev = out[i - 1].unwrap();
@@ -31,14 +32,20 @@ pub fn obv(bars: &[Bar]) -> Vec<Option<f64>> {
 pub fn adl(bars: &[Bar]) -> Vec<Option<f64>> {
     let n = bars.len();
     let mut out = vec![None; n];
-    if n == 0 { return out; }
+    if n == 0 {
+        return out;
+    }
     let mut adl_val = 0.0;
     for i in 0..n {
         let h = bars[i].high;
         let l = bars[i].low;
         let c = bars[i].close;
         let range = h - l;
-        let mfm = if range == 0.0 { 0.0 } else { ((c - l) - (h - c)) / range };
+        let mfm = if range == 0.0 {
+            0.0
+        } else {
+            ((c - l) - (h - c)) / range
+        };
         adl_val += mfm * bars[i].volume;
         out[i] = Some(adl_val);
     }
@@ -56,7 +63,11 @@ pub fn cmf(bars: &[Bar], period: usize) -> Vec<Option<f64>> {
         let mut vol_sum = 0.0;
         for b in window {
             let range = b.high - b.low;
-            let mfm = if range == 0.0 { 0.0 } else { ((b.close - b.low) - (b.high - b.close)) / range };
+            let mfm = if range == 0.0 {
+                0.0
+            } else {
+                ((b.close - b.low) - (b.high - b.close)) / range
+            };
             mfv_sum += mfm * b.volume;
             vol_sum += b.volume;
         }
@@ -76,7 +87,7 @@ pub fn mfi(bars: &[Bar], period: usize) -> Vec<Option<f64>> {
         return vec![None; n];
     }
     let mut out = vec![None; n];
-    for i in period..n {
+    for (i, value) in out.iter_mut().enumerate().skip(period) {
         let mut pos_flow = 0.0;
         let mut neg_flow = 0.0;
         for j in (i + 1 - period)..=i {
@@ -90,10 +101,10 @@ pub fn mfi(bars: &[Bar], period: usize) -> Vec<Option<f64>> {
             }
         }
         if neg_flow == 0.0 {
-            out[i] = Some(100.0);
+            *value = Some(100.0);
         } else {
             let ratio = pos_flow / neg_flow;
-            out[i] = Some(100.0 - 100.0 / (1.0 + ratio));
+            *value = Some(100.0 - 100.0 / (1.0 + ratio));
         }
     }
     out
@@ -124,10 +135,14 @@ pub fn chaikin_oscillator(bars: &[Bar], fast: usize, slow: usize) -> Vec<Option<
     let adl_floats: Vec<f64> = adl_vals.iter().map(|x| x.unwrap_or(0.0)).collect();
     let ema_fast = crate::indicators::ma::ema(&adl_floats, fast);
     let ema_slow = crate::indicators::ma::ema(&adl_floats, slow);
-    ema_fast.iter().zip(ema_slow.iter()).map(|(f, s)| match (f, s) {
-        (Some(x), Some(y)) => Some(x - y),
-        _ => None,
-    }).collect()
+    ema_fast
+        .iter()
+        .zip(ema_slow.iter())
+        .map(|(f, s)| match (f, s) {
+            (Some(x), Some(y)) => Some(x - y),
+            _ => None,
+        })
+        .collect()
 }
 
 /// PVT —— Price Volume Trend
@@ -135,7 +150,9 @@ pub fn chaikin_oscillator(bars: &[Bar], fast: usize, slow: usize) -> Vec<Option<
 pub fn pvt(bars: &[Bar]) -> Vec<Option<f64>> {
     let n = bars.len();
     let mut out = vec![None; n];
-    if n == 0 { return out; }
+    if n == 0 {
+        return out;
+    }
     out[0] = Some(0.0);
     for i in 1..n {
         let prev = out[i - 1].unwrap();
@@ -153,7 +170,9 @@ pub fn pvt(bars: &[Bar]) -> Vec<Option<f64>> {
 pub fn force_index(bars: &[Bar]) -> Vec<Option<f64>> {
     let n = bars.len();
     let mut out = vec![None; n];
-    if n == 0 { return out; }
+    if n == 0 {
+        return out;
+    }
     out[0] = Some(0.0);
     for i in 1..n {
         out[i] = Some((bars[i].close - bars[i - 1].close) * bars[i].volume);
@@ -167,12 +186,16 @@ pub fn force_index(bars: &[Bar]) -> Vec<Option<f64>> {
 pub fn emv(bars: &[Bar]) -> Vec<Option<f64>> {
     let n = bars.len();
     let mut out = vec![None; n];
-    if n < 2 { return out; }
+    if n < 2 {
+        return out;
+    }
     for i in 1..n {
-        let dm = (bars[i].high + bars[i].low) / 2.0
-            - (bars[i - 1].high + bars[i - 1].low) / 2.0;
-        let br = if bars[i].high == bars[i].low { 1.0 }
-                 else { bars[i].volume / (bars[i].high - bars[i].low) };
+        let dm = (bars[i].high + bars[i].low) / 2.0 - (bars[i - 1].high + bars[i - 1].low) / 2.0;
+        let br = if bars[i].high == bars[i].low {
+            1.0
+        } else {
+            bars[i].volume / (bars[i].high - bars[i].low)
+        };
         out[i] = Some(dm / br);
     }
     out
@@ -184,7 +207,9 @@ pub fn emv(bars: &[Bar]) -> Vec<Option<f64>> {
 pub fn nvi(bars: &[Bar]) -> Vec<Option<f64>> {
     let n = bars.len();
     let mut out = vec![None; n];
-    if n == 0 { return out; }
+    if n == 0 {
+        return out;
+    }
     out[0] = Some(1000.0);
     for i in 1..n {
         let prev = out[i - 1].unwrap();
@@ -202,7 +227,9 @@ pub fn nvi(bars: &[Bar]) -> Vec<Option<f64>> {
 pub fn pvi(bars: &[Bar]) -> Vec<Option<f64>> {
     let n = bars.len();
     let mut out = vec![None; n];
-    if n == 0 { return out; }
+    if n == 0 {
+        return out;
+    }
     out[0] = Some(1000.0);
     for i in 1..n {
         let prev = out[i - 1].unwrap();
@@ -221,20 +248,23 @@ pub fn volume_oscillator(bars: &[Bar], short: usize, long: usize) -> Vec<Option<
     let vols: Vec<f64> = bars.iter().map(|b| b.volume).collect();
     let s = crate::indicators::ma::sma(&vols, short);
     let l = crate::indicators::ma::sma(&vols, long);
-    s.iter().zip(l.iter()).map(|(a, b)| match (a, b) {
-        (Some(x), Some(z)) if *z != 0.0 => Some((x - z) / z * 100.0),
-        _ => None,
-    }).collect()
+    s.iter()
+        .zip(l.iter())
+        .map(|(a, b)| match (a, b) {
+            (Some(x), Some(z)) if *z != 0.0 => Some((x - z) / z * 100.0),
+            _ => None,
+        })
+        .collect()
 }
 
 /// VROC —— Volume Rate of Change
 pub fn vroc(bars: &[Bar], period: usize) -> Vec<Option<f64>> {
     let n = bars.len();
     let mut out = vec![None; n];
-    for i in period..n {
+    for (i, value) in out.iter_mut().enumerate().skip(period) {
         if bars[i - period].volume != 0.0 {
-            out[i] = Some((bars[i].volume - bars[i - period].volume)
-                          / bars[i - period].volume * 100.0);
+            *value =
+                Some((bars[i].volume - bars[i - period].volume) / bars[i - period].volume * 100.0);
         }
     }
     out
@@ -245,7 +275,7 @@ pub fn vroc(bars: &[Bar], period: usize) -> Vec<Option<f64>> {
 pub fn vr(bars: &[Bar], period: usize) -> Vec<Option<f64>> {
     let n = bars.len();
     let mut out = vec![None; n];
-    for i in period..n {
+    for (i, value) in out.iter_mut().enumerate().skip(period) {
         let mut up_v = 0.0;
         let mut down_v = 0.0;
         for j in (i + 1 - period..=i).rev() {
@@ -257,9 +287,9 @@ pub fn vr(bars: &[Bar], period: usize) -> Vec<Option<f64>> {
             }
         }
         if down_v > 0.0 {
-            out[i] = Some(up_v / down_v * 100.0);
+            *value = Some(up_v / down_v * 100.0);
         } else if up_v > 0.0 {
-            out[i] = Some(f64::INFINITY);
+            *value = Some(f64::INFINITY);
         }
     }
     out
@@ -271,12 +301,83 @@ pub fn wvad(bars: &[Bar]) -> Vec<Option<f64>> {
     let n = bars.len();
     let mut out = vec![None; n];
     let mut cum = 0.0;
-    for i in 0..n {
+    for (i, slot) in out.iter_mut().enumerate() {
         let range = bars[i].high - bars[i].low;
-        let value = if range == 0.0 { 0.0 }
-                    else { (bars[i].close - bars[i].open) / range * bars[i].volume };
+        let value = if range == 0.0 {
+            0.0
+        } else {
+            (bars[i].close - bars[i].open) / range * bars[i].volume
+        };
         cum += value;
-        out[i] = Some(cum);
+        *slot = Some(cum);
+    }
+    out
+}
+
+/// Klinger Volume Oscillator: 看多资金 vs 看空资金的力度差
+/// HLC 三值判断多空: 累加成交量 (高于前日 close 视为多)
+/// 然后做快慢 EMA 之差
+pub fn klinger(bars: &[Bar], fast: usize, slow: usize) -> Vec<Option<f64>> {
+    let n = bars.len();
+    let mut out = vec![None; n];
+    if n < slow + 1 {
+        return out;
+    }
+    let mut sv: Vec<f64> = Vec::with_capacity(n);
+    sv.push(0.0);
+    for i in 1..n {
+        let prev_hlc = (bars[i - 1].high + bars[i - 1].low + bars[i - 1].close) / 3.0;
+        let cur_hlc = (bars[i].high + bars[i].low + bars[i].close) / 3.0;
+        let trend = if cur_hlc > prev_hlc {
+            1.0
+        } else if cur_hlc < prev_hlc {
+            -1.0
+        } else {
+            0.0
+        };
+        sv.push(trend * bars[i].volume);
+    }
+    let fast_ema = ema_warm(&sv, fast);
+    let slow_ema = ema_warm(&sv, slow);
+    for (i, value) in out.iter_mut().enumerate() {
+        if let (Some(f), Some(s)) = (
+            fast_ema.get(i).copied().flatten(),
+            slow_ema.get(i).copied().flatten(),
+        ) {
+            *value = Some(f - s);
+        }
+    }
+    out
+}
+
+fn ema_warm(vals: &[f64], period: usize) -> Vec<Option<f64>> {
+    let n = vals.len();
+    let mut out = vec![None; n];
+    if n < period {
+        return out;
+    }
+    let alpha = 2.0 / (period as f64 + 1.0);
+    let mut prev = vals[..period].iter().sum::<f64>() / period as f64;
+    out[period - 1] = Some(prev);
+    for i in period..n {
+        prev = alpha * vals[i] + (1.0 - alpha) * prev;
+        out[i] = Some(prev);
+    }
+    out
+}
+
+/// 量比: 当日每分钟均量 / 过去 5 日同时段均量
+/// 当前 K 线成交量 / 前 period 根 K 线成交量均值（不等同日内同期量比）
+pub fn volume_ratio(bars: &[Bar], period: usize) -> Vec<Option<f64>> {
+    let mut out = vec![None; bars.len()];
+    if period == 0 {
+        return out;
+    }
+    for i in period..bars.len() {
+        let average = bars[i - period..i].iter().map(|b| b.volume).sum::<f64>() / period as f64;
+        if average > 0.0 {
+            out[i] = Some(bars[i].volume / average);
+        }
     }
     out
 }
@@ -289,10 +390,19 @@ mod tests {
     fn make_bars(prices: &[f64], volumes: &[f64]) -> Vec<Bar> {
         assert_eq!(prices.len(), volumes.len());
         let t = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
-        prices.iter().zip(volumes.iter()).enumerate().map(|(i, (&p, &v))| Bar {
-            timestamp: t + chrono::Duration::hours(i as i64),
-            open: p, high: p + 1.0, low: p - 1.0, close: p, volume: v,
-        }).collect()
+        prices
+            .iter()
+            .zip(volumes.iter())
+            .enumerate()
+            .map(|(i, (&p, &v))| Bar {
+                timestamp: t + chrono::Duration::hours(i as i64),
+                open: p,
+                high: p + 1.0,
+                low: p - 1.0,
+                close: p,
+                volume: v,
+            })
+            .collect()
     }
 
     #[test]
@@ -331,58 +441,4 @@ mod tests {
         let last = v.last().unwrap().unwrap();
         assert!(last > 0.0);
     }
-}
-/// Klinger Volume Oscillator: 看多资金 vs 看空资金的力度差
-/// HLC 三值判断多空: 累加成交量 (高于前日 close 视为多)
-/// 然后做快慢 EMA 之差
-pub fn klinger(bars: &[Bar], fast: usize, slow: usize) -> Vec<Option<f64>> {
-    let n = bars.len();
-    let mut out = vec![None; n];
-    if n < slow + 1 { return out; }
-    let mut sv: Vec<f64> = Vec::with_capacity(n);
-    sv.push(0.0);
-    for i in 1..n {
-        let prev_hlc = (bars[i - 1].high + bars[i - 1].low + bars[i - 1].close) / 3.0;
-        let cur_hlc = (bars[i].high + bars[i].low + bars[i].close) / 3.0;
-        let trend = if cur_hlc > prev_hlc { 1.0 } else if cur_hlc < prev_hlc { -1.0 } else { 0.0 };
-        sv.push(trend * bars[i].volume);
-    }
-    let fast_ema = ema_warm(&sv, fast);
-    let slow_ema = ema_warm(&sv, slow);
-    for i in 0..n {
-        if let (Some(f), Some(s)) = (fast_ema.get(i).copied().flatten(), slow_ema.get(i).copied().flatten()) {
-            out[i] = Some(f - s);
-        }
-    }
-    out
-}
-
-fn ema_warm(vals: &[f64], period: usize) -> Vec<Option<f64>> {
-    let n = vals.len();
-    let mut out = vec![None; n];
-    if n < period { return out; }
-    let alpha = 2.0 / (period as f64 + 1.0);
-    let mut prev = vals[..period].iter().sum::<f64>() / period as f64;
-    out[period - 1] = Some(prev);
-    for i in period..n {
-        prev = alpha * vals[i] + (1.0 - alpha) * prev;
-        out[i] = Some(prev);
-    }
-    out
-}
-
-/// 量比: 当日每分钟均量 / 过去 5 日同时段均量
-/// 简化为: 当前 period 成交量均值 / 上一 period 成交量均值
-pub fn volume_ratio(bars: &[Bar], period: usize) -> Vec<Option<f64>> {
-    let n = bars.len();
-    let mut out = vec![None; n];
-    if n < period * 2 { return out; }
-    for i in period * 2..n {
-        let recent: f64 = bars[i + 1 - period..=i].iter().map(|b| b.volume).sum::<f64>();
-        let prev: f64 = bars[i + 1 - period * 2..=i - period].iter().map(|b| b.volume).sum::<f64>();
-        if prev > 0.0 {
-            out[i] = Some(recent / prev);
-        }
-    }
-    out
 }

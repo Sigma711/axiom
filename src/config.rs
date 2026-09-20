@@ -33,7 +33,10 @@ fn default_exchange_name() -> String {
 }
 impl Default for ExchangeConfig {
     fn default() -> Self {
-        Self { name: "binance".to_string(), sandbox: false }
+        Self {
+            name: "binance".to_string(),
+            sandbox: false,
+        }
     }
 }
 
@@ -50,11 +53,21 @@ pub struct TradingConfig {
     #[serde(default = "default_slippage")]
     pub slippage_rate: f64,
 }
-fn default_symbol() -> String { "BTCUSDT".to_string() }
-fn default_timeframe() -> String { "1h".to_string() }
-fn default_initial_capital() -> f64 { 10_000.0 }
-fn default_commission() -> f64 { 0.001 }
-fn default_slippage() -> f64 { 0.0005 }
+fn default_symbol() -> String {
+    "BTCUSDT".to_string()
+}
+fn default_timeframe() -> String {
+    "1h".to_string()
+}
+fn default_initial_capital() -> f64 {
+    10_000.0
+}
+fn default_commission() -> f64 {
+    0.001
+}
+fn default_slippage() -> f64 {
+    0.0005
+}
 impl Default for TradingConfig {
     fn default() -> Self {
         Self {
@@ -74,11 +87,18 @@ pub struct BacktestConfig {
     #[serde(default = "default_speed")]
     pub speed: String,
 }
-fn default_lookback() -> u32 { 180 }
-fn default_speed() -> String { "instant".to_string() }
+fn default_lookback() -> u32 {
+    180
+}
+fn default_speed() -> String {
+    "instant".to_string()
+}
 impl Default for BacktestConfig {
     fn default() -> Self {
-        Self { lookback_days: default_lookback(), speed: default_speed() }
+        Self {
+            lookback_days: default_lookback(),
+            speed: default_speed(),
+        }
     }
 }
 
@@ -89,8 +109,12 @@ pub struct PaperConfig {
     #[serde(default = "default_speed_multiplier")]
     pub speed_multiplier: u64,
 }
-fn default_poll_interval() -> u64 { 5 }
-fn default_speed_multiplier() -> u64 { 60 }
+fn default_poll_interval() -> u64 {
+    5
+}
+fn default_speed_multiplier() -> u64 {
+    60
+}
 impl Default for PaperConfig {
     fn default() -> Self {
         Self {
@@ -109,7 +133,9 @@ pub struct RiskConfigY {
     #[serde(default)]
     pub take_profit_pct: f64,
 }
-fn default_max_pos() -> f64 { 0.95 }
+fn default_max_pos() -> f64 {
+    0.95
+}
 impl Default for RiskConfigY {
     fn default() -> Self {
         Self {
@@ -129,10 +155,9 @@ pub struct StrategyConfig {
 }
 
 pub fn load_config(path: &Path) -> Result<AppConfig> {
-    let content = std::fs::read_to_string(path)
-        .with_context(|| format!("读取配置文件失败: {:?}", path))?;
-    let cfg: AppConfig = serde_yaml::from_str(&content)
-        .with_context(|| "解析 YAML 失败")?;
+    let content =
+        std::fs::read_to_string(path).with_context(|| format!("读取配置文件失败: {:?}", path))?;
+    let cfg: AppConfig = serde_yaml::from_str(&content).with_context(|| "解析 YAML 失败")?;
     Ok(cfg)
 }
 

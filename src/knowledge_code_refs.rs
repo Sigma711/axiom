@@ -50,7 +50,7 @@ pub fn get_code_refs() -> HashMap<String, String> {
     m.insert("buyback_rate".to_string(), "src/indicators/shareholder.rs::buyback_ratio".to_string());
     m.insert("cagr".to_string(), "src/metrics.rs::compute_metrics".to_string());
     m.insert("calmar".to_string(), "src/metrics.rs::calmar_ratio".to_string());
-    m.insert("capture_ratio".to_string(), "src/metrics.rs::compute_metrics".to_string());
+    m.insert("capture_ratio".to_string(), "src/practice/independent.rs::evaluate".to_string());
     m.insert("cash_conversion_cycle".to_string(), "src/indicators/fundamental.rs - 自计算".to_string());
     m.insert("cash_ratio".to_string(), "src/indicators/fundamental.rs::CompanyFinancials - 扩展".to_string());
     m.insert("cci".to_string(), "src/indicators/momentum.rs::cci".to_string());
@@ -144,7 +144,7 @@ pub fn get_code_refs() -> HashMap<String, String> {
     m.insert("ichimoku_strategy".to_string(), "src/strategy.rs::IchimokuStrategy".to_string());
     m.insert("implied_volatility".to_string(), "src/indicators/options.rs::bs_price - 反推".to_string());
     m.insert("industry_pe_compare".to_string(), "src/indicators/fundamental.rs::CompanyFinancials::pe - 扩展".to_string());
-    m.insert("information_ratio".to_string(), "src/metrics.rs::compute_metrics".to_string());
+    m.insert("information_ratio".to_string(), "src/practice/independent.rs::evaluate".to_string());
     m.insert("inside_outside".to_string(), "src/indicators/extra.rs::detect_inside_outside".to_string());
     m.insert("insider_trading".to_string(), "src/indicators/shareholder.rs - SEC Form 4".to_string());
     m.insert("institution_holding".to_string(), "src/indicators/shareholder.rs - 需 13F".to_string());
@@ -158,7 +158,7 @@ pub fn get_code_refs() -> HashMap<String, String> {
     m.insert("k_pattern_doji".to_string(), "src/indicators/extra.rs::detect_pattern".to_string());
     m.insert("k_pattern_engulfing".to_string(), "src/indicators/extra.rs::detect_engulfing".to_string());
     m.insert("k_pattern_hammer".to_string(), "src/indicators/extra.rs::detect_pattern".to_string());
-    m.insert("k_pattern_star".to_string(), "src/indicators/extra.rs::detect_pattern".to_string());
+    m.insert("k_pattern_star".to_string(), "src/indicators/extra.rs::detect_star".to_string());
     m.insert("k_pattern_three".to_string(), "src/indicators/extra.rs::detect_pattern".to_string());
     m.insert("kdj".to_string(), "src/indicators/momentum.rs::kdj".to_string());
     m.insert("kdj_strategy".to_string(), "src/strategy.rs::KdjStrategy".to_string());
@@ -296,9 +296,9 @@ pub fn get_code_refs() -> HashMap<String, String> {
     m.insert("total_market_cap".to_string(), "src/indicators/fundamental.rs - 自计算".to_string());
     m.insert("total_return".to_string(), "src/metrics.rs::compute_metrics".to_string());
     m.insert("tpo".to_string(), "src/indicators/extra.rs - 需扩展 (时间价格机会)".to_string());
-    m.insert("tracking_error".to_string(), "src/metrics.rs::compute_metrics".to_string());
+    m.insert("tracking_error".to_string(), "src/practice/independent.rs::evaluate".to_string());
     m.insert("trendline".to_string(), "主观画线;TradingView".to_string());
-    m.insert("treynor".to_string(), "src/metrics.rs::compute_metrics".to_string());
+    m.insert("treynor".to_string(), "src/practice/independent.rs::evaluate".to_string());
     m.insert("trin".to_string(), "src/indicators/breadth.rs::trin".to_string());
     m.insert("trinomial_tree".to_string(), "src/indicators/options.rs - 自实现".to_string());
     m.insert("trix".to_string(), "src/indicators/trend.rs - 自计算".to_string());

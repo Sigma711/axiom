@@ -163,10 +163,11 @@ impl Portfolio {
         let cash = self.broker.get_cash();
         let strength = strength.clamp(0.0, 1.0);
         let max_money = cash * self.config.max_position_pct * strength;
-        if price <= 0.0 {
+        let cost = self.broker.buy_cost_per_unit(price);
+        if !cost.is_finite() || cost <= 0.0 || !max_money.is_finite() {
             0.0
         } else {
-            max_money / price
+            max_money / cost
         }
     }
 }

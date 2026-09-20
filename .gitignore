@@ -35,3 +35,13 @@ htmlcov/
 
 # 日志
 *.log
+
+# Frontend dependencies, generated assets, and test artifacts
+/web/node_modules/
+/web/*.tsbuildinfo
+/web/test-results/
+/web/playwright-report/
+/static/assets/
+/static/index.html
+/coverage/
+/work/

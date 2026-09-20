@@ -35,11 +35,14 @@ pub mod knowledge;
 pub mod metrics;
 pub mod paper;
 pub mod portfolio;
+pub mod practice;
 pub mod risk;
 pub mod strategy;
+pub mod supplement;
 pub mod types;
 
 pub mod api;
+mod api_validation;
 pub mod app_state;
 
 pub use broker::{Broker, BrokerConfig, SimulatedBroker};
@@ -51,8 +54,13 @@ pub use strategy::{
     IchimokuStrategy, KdjStrategy, MacdStrategy, PpoStrategy, RandomStrategy, RsiStrategy,
     SmaCrossStrategy, Strategy, SupertrendStrategy, VortexStrategy, VwapReversionStrategy,
 };
-pub use types::{
-    BacktestResult, Bar, EquityPoint, Fill, Order, Position, Side, Signal, Trade,
-};
+pub use types::{BacktestResult, Bar, EquityPoint, Fill, Order, Position, Side, Signal, Trade};
 pub mod diagrams;
 
+pub mod book;
+pub mod book_sources;
+pub mod book_technical;
+pub mod code_links;
+pub mod workflows;
+
+pub mod book_charts;

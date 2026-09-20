@@ -1,0 +1,863 @@
+{
+  "source_sha256": "1f630341266d05c743c1a6d2c8be9058af428ecb65664cfafcfe0eabbe245007",
+  "scope": "chapters 1-11",
+  "source_records": 85,
+  "implemented_records": 85,
+  "counts": {
+    "reused": 35,
+    "book_computed": 50,
+    "manual_or_external": 0
+  },
+  "records": [
+    {
+      "source_id": "book_01_01",
+      "chapter": 1,
+      "pdf_page": 11,
+      "title": "最新价、昨收、涨跌额、涨跌幅",
+      "knowledge_id": "latest_price",
+      "practice_id": "latest_price",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_01_02",
+      "chapter": 1,
+      "pdf_page": 11,
+      "title": "开盘价、最高价、最低价、收盘价",
+      "knowledge_id": "ohlc",
+      "practice_id": "ohlc",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_01_03",
+      "chapter": 1,
+      "pdf_page": 11,
+      "title": "振幅",
+      "knowledge_id": "amplitude",
+      "practice_id": "amplitude",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_01_04",
+      "chapter": 1,
+      "pdf_page": 12,
+      "title": "成交量、成交额、现手、总手",
+      "knowledge_id": "book_trade_volume",
+      "practice_id": "book_trade_volume",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_01_05",
+      "chapter": 1,
+      "pdf_page": 12,
+      "title": "均价",
+      "knowledge_id": "vwap_price",
+      "practice_id": "vwap_price",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_01_06",
+      "chapter": 1,
+      "pdf_page": 12,
+      "title": "量比与相对成交量 RVOL",
+      "knowledge_id": "volume_ratio",
+      "practice_id": "volume_ratio",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_01_07",
+      "chapter": 1,
+      "pdf_page": 13,
+      "title": "换手率",
+      "knowledge_id": "turnover_rate",
+      "practice_id": "turnover_rate",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_01_08",
+      "chapter": 1,
+      "pdf_page": 13,
+      "title": "总股本、流通股、自由流通股",
+      "knowledge_id": "book_share_counts",
+      "practice_id": "book_share_counts",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_01_09",
+      "chapter": 1,
+      "pdf_page": 14,
+      "title": "总市值与流通市值",
+      "knowledge_id": "book_float_market_cap",
+      "practice_id": "book_float_market_cap",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_01_10",
+      "chapter": 1,
+      "pdf_page": 14,
+      "title": "52 周最高、最低与距高点幅度",
+      "knowledge_id": "book_52w_range",
+      "practice_id": "book_52w_range",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_02_01",
+      "chapter": 2,
+      "pdf_page": 14,
+      "title": "买价 Bid、卖价 Ask、买卖价差 Spread",
+      "knowledge_id": "bid_ask_spread",
+      "practice_id": "bid_ask_spread",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_02_02",
+      "chapter": 2,
+      "pdf_page": 15,
+      "title": "盘口深度 Depth 与滑点",
+      "knowledge_id": "bid_ask_spread",
+      "practice_id": "bid_ask_spread",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_02_03",
+      "chapter": 2,
+      "pdf_page": 15,
+      "title": "委差与委比",
+      "knowledge_id": "book_order_imbalance",
+      "practice_id": "book_order_imbalance",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_02_04",
+      "chapter": 2,
+      "pdf_page": 16,
+      "title": "内盘与外盘",
+      "knowledge_id": "inside_outside",
+      "practice_id": "inside_outside",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_02_05",
+      "chapter": 2,
+      "pdf_page": 16,
+      "title": "逐笔成交 Time & Sales",
+      "knowledge_id": "inside_outside",
+      "practice_id": "inside_outside",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_02_06",
+      "chapter": 2,
+      "pdf_page": 16,
+      "title": "主力净流入、超大单、大单、中单、小单",
+      "knowledge_id": "book_order_flow",
+      "practice_id": "book_order_flow",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_03_01",
+      "chapter": 3,
+      "pdf_page": 17,
+      "title": "周期",
+      "knowledge_id": "book_period",
+      "practice_id": "book_period",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_03_02",
+      "chapter": 3,
+      "pdf_page": 17,
+      "title": "不复权、前复权、后复权",
+      "knowledge_id": "book_adjustment",
+      "practice_id": "book_adjustment",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_03_03",
+      "chapter": 3,
+      "pdf_page": 17,
+      "title": "算术坐标与对数坐标",
+      "knowledge_id": "book_log_return",
+      "practice_id": "book_log_return",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_03_04",
+      "chapter": 3,
+      "pdf_page": 17,
+      "title": "非标准 K 线图",
+      "knowledge_id": "book_nonstandard_bar",
+      "practice_id": "book_nonstandard_bar",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_04_01",
+      "chapter": 4,
+      "pdf_page": 19,
+      "title": "EPS：每股收益",
+      "knowledge_id": "eps",
+      "practice_id": "eps",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_04_02",
+      "chapter": 4,
+      "pdf_page": 19,
+      "title": "市盈率 PE",
+      "knowledge_id": "pe",
+      "practice_id": "pe",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_04_03",
+      "chapter": 4,
+      "pdf_page": 20,
+      "title": "市净率 PB",
+      "knowledge_id": "pb",
+      "practice_id": "pb",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_04_04",
+      "chapter": 4,
+      "pdf_page": 20,
+      "title": "有形市净率 P/TBV",
+      "knowledge_id": "book_ptbv",
+      "practice_id": "book_ptbv",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_04_05",
+      "chapter": 4,
+      "pdf_page": 21,
+      "title": "市销率 PS",
+      "knowledge_id": "ps",
+      "practice_id": "ps",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_04_06",
+      "chapter": 4,
+      "pdf_page": 21,
+      "title": "市现率 P/OCF 与 P/FCF",
+      "knowledge_id": "book_price_cashflow",
+      "practice_id": "book_price_cashflow",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_04_07",
+      "chapter": 4,
+      "pdf_page": 21,
+      "title": "PEG",
+      "knowledge_id": "peg",
+      "practice_id": "peg",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_04_08",
+      "chapter": 4,
+      "pdf_page": 21,
+      "title": "企业价值 EV",
+      "knowledge_id": "book_ev",
+      "practice_id": "book_ev",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_04_09",
+      "chapter": 4,
+      "pdf_page": 22,
+      "title": "EV/EBITDA",
+      "knowledge_id": "book_ev_ebit",
+      "practice_id": "book_ev_ebit",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_04_10",
+      "chapter": 4,
+      "pdf_page": 22,
+      "title": "EV/EBIT",
+      "knowledge_id": "book_ev_ebit",
+      "practice_id": "book_ev_ebit",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_04_11",
+      "chapter": 4,
+      "pdf_page": 22,
+      "title": "EV/Sales",
+      "knowledge_id": "book_ev_sales",
+      "practice_id": "book_ev_sales",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_04_12",
+      "chapter": 4,
+      "pdf_page": 22,
+      "title": "股息率 Dividend Yield",
+      "knowledge_id": "book_dividend_yield",
+      "practice_id": "book_dividend_yield",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_04_13",
+      "chapter": 4,
+      "pdf_page": 22,
+      "title": "分红支付率 Payout Ratio",
+      "knowledge_id": "book_payout_ratio",
+      "practice_id": "book_payout_ratio",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_04_14",
+      "chapter": 4,
+      "pdf_page": 23,
+      "title": "盈利收益率 Earnings Yield",
+      "knowledge_id": "book_earnings_yield",
+      "practice_id": "book_earnings_yield",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_04_15",
+      "chapter": 4,
+      "pdf_page": 23,
+      "title": "自由现金流收益率 FCF Yield",
+      "knowledge_id": "book_fcf_yield",
+      "practice_id": "book_fcf_yield",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_04_16",
+      "chapter": 4,
+      "pdf_page": 23,
+      "title": "净资产值折价与溢价",
+      "knowledge_id": "book_nav_discount",
+      "practice_id": "book_nav_discount",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_04_17",
+      "chapter": 4,
+      "pdf_page": 23,
+      "title": "CAPE、DCF、公允价值与目标价",
+      "knowledge_id": "book_dcf",
+      "practice_id": "book_dcf",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_05_01",
+      "chapter": 5,
+      "pdf_page": 24,
+      "title": "营业收入 Revenue",
+      "knowledge_id": "book_revenue",
+      "practice_id": "book_revenue",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_05_02",
+      "chapter": 5,
+      "pdf_page": 24,
+      "title": "毛利与毛利率",
+      "knowledge_id": "book_gross_margin",
+      "practice_id": "book_gross_margin",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_05_03",
+      "chapter": 5,
+      "pdf_page": 24,
+      "title": "营业利润率 / EBIT Margin",
+      "knowledge_id": "book_ebit_margin",
+      "practice_id": "book_ebit_margin",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_05_04",
+      "chapter": 5,
+      "pdf_page": 24,
+      "title": "EBITDA Margin",
+      "knowledge_id": "book_ebitda_margin",
+      "practice_id": "book_ebitda_margin",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_05_05",
+      "chapter": 5,
+      "pdf_page": 24,
+      "title": "净利率",
+      "knowledge_id": "book_net_margin",
+      "practice_id": "book_net_margin",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_05_06",
+      "chapter": 5,
+      "pdf_page": 24,
+      "title": "ROE：净资产收益率",
+      "knowledge_id": "roe",
+      "practice_id": "roe",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_05_07",
+      "chapter": 5,
+      "pdf_page": 25,
+      "title": "ROA：总资产收益率",
+      "knowledge_id": "book_roa",
+      "practice_id": "book_roa",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_05_08",
+      "chapter": 5,
+      "pdf_page": 25,
+      "title": "ROIC：投入资本回报率",
+      "knowledge_id": "roic",
+      "practice_id": "roic",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_05_09",
+      "chapter": 5,
+      "pdf_page": 25,
+      "title": "ROCE",
+      "knowledge_id": "book_roce",
+      "practice_id": "book_roce",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_05_10",
+      "chapter": 5,
+      "pdf_page": 25,
+      "title": "杜邦分析",
+      "knowledge_id": "dupont",
+      "practice_id": "dupont",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_06_01",
+      "chapter": 6,
+      "pdf_page": 25,
+      "title": "同比 YoY",
+      "knowledge_id": "book_yoy",
+      "practice_id": "book_yoy",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_06_02",
+      "chapter": 6,
+      "pdf_page": 26,
+      "title": "环比 QoQ",
+      "knowledge_id": "book_qoq",
+      "practice_id": "book_qoq",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_06_03",
+      "chapter": 6,
+      "pdf_page": 26,
+      "title": "CAGR：复合年增长率",
+      "knowledge_id": "cagr",
+      "practice_id": "cagr",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_06_04",
+      "chapter": 6,
+      "pdf_page": 26,
+      "title": "收入增长、EPS 增长与 FCF 增长",
+      "knowledge_id": "eps",
+      "practice_id": "eps",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_06_05",
+      "chapter": 6,
+      "pdf_page": 26,
+      "title": "业绩超预期 Earnings Surprise",
+      "knowledge_id": "earnings_surprise",
+      "practice_id": "earnings_surprise",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_06_06",
+      "chapter": 6,
+      "pdf_page": 26,
+      "title": "预测上调与下调 Revision",
+      "knowledge_id": "revision",
+      "practice_id": "revision",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_07_01",
+      "chapter": 7,
+      "pdf_page": 26,
+      "title": "资产负债率",
+      "knowledge_id": "book_debt_ratio",
+      "practice_id": "book_debt_ratio",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_07_02",
+      "chapter": 7,
+      "pdf_page": 27,
+      "title": "负债权益比 D/E",
+      "knowledge_id": "book_de_ratio",
+      "practice_id": "book_de_ratio",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_07_03",
+      "chapter": 7,
+      "pdf_page": 27,
+      "title": "净债务",
+      "knowledge_id": "book_net_debt",
+      "practice_id": "book_net_debt",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_07_04",
+      "chapter": 7,
+      "pdf_page": 27,
+      "title": "净债务/EBITDA",
+      "knowledge_id": "book_net_debt_ebitda",
+      "practice_id": "book_net_debt_ebitda",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_07_05",
+      "chapter": 7,
+      "pdf_page": 27,
+      "title": "利息保障倍数",
+      "knowledge_id": "book_interest_coverage",
+      "practice_id": "book_interest_coverage",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_07_06",
+      "chapter": 7,
+      "pdf_page": 27,
+      "title": "流动比率",
+      "knowledge_id": "book_current_ratio",
+      "practice_id": "book_current_ratio",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_07_07",
+      "chapter": 7,
+      "pdf_page": 27,
+      "title": "速动比率",
+      "knowledge_id": "book_quick_ratio",
+      "practice_id": "book_quick_ratio",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_07_08",
+      "chapter": 7,
+      "pdf_page": 27,
+      "title": "现金比率",
+      "knowledge_id": "book_cash_ratio",
+      "practice_id": "book_cash_ratio",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_08_01",
+      "chapter": 8,
+      "pdf_page": 28,
+      "title": "经营现金流 CFO",
+      "knowledge_id": "book_cfo",
+      "practice_id": "book_cfo",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_08_02",
+      "chapter": 8,
+      "pdf_page": 28,
+      "title": "资本开支 Capex",
+      "knowledge_id": "book_capex",
+      "practice_id": "book_capex",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_08_03",
+      "chapter": 8,
+      "pdf_page": 28,
+      "title": "自由现金流 FCF",
+      "knowledge_id": "book_fcf",
+      "practice_id": "book_fcf",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_08_04",
+      "chapter": 8,
+      "pdf_page": 28,
+      "title": "CFO/净利润",
+      "knowledge_id": "book_cfo_income",
+      "practice_id": "book_cfo_income",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_08_05",
+      "chapter": 8,
+      "pdf_page": 28,
+      "title": "资产周转率",
+      "knowledge_id": "book_asset_turnover",
+      "practice_id": "book_asset_turnover",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_08_06",
+      "chapter": 8,
+      "pdf_page": 28,
+      "title": "存货周转率与存货天数 DIO",
+      "knowledge_id": "book_inventory_turnover",
+      "practice_id": "book_inventory_turnover",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_08_07",
+      "chapter": 8,
+      "pdf_page": 28,
+      "title": "应收账款天数 DSO",
+      "knowledge_id": "book_receivable_turnover",
+      "practice_id": "book_receivable_turnover",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_08_08",
+      "chapter": 8,
+      "pdf_page": 29,
+      "title": "应付账款天数 DPO",
+      "knowledge_id": "book_dpo",
+      "practice_id": "book_dpo",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_08_09",
+      "chapter": 8,
+      "pdf_page": 29,
+      "title": "现金转换周期 CCC",
+      "knowledge_id": "book_ccc",
+      "practice_id": "book_ccc",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_09_01",
+      "chapter": 9,
+      "pdf_page": 29,
+      "title": "应计比率 Accrual Ratio",
+      "knowledge_id": "accrual_ratio",
+      "practice_id": "accrual_ratio",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_09_02",
+      "chapter": 9,
+      "pdf_page": 29,
+      "title": "Piotroski F-Score",
+      "knowledge_id": "piotroski",
+      "practice_id": "piotroski",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_09_03",
+      "chapter": 9,
+      "pdf_page": 29,
+      "title": "Altman Z-Score",
+      "knowledge_id": "altman_z",
+      "practice_id": "altman_z",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_09_04",
+      "chapter": 9,
+      "pdf_page": 29,
+      "title": "Beneish M-Score",
+      "knowledge_id": "beneish_m",
+      "practice_id": "beneish_m",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_09_05",
+      "chapter": 9,
+      "pdf_page": 29,
+      "title": "商誉与无形资产占比",
+      "knowledge_id": "book_intangibles_ratio",
+      "practice_id": "book_intangibles_ratio",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_10_01",
+      "chapter": 10,
+      "pdf_page": 30,
+      "title": "总股数、基本股数、稀释股数",
+      "knowledge_id": "book_diluted_shares",
+      "practice_id": "book_diluted_shares",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_10_02",
+      "chapter": 10,
+      "pdf_page": 30,
+      "title": "自由流通比例",
+      "knowledge_id": "book_free_float",
+      "practice_id": "book_free_float",
+      "status": "book_computed",
+      "reason": null
+    },
+    {
+      "source_id": "book_10_03",
+      "chapter": 10,
+      "pdf_page": 30,
+      "title": "机构持股比例",
+      "knowledge_id": "institution_holding",
+      "practice_id": "institution_holding",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_10_04",
+      "chapter": 10,
+      "pdf_page": 30,
+      "title": "内部人持股与内部人交易",
+      "knowledge_id": "insider_trading",
+      "practice_id": "insider_trading",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_10_05",
+      "chapter": 10,
+      "pdf_page": 30,
+      "title": "股东户数与持仓集中度",
+      "knowledge_id": "holder_concentration",
+      "practice_id": "holder_concentration",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_10_06",
+      "chapter": 10,
+      "pdf_page": 30,
+      "title": "股权质押比例",
+      "knowledge_id": "share_pledge",
+      "practice_id": "share_pledge",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_10_07",
+      "chapter": 10,
+      "pdf_page": 30,
+      "title": "解禁数量与解禁市值",
+      "knowledge_id": "restricted_shares",
+      "practice_id": "restricted_shares",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_10_08",
+      "chapter": 10,
+      "pdf_page": 30,
+      "title": "回购率与注销率",
+      "knowledge_id": "buyback_rate",
+      "practice_id": "buyback_rate",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_10_09",
+      "chapter": 10,
+      "pdf_page": 31,
+      "title": "做空比例 Short Interest",
+      "knowledge_id": "short_interest",
+      "practice_id": "short_interest",
+      "status": "reused",
+      "reason": null
+    },
+    {
+      "source_id": "book_10_10",
+      "chapter": 10,
+      "pdf_page": 31,
+      "title": "Days to Cover",
+      "knowledge_id": "short_interest",
+      "practice_id": "short_interest",
+      "status": "reused",
+      "reason": null
+    }
+  ]
+}

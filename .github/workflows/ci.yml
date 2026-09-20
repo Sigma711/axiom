@@ -1,0 +1,49 @@
+name: Quality gates
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy, llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Locked dependencies and browser
+        run: make setup
+      - name: System browser dependencies
+        run: make browser-deps
+      - name: Build and all quality gates
+        run: make ci
+      - name: Install coverage tool
+        run: make tools
+      - name: Rust coverage
+        run: make coverage
+      - name: Browser evidence and coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-evidence
+          path: |
+            web/playwright-report/
+            web/test-results/
+            coverage/
+          retention-days: 14

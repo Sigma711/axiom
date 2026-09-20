@@ -1,0 +1,1211 @@
+{
+  "concepts": [
+    {
+      "id": "book_volume_24h",
+      "name": "24-hour Volume",
+      "category": "衍生品与链上",
+      "summary": "滚动 24 小时成交量，常见于加密货币等全天交易市场。",
+      "meaning": "滚动 24 小时成交量，常见于加密货币等全天交易市场。例：当前数值统计此刻向前 24 小时，而不是自然日。",
+      "pitfalls": "跨平台成交量口径、交易对和计价币不同；不能与股票的单一交易日成交量直接比较。",
+      "formula": "滚动24小时成交量 = 最近24个完整小时成交量之和",
+      "example": "每小时100枚，连续24小时共2400枚；这不是自然日统计。",
+      "op": "sum24",
+      "defaults": {
+        "hourly_volumes": [
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100
+        ]
+      },
+      "unit": "units",
+      "source_ids": [
+        "appendix_055"
+      ],
+      "pdf_page": 75
+    },
+    {
+      "id": "book_basis",
+      "name": "Basis",
+      "category": "衍生品与链上",
+      "summary": "期货价格减现货价格，或以百分比表示。",
+      "meaning": "期货价格减现货价格，或以百分比表示。例：现货 100、期货 103，基差为 +3。",
+      "pitfalls": "正基差可能反映融资、利率和持仓成本；临近交割通常收敛，但市场压力下可异常。",
+      "formula": "基差 = 期货价 − 现货价；基差率 = 基差 / 现货价",
+      "example": "现货100、期货103，基差3，基差率3%。",
+      "op": "basis",
+      "defaults": {
+        "spot": 100,
+        "future": 103
+      },
+      "unit": "currency",
+      "source_ids": [
+        "appendix_056"
+      ],
+      "pdf_page": 75
+    },
+    {
+      "id": "book_premium",
+      "name": "Premium",
+      "category": "衍生品与链上",
+      "summary": "衍生品价格相对指数或现货的溢价。",
+      "meaning": "衍生品价格相对指数或现货的溢价。永续合约高于指数，说明多头愿意支付更高价格。",
+      "pitfalls": "溢价不等于马上下跌，它可能在强趋势中持续；需与资金费率、基差和流动性结合。",
+      "formula": "溢价 = 衍生品报价 − 指数价；溢价率 = 溢价 / 指数价",
+      "example": "指数100、永续102，溢价2%；这不是预测下一刻跌2%。",
+      "op": "basis",
+      "defaults": {
+        "spot": 100,
+        "future": 102
+      },
+      "unit": "currency",
+      "source_ids": [
+        "appendix_057"
+      ],
+      "pdf_page": 75
+    },
+    {
+      "id": "book_funding",
+      "name": "Funding rate: a guide to market sentiment",
+      "category": "衍生品与链上",
+      "summary": "永续合约多空之间定期支付的费用，用来把合约价格拉回现货。",
+      "meaning": "永续合约多空之间定期支付的费用，用来把合约价格拉回现货。正费率通常是多头付空头。",
+      "pitfalls": "高正费率代表多头拥挤但不等于立即反转；不同交易所的周期、上限和指数不同。",
+      "formula": "本次资金费 = 名义仓位 × 本期费率；多头在正费率时支付",
+      "example": "1万元多仓、费率0.01%，本次支付1元；若每期相同，一天3元。",
+      "op": "funding",
+      "defaults": {
+        "notional": 10000,
+        "rate_per_settlement": 0.0001,
+        "settlements_per_day": 3,
+        "is_long": true
+      },
+      "unit": "currency",
+      "source_ids": [
+        "appendix_058"
+      ],
+      "pdf_page": 75
+    },
+    {
+      "id": "book_index_price",
+      "name": "Index price",
+      "category": "衍生品与链上",
+      "summary": "由多个现货市场加权得到的参考价格，用来减少单一交易所异常报价影响。",
+      "meaning": "由多个现货市场加权得到的参考价格，用来减少单一交易所异常报价影响。",
+      "pitfalls": "指数成分、权重和异常值处理由平台定义；它不是你一定能成交的价格。",
+      "formula": "指数价 = Σ(现货成分价 × 权重) / Σ权重",
+      "example": "100×50% + 102×30% + 99×20% = 100.4；它不是可成交报价。",
+      "op": "weighted",
+      "defaults": {
+        "prices": [
+          100,
+          102,
+          99
+        ],
+        "weights": [
+          0.5,
+          0.3,
+          0.2
+        ]
+      },
+      "unit": "currency",
+      "source_ids": [
+        "appendix_059"
+      ],
+      "pdf_page": 75
+    },
+    {
+      "id": "book_mark_price",
+      "name": "Mark price",
+      "category": "衍生品与链上",
+      "summary": "用于计算未实现盈亏和强平的公平价格，通常结合指数价与基差。",
+      "meaning": "用于计算未实现盈亏和强平的公平价格，通常结合指数价与基差。",
+      "pitfalls": "合约最新成交价瞬间剧烈波动时，标记价格可避免不必要强平；交易所公式不同。",
+      "formula": "线性合约未实现盈亏 = (交易所标记价 − 成本价) × 有符号数量",
+      "example": "10份多仓成本100，标记价102时浮盈20；最新价108不等于可按80浮盈计算保证金。",
+      "op": "mark",
+      "defaults": {
+        "mark_price": 102,
+        "last_price": 108,
+        "entry_price": 100,
+        "signed_size": 10
+      },
+      "unit": "currency",
+      "source_ids": [
+        "appendix_060"
+      ],
+      "pdf_page": 75
+    },
+    {
+      "id": "book_open_interest",
+      "name": "Open Interest / Understanding crypto open interest",
+      "category": "衍生品与链上",
+      "summary": "尚未平仓的合约总量。",
+      "meaning": "尚未平仓的合约总量。价格涨、OI 增，常解释为新资金加入；价格涨、OI 降，可能是空头回补。",
+      "pitfalls": "每张合约同时有多头和空头，OI 本身不提供净方向；不同交易所是否按张、币或美元计量也不同。",
+      "formula": "OI_t = OI_(t−1) + 新建合约 − 平仓合约",
+      "example": "原1000张、新开200、平80，剩1120；每张含一多一空，不能翻倍数成2240。",
+      "op": "open_interest",
+      "defaults": {
+        "previous_contracts": 1000,
+        "new_contracts": 200,
+        "closed_contracts": 80
+      },
+      "unit": "contracts",
+      "source_ids": [
+        "appendix_061"
+      ],
+      "pdf_page": 75
+    },
+    {
+      "id": "book_liquidations",
+      "name": "Liquidation data",
+      "category": "衍生品与链上",
+      "summary": "统计杠杆仓位因保证金不足被强制平仓的数量或金额。",
+      "meaning": "统计杠杆仓位因保证金不足被强制平仓的数量或金额。例：大额多头强平常伴随快速下跌。",
+      "pitfalls": "数据通常只覆盖部分交易所，且强平是结果也是加速器；不能据此确定底部。",
+      "formula": "总强平额 = 多仓强平额 + 空仓强平额；多仓占比 = 多仓额 / 总额",
+      "example": "多仓350、空仓120，共470；这里只能描述输入覆盖的交易所。",
+      "op": "liquidations",
+      "defaults": {
+        "long_liquidations": [
+          100,
+          200,
+          50
+        ],
+        "short_liquidations": [
+          40,
+          60,
+          20
+        ]
+      },
+      "unit": "currency",
+      "source_ids": [
+        "appendix_062"
+      ],
+      "pdf_page": 75
+    },
+    {
+      "id": "book_long_short_accounts",
+      "name": "Long / Short Ratio Accounts / Long Short Accounts %",
+      "category": "衍生品与链上",
+      "summary": "按账户数统计做多账户与做空账户比例。",
+      "meaning": "按账户数统计做多账户与做空账户比例。例：70% 账户净多，不代表 70% 资金做多。",
+      "pitfalls": "账户大小差异巨大，一个大空头可对冲很多小多头；还可能包含套利仓位。",
+      "formula": "多空比 = 多头数值 / 空头数值；多头占比 = 多头 / (多头 + 空头)",
+      "example": "700个多账户、300个空账户，多空比2.33，多头账户占70%。",
+      "op": "long_short",
+      "defaults": {
+        "long": 700,
+        "short": 300
+      },
+      "unit": "ratio",
+      "source_ids": [
+        "appendix_063"
+      ],
+      "pdf_page": 75
+    },
+    {
+      "id": "book_top_accounts",
+      "name": "Top trader long/short accounts / ratio",
+      "category": "衍生品与链上",
+      "summary": "只统计平台认定的头部交易者账户方向及比例。",
+      "meaning": "只统计平台认定的头部交易者账户方向及比例。",
+      "pitfalls": "‘头部’定义由交易所决定，数据仍不能显示仓位成本和对冲腿。",
+      "formula": "多空比 = 多头数值 / 空头数值；多头占比 = 多头 / (多头 + 空头)",
+      "example": "70个头部多账户、30个头部空账户，多空比2.33；账户数不是资金量。",
+      "op": "long_short",
+      "defaults": {
+        "long": 700,
+        "short": 300
+      },
+      "unit": "ratio",
+      "source_ids": [
+        "appendix_064"
+      ],
+      "pdf_page": 75
+    },
+    {
+      "id": "book_top_positions",
+      "name": "Top trader long/short positions / ratio",
+      "category": "衍生品与链上",
+      "summary": "按头部交易者的仓位规模而不是账户数量统计多空。",
+      "meaning": "按头部交易者的仓位规模而不是账户数量统计多空。",
+      "pitfalls": "比账户数更接近资金权重，但仍可能把跨市场套利的一条腿误解为方向押注。",
+      "formula": "多空比 = 多头数值 / 空头数值；多头占比 = 多头 / (多头 + 空头)",
+      "example": "多仓价值700、空仓价值300，多空比2.33，仓位权重与账户权重不同。",
+      "op": "long_short",
+      "defaults": {
+        "long": 700,
+        "short": 300
+      },
+      "unit": "ratio",
+      "source_ids": [
+        "appendix_065"
+      ],
+      "pdf_page": 75
+    },
+    {
+      "id": "book_etf_balances",
+      "name": "ETF balances / US spot crypto ETF balances",
+      "category": "衍生品与链上",
+      "summary": "统计 ETF 持有的标的资产或加密资产余额。",
+      "meaning": "统计 ETF 持有的标的资产或加密资产余额。余额增加通常表示基金净持仓增加。",
+      "pitfalls": "价格上涨也会提高美元市值，需区分资产数量和金额；披露可能有时间差。",
+      "formula": "资产数量变化 = 本期数量 − 上期数量；资产价值 = 数量 × 价格",
+      "example": "ETF由100枚增至110枚，净增10枚；每枚200元，持有价值22000元。",
+      "op": "balances",
+      "defaults": {
+        "previous_units": 100,
+        "current_units": 110,
+        "price": 200
+      },
+      "unit": "tokens",
+      "source_ids": [
+        "appendix_066"
+      ],
+      "pdf_page": 75
+    },
+    {
+      "id": "book_etf_flows",
+      "name": "ETF flows / US spot crypto ETF flows",
+      "category": "衍生品与链上",
+      "summary": "统计 ETF 申购赎回造成的净流入或净流出。",
+      "meaning": "统计 ETF 申购赎回造成的净流入或净流出。",
+      "pitfalls": "流入是基金份额需求，不等于同一时刻在公开市场等额追价；做市商可使用库存和实物申赎。",
+      "formula": "净申赎 = 申购 − 赎回；累计净申赎 = Σ净申赎",
+      "example": "三期净额60、−10、40，累计90；这是申赎记录，不等于同时公开市场追价。",
+      "op": "flows",
+      "defaults": {
+        "creations": [
+          100,
+          80,
+          60
+        ],
+        "redemptions": [
+          40,
+          90,
+          20
+        ]
+      },
+      "unit": "currency",
+      "source_ids": [
+        "appendix_067"
+      ],
+      "pdf_page": 75
+    },
+    {
+      "id": "book_government_balance",
+      "name": "El Salvador Government balance",
+      "category": "衍生品与链上",
+      "summary": "估算萨尔瓦多政府持有的比特币余额或价值。",
+      "meaning": "估算萨尔瓦多政府持有的比特币余额或价值。",
+      "pitfalls": "属于特定主体持仓数据，不是技术指标；来源与钱包归属识别可能不完整。",
+      "formula": "指定实体估计持仓 = 归属钱包余额之和；估值 = 币数 × 币价",
+      "example": "归属已确认的钱包合计6100枚，5万元/枚时估值3.05亿元；未知钱包不纳入。",
+      "op": "balances",
+      "defaults": {
+        "previous_units": 6000,
+        "current_units": 6100,
+        "price": 50000
+      },
+      "unit": "tokens",
+      "source_ids": [
+        "appendix_068"
+      ],
+      "pdf_page": 75
+    },
+    {
+      "id": "book_active_supply",
+      "name": "1 year active supply %",
+      "category": "衍生品与链上",
+      "summary": "过去一年内曾经移动过的币占总供应量比例。",
+      "meaning": "过去一年内曾经移动过的币占总供应量比例。比例上升，说明更多旧币重新活跃。",
+      "pitfalls": "币移动可能是交易、托管迁移或内部整理，不等于卖出。",
+      "formula": "一年活跃供应占比 = 过去一年移动的供应量 / 总供应量",
+      "example": "1000枚供应中200枚一年内移动，比例20%；移动不一定是卖出。",
+      "op": "ratio",
+      "defaults": {
+        "active_supply": 200,
+        "total_supply": 1000
+      },
+      "unit": "fraction",
+      "source_ids": [
+        "appendix_069"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_active_contract_addresses",
+      "name": "Active addresses with contracts",
+      "category": "衍生品与链上",
+      "summary": "统计与智能合约发生交互的活跃地址。",
+      "meaning": "统计与智能合约发生交互的活跃地址。例：DeFi 活跃时该数值可能上升。",
+      "pitfalls": "一个人可控制多个地址，交易所也可代表大量用户；地址数不等于真实用户数。",
+      "formula": "活跃合约地址数 = 在窗口内发生交互的去重地址数",
+      "example": "交互记录A、B、A、C对应3个地址；地址数不等于人数。",
+      "op": "unique",
+      "defaults": {
+        "addresses": [
+          "A",
+          "B",
+          "A",
+          "C"
+        ]
+      },
+      "unit": "addresses",
+      "source_ids": [
+        "appendix_070"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_large_addresses",
+      "name": "Addresses with balance ≥ X (% of supply) / (USD)",
+      "category": "衍生品与链上",
+      "summary": "统计余额达到阈值 X 的地址数量或其持仓占供应量/美元价值，用于观察大户与持仓分层。",
+      "meaning": "统计余额达到阈值 X 的地址数量或其持仓占供应量/美元价值，用于观察大户与持仓分层。",
+      "pitfalls": "阈值、币价和地址聚类方式会影响结果；一个实体可拆成多个地址。",
+      "formula": "达到阈值的地址数；其持币量之和 / 总供应量；持币量 × 价格",
+      "example": "阈值100时选中100与300两个地址，合计400枚，占供应40%，价值800元。",
+      "op": "threshold",
+      "defaults": {
+        "balances": [
+          5,
+          20,
+          100,
+          300
+        ],
+        "threshold": 100,
+        "total_supply": 1000,
+        "price": 2
+      },
+      "unit": "tokens",
+      "source_ids": [
+        "appendix_071"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_large_holdings",
+      "name": "Held tokens in addresses ≥ X (% of supply) / (tokens) / (USD)",
+      "category": "衍生品与链上",
+      "summary": "统计达到某余额阈值的地址合计持有多少币、占比多少或值多少钱。",
+      "meaning": "统计达到某余额阈值的地址合计持有多少币、占比多少或值多少钱。",
+      "pitfalls": "适合看持仓集中度变化；美元口径会同时受币价影响，不能只看金额上升。",
+      "formula": "达到阈值的地址数；其持币量之和 / 总供应量；持币量 × 价格",
+      "example": "阈值100时选中100与300两个地址，合计400枚，占供应40%，价值800元。",
+      "op": "threshold",
+      "defaults": {
+        "balances": [
+          5,
+          20,
+          100,
+          300
+        ],
+        "threshold": 100,
+        "total_supply": 1000,
+        "price": 2
+      },
+      "unit": "tokens",
+      "source_ids": [
+        "appendix_072"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_transaction_volume",
+      "name": "Average transaction volume / Large transaction volume",
+      "category": "衍生品与链上",
+      "summary": "前者是平均每笔链上交易价值，后者统计超过平台阈值的大额转账。",
+      "meaning": "前者是平均每笔链上交易价值，后者统计超过平台阈值的大额转账。",
+      "pitfalls": "大额转账可能是交易所内部调拨、托管迁移或OTC 结算，不必然是鲸鱼买卖。",
+      "formula": "平均量 = 总交易量 / 笔数；大额量 = Σ超过阈值的交易量",
+      "example": "四笔共200枚，均笔50枚；阈值100时，大额转账合计140枚。",
+      "op": "large_volume",
+      "defaults": {
+        "volumes": [
+          10,
+          20,
+          30,
+          140
+        ],
+        "large_threshold": 100
+      },
+      "unit": "tokens",
+      "source_ids": [
+        "appendix_073"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_block_height",
+      "name": "Block height / Blocks mined",
+      "category": "衍生品与链上",
+      "summary": "区块高度是链从创世区块起的序号；Blocks mined 是某段时间新增区块数。",
+      "meaning": "区块高度是链从创世区块起的序号；Blocks mined 是某段时间新增区块数。",
+      "pitfalls": "它们主要描述网络进度和出块情况，不直接说明资产便宜或昂贵。",
+      "formula": "新增区块数 = 结束高度 − 开始高度",
+      "example": "高度从800000增加到800006，期间新出6块；起始块不重复计算。",
+      "op": "blocks",
+      "defaults": {
+        "start_height": 800000,
+        "end_height": 800006
+      },
+      "unit": "blocks",
+      "source_ids": [
+        "appendix_074"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_difficulty_hashrate",
+      "name": "Difficulty / Hash Rate",
+      "category": "衍生品与链上",
+      "summary": "难度表示挖出新区块所需计算难度，Hash Rate 表示全网算力。",
+      "meaning": "难度表示挖出新区块所需计算难度，Hash Rate 表示全网算力。",
+      "pitfalls": "算力上升常代表安全预算和矿工投入增加，但也受矿机效率、能源价格和算法调整影响。",
+      "formula": "Bitcoin 估计算力 = 难度 × 2³² / 平均出块秒数",
+      "example": "难度10¹²、间隔600秒时，估计7.158×10¹⁸ H/s；仅适用该PoW难度定义。",
+      "op": "hashrate",
+      "defaults": {
+        "bitcoin_difficulty": 1000000000000,
+        "mean_block_seconds": 600
+      },
+      "unit": "hashes/second",
+      "source_ids": [
+        "appendix_075"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_block_interval",
+      "name": "Mean / Median block interval",
+      "category": "衍生品与链上",
+      "summary": "平均或中位出块间隔。",
+      "meaning": "平均或中位出块间隔。平均容易被少数极慢区块拉高，中位数更抗异常值。",
+      "pitfalls": "偏离目标间隔可能反映算力变化或网络机制；短期波动通常很大。",
+      "formula": "总量=Σ样本；均值=总量/样本数；中位数=排序后中间值（偶数时取中间两项平均）",
+      "example": "输入[600, 610, 590, 1200]，分别观察总量、平均值和中位数；离群值会拉动均值，不能把单位混在一起。",
+      "op": "statistics",
+      "defaults": {
+        "observations": [
+          600,
+          610,
+          590,
+          1200
+        ]
+      },
+      "unit": "seconds",
+      "source_ids": [
+        "appendix_076"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_block_size",
+      "name": "Mean block size in bytes / Total block size in bytes",
+      "category": "衍生品与链上",
+      "summary": "分别表示平均区块数据大小和某段时间区块总数据量。",
+      "meaning": "分别表示平均区块数据大小和某段时间区块总数据量。",
+      "pitfalls": "可反映链上空间使用，但不同链的压缩、批处理和数据可用性设计不可直接横比。",
+      "formula": "总量=Σ样本；均值=总量/样本数；中位数=排序后中间值（偶数时取中间两项平均）",
+      "example": "输入[1000, 2000, 3000]，分别观察总量、平均值和中位数；离群值会拉动均值，不能把单位混在一起。",
+      "op": "statistics",
+      "defaults": {
+        "observations": [
+          1000,
+          2000,
+          3000
+        ]
+      },
+      "unit": "bytes",
+      "source_ids": [
+        "appendix_077"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_utxo_value_stats",
+      "name": "Mean / Median UTXO value created / spent",
+      "category": "衍生品与链上",
+      "summary": "统计新建或花费 UTXO 的平均/中位价值。",
+      "meaning": "统计新建或花费 UTXO 的平均/中位价值。中位数更能代表典型小额活动。",
+      "pitfalls": "价格上涨会机械抬高美元口径；平均数易被巨额转账扭曲。",
+      "formula": "总量=Σ样本；均值=总量/样本数；中位数=排序后中间值（偶数时取中间两项平均）",
+      "example": "输入[1, 2, 3, 100]，分别观察总量、平均值和中位数；离群值会拉动均值，不能把单位混在一起。",
+      "op": "statistics",
+      "defaults": {
+        "observations": [
+          1,
+          2,
+          3,
+          100
+        ]
+      },
+      "unit": "tokens",
+      "source_ids": [
+        "appendix_080"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_gas_used",
+      "name": "Mean / Median gas used",
+      "category": "衍生品与链上",
+      "summary": "每笔以太坊类交易实际消耗 Gas 的平均或中位数，反映合约复杂度。",
+      "meaning": "每笔以太坊类交易实际消耗 Gas 的平均或中位数，反映合约复杂度。",
+      "pitfalls": "Gas used 与 Gas price 不同：一个是计算量，一个是每单位计算的价格。",
+      "formula": "总量=Σ样本；均值=总量/样本数；中位数=排序后中间值（偶数时取中间两项平均）",
+      "example": "输入[21000, 21000, 100000]，分别观察总量、平均值和中位数；离群值会拉动均值，不能把单位混在一起。",
+      "op": "statistics",
+      "defaults": {
+        "observations": [
+          21000,
+          21000,
+          100000
+        ]
+      },
+      "unit": "gas",
+      "source_ids": [
+        "appendix_081"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_gas_limit",
+      "name": "Mean / Median transaction gas limit",
+      "category": "衍生品与链上",
+      "summary": "用户为交易设置的最大 Gas 上限。",
+      "meaning": "用户为交易设置的最大 Gas 上限。",
+      "pitfalls": "上限高不代表实际消耗高；它更多反映交易类型和钱包估算策略。",
+      "formula": "总量=Σ样本；均值=总量/样本数；中位数=排序后中间值（偶数时取中间两项平均）",
+      "example": "输入[30000, 50000, 120000]，分别观察总量、平均值和中位数；离群值会拉动均值，不能把单位混在一起。",
+      "op": "statistics",
+      "defaults": {
+        "observations": [
+          30000,
+          50000,
+          120000
+        ]
+      },
+      "unit": "gas",
+      "source_ids": [
+        "appendix_082"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_gas_price",
+      "name": "Mean / Median transaction gas price",
+      "category": "衍生品与链上",
+      "summary": "每单位 Gas 愿意支付的平均或中位价格，反映区块空间竞争。",
+      "meaning": "每单位 Gas 愿意支付的平均或中位价格，反映区块空间竞争。",
+      "pitfalls": "升级后的费用机制可能拆成基础费和小费，单一 Gas price 需结合链规则。",
+      "formula": "总量=Σ样本；均值=总量/样本数；中位数=排序后中间值（偶数时取中间两项平均）",
+      "example": "输入[10, 12, 100]，分别观察总量、平均值和中位数；离群值会拉动均值，不能把单位混在一起。",
+      "op": "statistics",
+      "defaults": {
+        "observations": [
+          10,
+          12,
+          100
+        ]
+      },
+      "unit": "gwei",
+      "source_ids": [
+        "appendix_083"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_total_gas",
+      "name": "Total gas used",
+      "category": "衍生品与链上",
+      "summary": "某段时间所有交易实际消耗的 Gas 总量。",
+      "meaning": "某段时间所有交易实际消耗的 Gas 总量。",
+      "pitfalls": "受区块 Gas 上限和协议升级影响，跨时期比较需注意制度变化。",
+      "formula": "总量=Σ样本；均值=总量/样本数；中位数=排序后中间值（偶数时取中间两项平均）",
+      "example": "输入[21000, 21000, 100000]，分别观察总量、平均值和中位数；离群值会拉动均值，不能把单位混在一起。",
+      "op": "statistics",
+      "defaults": {
+        "observations": [
+          21000,
+          21000,
+          100000
+        ]
+      },
+      "unit": "gas",
+      "source_ids": [
+        "appendix_084"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_transaction_fees",
+      "name": "Mean / Median transaction fees / Transaction fees",
+      "category": "衍生品与链上",
+      "summary": "每笔交易平均/中位手续费，或某段时间手续费总额。",
+      "meaning": "每笔交易平均/中位手续费，或某段时间手续费总额。",
+      "pitfalls": "平均数易受极端高费交易影响；总手续费既受交易量也受拥堵程度影响。官方列表中Transaction fees 有重复入口。",
+      "formula": "总量=Σ样本；均值=总量/样本数；中位数=排序后中间值（偶数时取中间两项平均）",
+      "example": "输入[1, 2, 3, 10]，分别观察总量、平均值和中位数；离群值会拉动均值，不能把单位混在一起。",
+      "op": "statistics",
+      "defaults": {
+        "observations": [
+          1,
+          2,
+          3,
+          10
+        ]
+      },
+      "unit": "currency",
+      "source_ids": [
+        "appendix_085"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_transaction_bytes",
+      "name": "Mean transaction size in bytes / Total transactions size in bytes",
+      "category": "衍生品与链上",
+      "summary": "统计单笔交易平均字节数及全部交易字节量。",
+      "meaning": "统计单笔交易平均字节数及全部交易字节量。",
+      "pitfalls": "反映数据负载而非经济价值；批处理交易可能字节大但更高效。",
+      "formula": "总量=Σ样本；均值=总量/样本数；中位数=排序后中间值（偶数时取中间两项平均）",
+      "example": "输入[100, 200, 300]，分别观察总量、平均值和中位数；离群值会拉动均值，不能把单位混在一起。",
+      "op": "statistics",
+      "defaults": {
+        "observations": [
+          100,
+          200,
+          300
+        ]
+      },
+      "unit": "bytes",
+      "source_ids": [
+        "appendix_086"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_transfer_volume",
+      "name": "Mean / Median transfer volume",
+      "category": "衍生品与链上",
+      "summary": "统计链上转账价值的平均或中位数。",
+      "meaning": "统计链上转账价值的平均或中位数。",
+      "pitfalls": "平均受巨鲸影响，中位更接近典型转账；需区分原生币、代币和调整后实体转账。",
+      "formula": "总量=Σ样本；均值=总量/样本数；中位数=排序后中间值（偶数时取中间两项平均）",
+      "example": "输入[10, 20, 30, 140]，分别观察总量、平均值和中位数；离群值会拉动均值，不能把单位混在一起。",
+      "op": "statistics",
+      "defaults": {
+        "observations": [
+          10,
+          20,
+          30,
+          140
+        ]
+      },
+      "unit": "tokens",
+      "source_ids": [
+        "appendix_088"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_utxo_counts",
+      "name": "Created UTXOs / Spent UTXOs / Total UTXOs",
+      "category": "衍生品与链上",
+      "summary": "UTXO 是尚未花费的交易输出。",
+      "meaning": "UTXO 是尚未花费的交易输出。Created 与 Spent 分别统计新建和被消费数量，Total 是当前集合规模。",
+      "pitfalls": "UTXO 数量受找零、批量交易和协议使用方式影响，不等于用户数。",
+      "formula": "UTXO集合末值 = 初始未花费输出数 + 新建数 − 已花费数",
+      "example": "原1000个、新建200、花费150，末值1050个；找零输出也会增加数量。",
+      "op": "open_interest",
+      "defaults": {
+        "previous_contracts": 1000,
+        "new_contracts": 200,
+        "closed_contracts": 150
+      },
+      "unit": "outputs",
+      "source_ids": [
+        "appendix_078"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_utxo_totals",
+      "name": "Total UTXO value created / spent",
+      "category": "衍生品与链上",
+      "summary": "统计某段时间新建或花费的 UTXO 总价值。",
+      "meaning": "统计某段时间新建或花费的 UTXO 总价值。",
+      "pitfalls": "高值可能由少数大额内部转账造成，需结合调整后转账量与实体聚类。",
+      "formula": "新建总价值=Σ新建输出金额；花费总价值=Σ花费输出金额",
+      "example": "新建1+2+5=8枚、花费2+4=6枚；二者差不是投资资金净流入。",
+      "op": "utxo_totals",
+      "defaults": {
+        "created_values": [
+          1,
+          2,
+          5
+        ],
+        "spent_values": [
+          2,
+          4
+        ]
+      },
+      "unit": "tokens",
+      "source_ids": [
+        "appendix_079"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_transaction_rate",
+      "name": "Transaction rate",
+      "category": "衍生品与链上",
+      "summary": "单位时间内确认的交易笔数，类似链上吞吐率。",
+      "meaning": "单位时间内确认的交易笔数，类似链上吞吐率。",
+      "pitfalls": "不同链对‘一笔交易’定义不同；高 TPS 也可能来自机器人或低价值活动。",
+      "formula": "交易速率 = 确认交易数 / 统计秒数",
+      "example": "60秒确认120笔，TPS=2；链内交易定义必须保持一致。",
+      "op": "rate",
+      "defaults": {
+        "count": 120,
+        "elapsed_seconds": 60
+      },
+      "unit": "transactions/second",
+      "source_ids": [
+        "appendix_087"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_transfer_rate",
+      "name": "Transfer count / Transfer rate",
+      "category": "衍生品与链上",
+      "summary": "某段时间转账次数及单位时间转账速度。",
+      "meaning": "某段时间转账次数及单位时间转账速度。",
+      "pitfalls": "同一交易可包含多次转账，智能合约可制造大量内部转账，不能直接当作用户增长。",
+      "formula": "转账速率 = 转账次数 / 统计秒数",
+      "example": "60秒180次转账，速率3次/秒；一笔交易可以含多次转账。",
+      "op": "rate",
+      "defaults": {
+        "count": 180,
+        "elapsed_seconds": 60
+      },
+      "unit": "transfers/second",
+      "source_ids": [
+        "appendix_089"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_sending_receiving",
+      "name": "Receiving addresses / Sending addresses",
+      "category": "衍生品与链上",
+      "summary": "统计某段时间收到资产或发送资产的唯一地址数。",
+      "meaning": "统计某段时间收到资产或发送资产的唯一地址数。",
+      "pitfalls": "地址重复、交易所归集和新地址策略会扭曲真实参与者数量。",
+      "formula": "发送与接收地址分别去重；交集显示同一窗口两种活动",
+      "example": "发送A、B、A=2个；接收B、C、C=2个；B既发送又接收。",
+      "op": "address_sets",
+      "defaults": {
+        "senders": [
+          "A",
+          "B",
+          "A"
+        ],
+        "receivers": [
+          "B",
+          "C",
+          "C"
+        ]
+      },
+      "unit": "addresses",
+      "source_ids": [
+        "appendix_090"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_eth_deposits",
+      "name": "Ethereum new deposits / total number of deposits",
+      "category": "衍生品与链上",
+      "summary": "统计新增质押存款及累计存款次数。",
+      "meaning": "统计新增质押存款及累计存款次数。",
+      "pitfalls": "一次验证者存款与实际独立实体数量不同；协议规则变化会造成结构断点。",
+      "formula": "累计存款次数 = 原累计次数 + 新存款记录数",
+      "example": "已有100次，再出现3条存款记录，累计103次；次数不等于独立实体。",
+      "op": "deposits",
+      "defaults": {
+        "previous_total": 100,
+        "new_values": [
+          32,
+          32,
+          32
+        ]
+      },
+      "unit": "deposits",
+      "source_ids": [
+        "appendix_091"
+      ],
+      "pdf_page": 76
+    },
+    {
+      "id": "book_eth_depositors",
+      "name": "Ethereum new unique depositors / total unique depositors",
+      "category": "衍生品与链上",
+      "summary": "统计首次参与质押的独立存款地址及累计地址数。",
+      "meaning": "统计首次参与质押的独立存款地址及累计地址数。",
+      "pitfalls": "地址不等于人或机构，托管平台可能代表大量用户。",
+      "formula": "新增独立地址 = 新窗口地址集合 − 已有地址集合",
+      "example": "已有A、B；新记录B、C、C、D，只新增C和D两个，累计4个。",
+      "op": "new_addresses",
+      "defaults": {
+        "previous_addresses": [
+          "A",
+          "B"
+        ],
+        "new_addresses": [
+          "B",
+          "C",
+          "C",
+          "D"
+        ]
+      },
+      "unit": "addresses",
+      "source_ids": [
+        "appendix_092"
+      ],
+      "pdf_page": 77
+    },
+    {
+      "id": "book_eth_staked",
+      "name": "Ethereum new value staked / total value staked",
+      "category": "衍生品与链上",
+      "summary": "统计新增质押价值与累计质押价值。",
+      "meaning": "统计新增质押价值与累计质押价值。",
+      "pitfalls": "美元价值同时受 ETH 价格影响；应同时看ETH 数量口径。",
+      "formula": "净新增质押 = 新存入 − 提取；末质押量 = 初始 + 净新增",
+      "example": "初始1000枚，新增64、提取10，末值1054枚；按2000元折算2108000元。",
+      "op": "staked",
+      "defaults": {
+        "previous_tokens": 1000,
+        "new_stakes": [
+          32,
+          32
+        ],
+        "withdrawals": [
+          10
+        ],
+        "price": 2000
+      },
+      "unit": "tokens",
+      "source_ids": [
+        "appendix_093"
+      ],
+      "pdf_page": 77
+    },
+    {
+      "id": "book_realized_cap",
+      "name": "Realized market cap",
+      "category": "衍生品与链上",
+      "summary": "每枚币按它最后一次链上移动时的价格估值，再求和。",
+      "meaning": "每枚币按它最后一次链上移动时的价格估值，再求和。比当前市值更接近链上持有成本基线。",
+      "pitfalls": "交易所内部账本活动不在链上，地址移动也不一定代表实际换手。",
+      "formula": "已实现市值 = Σ每批币数量 × 其最后移动时价格",
+      "example": "2枚最后移动价100、3枚价200，已实现市值800；内部转账会影响这一成本代理。",
+      "op": "realized",
+      "defaults": {
+        "token_amounts": [
+          2,
+          3
+        ],
+        "last_moved_prices": [
+          100,
+          200
+        ]
+      },
+      "unit": "currency",
+      "source_ids": [
+        "appendix_094"
+      ],
+      "pdf_page": 77
+    },
+    {
+      "id": "book_sopr",
+      "name": "Spent Output Profit Ratio (SOPR)",
+      "category": "衍生品与链上",
+      "summary": "花费输出的卖出价值除以其形成时价值。",
+      "meaning": "花费输出的卖出价值除以其形成时价值。大于 1 表示被移动的币总体处于账面盈利。",
+      "pitfalls": "币移动不必然是卖出；实体调整版和原始版口径不同。",
+      "formula": "SOPR = Σ数量×花费时价 / Σ数量×形成时价",
+      "example": "原值2×100+3×200=800，花费值1050，SOPR=1.3125；转移不必然代表卖出。",
+      "op": "sopr",
+      "defaults": {
+        "amounts": [
+          2,
+          3
+        ],
+        "creation_prices": [
+          100,
+          200
+        ],
+        "spent_prices": [
+          150,
+          250
+        ]
+      },
+      "unit": "ratio",
+      "source_ids": [
+        "appendix_095"
+      ],
+      "pdf_page": 77
+    },
+    {
+      "id": "book_stock_flow",
+      "name": "Stock-to-Flow Ratio in USD",
+      "category": "衍生品与链上",
+      "summary": "把现有库存与年度新增供应相比，并常映射到美元价格模型。",
+      "meaning": "把现有库存与年度新增供应相比，并常映射到美元价格模型。供应增长越慢，S/F 越高。",
+      "pitfalls": "只强调稀缺性，忽略需求、监管、技术和竞争；历史拟合不能证明预测能力。",
+      "formula": "S/F = 现有供应 / 年新增供应；USD库存 = 供应 × 当前价",
+      "example": "2100万枚库存、年新增45万枚，S/F=46.67年；不会由此推出可靠目标价。",
+      "op": "stock_flow",
+      "defaults": {
+        "stock_tokens": 21000000,
+        "annual_new_tokens": 450000,
+        "price": 50000
+      },
+      "unit": "years",
+      "source_ids": [
+        "appendix_096"
+      ],
+      "pdf_page": 77
+    },
+    {
+      "id": "book_power_law",
+      "name": "Power-Law Model",
+      "category": "衍生品与链上",
+      "summary": "用比特币诞生后的天数拟合长期价格幂函数，观察当前价偏离长期曲线多少。",
+      "meaning": "用比特币诞生后的天数拟合长期价格幂函数，观察当前价偏离长期曲线多少。",
+      "pitfalls": "只基于历史时间与价格，无法纳入随机冲击；高相关的回溯拟合不等于可预测未来。",
+      "formula": "历史幂律参考价 = a × 天数ᵇ；偏离 = 现价/参考价 − 1",
+      "example": "a=0.001、b=2、1000天，拟合参考1000；现价1200偏离20%，是拟合非预测。",
+      "op": "power_law",
+      "defaults": {
+        "days_since_origin": 1000,
+        "coefficient": 0.001,
+        "exponent": 2,
+        "observed_price": 1200
+      },
+      "unit": "currency",
+      "source_ids": [
+        "appendix_097"
+      ],
+      "pdf_page": 77
+    },
+    {
+      "id": "book_supply_equality",
+      "name": "Supply Equality Ratio",
+      "category": "衍生品与链上",
+      "summary": "比较最小地址群体持币与前 1% 地址持币，数值高表示地址层面的财富分布更均衡。",
+      "meaning": "比较最小地址群体持币与前 1% 地址持币，数值高表示地址层面的财富分布更均衡。",
+      "pitfalls": "一个实体可控制多个地址，交易所地址代表大量用户，不能直接等于社会财富平等。",
+      "formula": "供应均衡比 = 指定小额地址群持币 / 顶部1%地址群持币",
+      "example": "小额群200、大额群800，比率0.25；需先明确群体口径，不能当成人口财富分布。",
+      "op": "equality",
+      "defaults": {
+        "small_holder_tokens": 200,
+        "top_one_percent_tokens": 800
+      },
+      "unit": "ratio",
+      "source_ids": [
+        "appendix_098"
+      ],
+      "pdf_page": 77
+    },
+    {
+      "id": "book_rvt",
+      "name": "RVT ratio, 90 days",
+      "category": "衍生品与链上",
+      "summary": "实现市值除以 90 日调整转账价值均线。",
+      "meaning": "实现市值除以 90 日调整转账价值均线。高值表示链上交易活跃度相对估值偏低，低值反之。",
+      "pitfalls": "主要用于长期周期，不适合短线；转账价值清洗和实体调整口径会显著影响结果。",
+      "formula": "RVT = 已实现市值 / 90日调整转账价值均值",
+      "example": "已实现市值9000、90日均转账值100，RVT=90；转账清洗口径必须一致。",
+      "op": "rvt",
+      "defaults": {
+        "realized_market_cap": 9000,
+        "daily_adjusted_transfer_values": [
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100,
+          100
+        ]
+      },
+      "unit": "ratio",
+      "source_ids": [
+        "appendix_099"
+      ],
+      "pdf_page": 77
+    },
+    {
+      "id": "book_cape",
+      "name": "CAPE 周期调整市盈率",
+      "category": "基本面与估值",
+      "source_ids": [
+        "book_04_17"
+      ],
+      "pdf_page": 23,
+      "op": "cape",
+      "unit": "倍",
+      "summary": "先把十年利润换成今天的购买力，再看价格是平均利润的多少倍。",
+      "meaning": "CAPE用过去十年的年度每股利润，按CPI折算至当前购买力后取平均。它降低单年经济周期的影响，常用于指数长期估值；不能代替未来现金流预测。",
+      "formula": "CAPE=当前价格/mean(年度EPS×当前CPI/当年CPI)",
+      "example": "十年EPS均为2元；前五年CPI100、后五年200，当前CPI200。调整后EPS分别4元和2元，平均3元；价格60元时CAPE为20倍。",
+      "pitfalls": "必须使用同一口径的十个完整年度、已公开利润与一致CPI基期；调整后平均利润非正时不作正常PE解读。更低CAPE也不保证近期上涨。",
+      "defaults": {
+        "price": 60,
+        "annual_eps": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ],
+        "annual_cpi": [
+          100,
+          100,
+          100,
+          100,
+          100,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
+        "current_cpi": 200
+      },
+      "labels": {
+        "price": "当前价格（元）",
+        "annual_eps": "过去十年年度每股利润（元，按年顺序）",
+        "annual_cpi": "对应十年平均 CPI（同一基期）",
+        "current_cpi": "当前 CPI（同一基期）"
+      }
+    }
+  ]
+}

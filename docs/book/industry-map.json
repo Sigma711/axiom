@@ -1,0 +1,279 @@
+{
+  "source": "原书第11章行业表，PDF第31–32页；34行含36个独立概念",
+  "records": [
+    {
+      "source_id": "book_11_01",
+      "title": "银行 净息差 NIM",
+      "pdf_page": 31,
+      "concept_ids": [
+        "book_bank_nim"
+      ]
+    },
+    {
+      "source_id": "book_11_02",
+      "title": "银行 不良贷款率 NPL",
+      "pdf_page": 31,
+      "concept_ids": [
+        "book_bank_npl_ratio"
+      ]
+    },
+    {
+      "source_id": "book_11_03",
+      "title": "银行 拨备覆盖率",
+      "pdf_page": 31,
+      "concept_ids": [
+        "book_bank_provision_coverage"
+      ]
+    },
+    {
+      "source_id": "book_11_04",
+      "title": "银行 CET1 核心一级资本充足率",
+      "pdf_page": 31,
+      "concept_ids": [
+        "book_bank_cet1_ratio"
+      ]
+    },
+    {
+      "source_id": "book_11_05",
+      "title": "银行 成本收入比",
+      "pdf_page": 31,
+      "concept_ids": [
+        "book_bank_cost_income"
+      ]
+    },
+    {
+      "source_id": "book_11_06",
+      "title": "保险 综合成本率",
+      "pdf_page": 31,
+      "concept_ids": [
+        "book_insurance_combined_ratio"
+      ]
+    },
+    {
+      "source_id": "book_11_07",
+      "title": "保险 偿付能力充足率",
+      "pdf_page": 31,
+      "concept_ids": [
+        "book_insurance_solvency_ratio"
+      ]
+    },
+    {
+      "source_id": "book_11_08",
+      "title": "保险 新业务价值 NBV",
+      "pdf_page": 31,
+      "concept_ids": [
+        "book_insurance_nbv"
+      ]
+    },
+    {
+      "source_id": "book_11_09",
+      "title": "REIT FFO",
+      "pdf_page": 31,
+      "concept_ids": [
+        "book_reit_ffo"
+      ]
+    },
+    {
+      "source_id": "book_11_10",
+      "title": "REIT AFFO",
+      "pdf_page": 31,
+      "concept_ids": [
+        "book_reit_affo"
+      ]
+    },
+    {
+      "source_id": "book_11_11",
+      "title": "REIT 入住率",
+      "pdf_page": 31,
+      "concept_ids": [
+        "book_reit_occupancy"
+      ]
+    },
+    {
+      "source_id": "book_11_12",
+      "title": "REIT Cap Rate",
+      "pdf_page": 31,
+      "concept_ids": [
+        "book_reit_cap_rate"
+      ]
+    },
+    {
+      "source_id": "book_11_13",
+      "title": "SaaS ARR",
+      "pdf_page": 31,
+      "concept_ids": [
+        "book_saas_arr"
+      ]
+    },
+    {
+      "source_id": "book_11_14",
+      "title": "SaaS NRR",
+      "pdf_page": 31,
+      "concept_ids": [
+        "book_saas_nrr"
+      ]
+    },
+    {
+      "source_id": "book_11_15",
+      "title": "SaaS Churn",
+      "pdf_page": 31,
+      "concept_ids": [
+        "book_saas_churn"
+      ]
+    },
+    {
+      "source_id": "book_11_16",
+      "title": "SaaS Rule of 40",
+      "pdf_page": 31,
+      "concept_ids": [
+        "book_saas_rule_of_40"
+      ]
+    },
+    {
+      "source_id": "book_11_17",
+      "title": "SaaS CAC Payback",
+      "pdf_page": 31,
+      "concept_ids": [
+        "book_saas_cac_payback"
+      ]
+    },
+    {
+      "source_id": "book_11_18",
+      "title": "平台企业 GMV",
+      "pdf_page": 31,
+      "concept_ids": [
+        "book_platform_gmv"
+      ]
+    },
+    {
+      "source_id": "book_11_19",
+      "title": "平台企业 Take Rate",
+      "pdf_page": 31,
+      "concept_ids": [
+        "book_platform_take_rate"
+      ]
+    },
+    {
+      "source_id": "book_11_20",
+      "title": "互联网 DAU/MAU",
+      "pdf_page": 31,
+      "concept_ids": [
+        "book_internet_dau_mau"
+      ]
+    },
+    {
+      "source_id": "book_11_21",
+      "title": "互联网 ARPU",
+      "pdf_page": 31,
+      "concept_ids": [
+        "book_internet_arpu"
+      ]
+    },
+    {
+      "source_id": "book_11_22",
+      "title": "零售 同店销售",
+      "pdf_page": 32,
+      "concept_ids": [
+        "book_retail_same_store_sales_growth"
+      ]
+    },
+    {
+      "source_id": "book_11_23",
+      "title": "半导体 产能利用率",
+      "pdf_page": 32,
+      "concept_ids": [
+        "book_semiconductor_utilization"
+      ]
+    },
+    {
+      "source_id": "book_11_24",
+      "title": "半导体 ASP",
+      "pdf_page": 32,
+      "concept_ids": [
+        "book_semiconductor_asp"
+      ]
+    },
+    {
+      "source_id": "book_11_25",
+      "title": "工业 Book-to-Bill",
+      "pdf_page": 32,
+      "concept_ids": [
+        "book_industrial_book_to_bill"
+      ]
+    },
+    {
+      "source_id": "book_11_26",
+      "title": "工业 Backlog",
+      "pdf_page": 32,
+      "concept_ids": [
+        "book_industrial_backlog"
+      ]
+    },
+    {
+      "source_id": "book_11_27",
+      "title": "能源 储量寿命",
+      "pdf_page": 32,
+      "concept_ids": [
+        "book_energy_reserve_life"
+      ]
+    },
+    {
+      "source_id": "book_11_28",
+      "title": "能源 Lifting Cost",
+      "pdf_page": 32,
+      "concept_ids": [
+        "book_energy_lifting_cost"
+      ]
+    },
+    {
+      "source_id": "book_11_29",
+      "title": "黄金矿业 AISC",
+      "pdf_page": 32,
+      "concept_ids": [
+        "book_gold_aisc"
+      ]
+    },
+    {
+      "source_id": "book_11_30",
+      "title": "航空 客座率",
+      "pdf_page": 32,
+      "concept_ids": [
+        "book_airline_load_factor"
+      ]
+    },
+    {
+      "source_id": "book_11_31",
+      "title": "航空 RASM/CASM",
+      "pdf_page": 32,
+      "concept_ids": [
+        "book_airline_rasm",
+        "book_airline_casm"
+      ]
+    },
+    {
+      "source_id": "book_11_32",
+      "title": "电信 ARPU、流失率",
+      "pdf_page": 32,
+      "concept_ids": [
+        "book_telecom_arpu",
+        "book_telecom_churn"
+      ]
+    },
+    {
+      "source_id": "book_11_33",
+      "title": "生物医药 Cash Runway",
+      "pdf_page": 32,
+      "concept_ids": [
+        "book_biopharma_cash_runway"
+      ]
+    },
+    {
+      "source_id": "book_11_34",
+      "title": "航运 TCE",
+      "pdf_page": 32,
+      "concept_ids": [
+        "book_shipping_tce"
+      ]
+    }
+  ]
+}

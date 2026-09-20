@@ -6,6 +6,7 @@ import path from 'node:path';
 export default defineConfig({
   plugins: [react()],
   root: '.',
+  base: process.env.VITE_BASE ?? '/static/',
   build: {
     outDir: path.resolve(__dirname, '../static'),
     emptyOutDir: true,

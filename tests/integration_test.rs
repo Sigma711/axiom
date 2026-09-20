@@ -106,8 +106,10 @@ fn test_sma_cross_strategy_emits_signals() {
         }
     }
     assert!(buy_signals >= 1, "先跌后涨应至少有 1 次买入信号");
-    // sell_signals 不必有:我们要的是"产生信号",不一定要有 sell
-    // （下跌→上涨仅会触发 buy,因为 fast 从下面穿越到 slow 上面）
+    assert_eq!(
+        sell_signals, 0,
+        "先跌后涨只有一次向上穿越，不应误发卖出信号"
+    );
 }
 
 #[test]
@@ -220,24 +222,52 @@ fn test_all_new_strategies() {
 
 #[test]
 fn test_risk_manager_stop_loss() {
-    let broker = SimulatedBroker::new(BrokerConfig::default(), 10000.0);
-    let pf = Portfolio::new(
-        Box::new(SimulatedBroker::new(BrokerConfig::default(), 10000.0)),
-        PortfolioConfig::default(),
+    let mut broker = SimulatedBroker::new(
+        BrokerConfig {
+            commission_rate: 0.0,
+            slippage_rate: 0.0,
+            allow_short: false,
+        },
+        10000.0,
+    );
+    broker.set_market_price("BTCUSDT", 100.0);
+    let fill = broker.place_order(new_order(
+        "BTCUSDT",
+        Side::Buy,
+        10.0,
+        Utc::now(),
+        axiom::types::OrderType::Market,
+        None,
+    ));
+    assert_eq!(fill.size, 10.0);
+    let mut pf = Portfolio::new(
+        Box::new(broker),
+        PortfolioConfig {
+            symbol: "BTCUSDT".into(),
+            ..Default::default()
+        },
     );
     let rm = RiskManager::new(
         RiskConfig {
             stop_loss_pct: 0.05,
-            take_profit_pct: 0.0,
+            take_profit_pct: 0.10,
             max_position_pct: 0.95,
         },
-        "BTCUSDT".to_string(),
+        "BTCUSDT".into(),
     );
-    // 价格跌 10% 时应触发止损
-    pf.broker.as_ref(); // 占位
-    drop(broker);
-    drop(pf);
-    drop(rm);
+    assert!(rm.force_close_reason(&pf, pf.broker.as_ref()).is_none());
+    pf.broker.set_market_price("BTCUSDT", 96.0);
+    assert!(rm.force_close_reason(&pf, pf.broker.as_ref()).is_none());
+    pf.broker.set_market_price("BTCUSDT", 90.0);
+    assert!(rm
+        .force_close_reason(&pf, pf.broker.as_ref())
+        .unwrap()
+        .contains("止损"));
+    pf.broker.set_market_price("BTCUSDT", 112.0);
+    assert!(rm
+        .force_close_reason(&pf, pf.broker.as_ref())
+        .unwrap()
+        .contains("止盈"));
 }
 
 #[test]

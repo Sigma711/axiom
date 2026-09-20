@@ -1,0 +1,3462 @@
+{
+  "version": 1,
+  "concepts": [
+    {
+      "id": "book_tema",
+      "name": "DEMA、TEMA",
+      "summary": "三重EMA组合减少滞后，但必须等三次预热。",
+      "example": "恒定100的价格，完成预热后TEMA仍为100。",
+      "formula": "3 EMA1 - 3 EMA2 + EMA3",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 14
+      },
+      "source_ids": [
+        "book_12_06"
+      ]
+    },
+    {
+      "id": "book_kama",
+      "name": "KAMA：自适应移动平均",
+      "summary": "按方向效率调节平滑速度：一路涨时快，来回震荡时慢。",
+      "example": "净移动10、累计波动20，效率比为0.5。",
+      "formula": "ER=abs(C-Cn)/sum(abs(delta)); SC=(ER*(fastSC-slowSC)+slowSC)^2",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 10,
+        "fast": 2,
+        "slow": 30
+      },
+      "source_ids": [
+        "book_12_08"
+      ]
+    },
+    {
+      "id": "book_alma",
+      "name": "ALMA",
+      "summary": "高斯权重的均线，offset决定重心靠近哪一端。",
+      "example": "offset接近1会更重视最近价格。",
+      "formula": "sum(C_i exp(-(i-offset*(n-1))^2/(2(n/sigma)^2)))/sum(weights)",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 9,
+        "offset": 0.85,
+        "sigma": 6.0
+      },
+      "source_ids": [
+        "book_12_09"
+      ]
+    },
+    {
+      "id": "book_gmma",
+      "name": "MA Ribbon 与 GMMA",
+      "summary": "比较短期和长期两组EMA的方向与分散程度。",
+      "example": "短组整体在长组上方说明近期成本高于较长期成本。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "short_periods": [
+          3,
+          5,
+          8,
+          10,
+          12,
+          15
+        ],
+        "long_periods": [
+          30,
+          35,
+          40,
+          45,
+          50,
+          60
+        ]
+      },
+      "source_ids": [
+        "book_12_11"
+      ]
+    },
+    {
+      "id": "book_macd_zero",
+      "name": "零轴",
+      "summary": "DIF相对零轴表示快慢EMA的顺序。",
+      "example": "快EMA为105、慢EMA为100时DIF=5；DEA=4时柱体=1。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "fast": 12,
+        "slow": 26,
+        "signal": 9,
+        "period": 14,
+        "right_bars": 2
+      },
+      "source_ids": [
+        "book_13_01"
+      ]
+    },
+    {
+      "id": "book_macd_cross",
+      "name": "DIF 与 DEA 交叉",
+      "summary": "只在DIF和DEA发生交叉的这一根报告交叉。",
+      "example": "快EMA为105、慢EMA为100时DIF=5；DEA=4时柱体=1。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "fast": 12,
+        "slow": 26,
+        "signal": 9,
+        "period": 14,
+        "right_bars": 2
+      },
+      "source_ids": [
+        "book_13_02"
+      ]
+    },
+    {
+      "id": "book_macd_histogram",
+      "name": "柱体",
+      "summary": "柱体是DIF减DEA，正负与变化分开解读。",
+      "example": "快EMA为105、慢EMA为100时DIF=5；DEA=4时柱体=1。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "fast": 12,
+        "slow": 26,
+        "signal": 9,
+        "period": 14,
+        "right_bars": 2
+      },
+      "source_ids": [
+        "book_13_03"
+      ]
+    },
+    {
+      "id": "book_macd_divergence",
+      "name": "MACD 背离",
+      "summary": "用已确认的两个价格枢轴比较对应DIF，不把未确认峰谷当已知。",
+      "example": "快EMA为105、慢EMA为100时DIF=5；DEA=4时柱体=1。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "fast": 12,
+        "slow": 26,
+        "signal": 9,
+        "period": 14,
+        "right_bars": 2
+      },
+      "source_ids": [
+        "book_13_04"
+      ]
+    },
+    {
+      "id": "book_macd_regime",
+      "name": "适用环境",
+      "summary": "把MACD方向和ADX趋势强度一起观察，不把震荡环境的每次交叉都当趋势。",
+      "example": "快EMA为105、慢EMA为100时DIF=5；DEA=4时柱体=1。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "fast": 12,
+        "slow": 26,
+        "signal": 9,
+        "period": 14,
+        "right_bars": 2
+      },
+      "source_ids": [
+        "book_13_05"
+      ]
+    },
+    {
+      "id": "book_vortex",
+      "name": "Vortex Indicator",
+      "summary": "比较跨相邻K线的上行动向和下行动向。",
+      "example": "VI+大于VI-表示该窗口上行动向较强。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 14
+      },
+      "source_ids": [
+        "book_14_03"
+      ]
+    },
+    {
+      "id": "book_chandelier_exit",
+      "name": "Chandelier Exit",
+      "summary": "从窗口最高价减去ATR倍数，或从最低价加ATR倍数。",
+      "example": "高点110、ATR2、倍数3，多头参考止损104。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 22,
+        "multiplier": 3.0
+      },
+      "source_ids": [
+        "book_14_06"
+      ]
+    },
+    {
+      "id": "book_ma_envelope",
+      "name": "MA Envelope",
+      "summary": "在均线上下按固定百分比画通道。",
+      "example": "均线100、宽度3%，上下轨103和97。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 20,
+        "fraction": 0.03
+      },
+      "source_ids": [
+        "book_14_09"
+      ]
+    },
+    {
+      "id": "book_regression_channel",
+      "name": "线性回归线与回归通道",
+      "summary": "用滚动最小二乘线末端表示中心，用残差波动表示通道。",
+      "example": "完全线性上涨没有拟合残差，通道宽度为0。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 20,
+        "multiplier": 2.0
+      },
+      "source_ids": [
+        "book_14_10",
+        "appendix_014"
+      ]
+    },
+    {
+      "id": "book_ppo_apo",
+      "name": "PPO 与 APO",
+      "summary": "APO是快慢EMA差，PPO把它除以慢EMA化为百分比。",
+      "example": "快EMA105、慢EMA100，APO5，PPO5%。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "fast": 12,
+        "slow": 26
+      },
+      "source_ids": [
+        "book_14_13"
+      ]
+    },
+    {
+      "id": "book_dma",
+      "name": "DMA",
+      "summary": "两条SMA之差再做平滑，区分趋势差与信号线。",
+      "example": "短均线105、长均线100，DMA=5。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "fast": 10,
+        "slow": 50,
+        "signal": 10
+      },
+      "source_ids": [
+        "book_14_14"
+      ]
+    },
+    {
+      "id": "book_trix",
+      "name": "TRIX",
+      "summary": "三重EMA的单期变化率，再可与信号线比较。",
+      "example": "三重EMA从100升到101，TRIX=1%。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 15,
+        "signal": 9
+      },
+      "source_ids": [
+        "book_14_15"
+      ]
+    },
+    {
+      "id": "book_ichimoku_chikou",
+      "name": "迟行线 Chikou Span",
+      "summary": "迟行线只是当前收盘价回画26根，不能在回画日期作为预测输入。",
+      "example": "t=30的收盘回画到t=4，但数据可得时刻仍是t=30。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "displacement": 26
+      },
+      "source_ids": [
+        "book_15_05"
+      ]
+    },
+    {
+      "id": "book_accelerator",
+      "name": "Accelerator Oscillator",
+      "summary": "AO减去它的短均线，观察动量是否继续加速。",
+      "example": "AO为3、AO均线为2，AC=1。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "fast": 5,
+        "slow": 34,
+        "signal": 5
+      },
+      "source_ids": [
+        "book_16_18"
+      ]
+    },
+    {
+      "id": "book_osc",
+      "name": "OSC",
+      "summary": "价格与均线之差，明确采用价格单位口径。",
+      "example": "收盘103、均线100，OSC=3。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 20
+      },
+      "source_ids": [
+        "book_16_25"
+      ]
+    },
+    {
+      "id": "book_true_range",
+      "name": "True Range",
+      "summary": "把当根振幅与相对前收的跳空都纳入。",
+      "example": "高105低102、昨收100，TR=5而不是3。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {},
+      "source_ids": [
+        "book_17_01"
+      ]
+    },
+    {
+      "id": "book_adr",
+      "name": "ADR",
+      "summary": "平均高低价振幅，和包含跳空的ATR不同。",
+      "example": "两根振幅2和4，ADR=3。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 14
+      },
+      "source_ids": [
+        "book_17_07"
+      ]
+    },
+    {
+      "id": "book_ohlc_volatility",
+      "name": "Parkinson、Garman-Klass、Yang-Zhang 波动率",
+      "summary": "并列Parkinson、Garman–Klass和Yang–Zhang估计，展示各自是否纳入跳空。",
+      "example": "连续交易和开盘跳空的贡献分开，不能把三个估计当相同口径。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 20,
+        "periods_per_year": 252.0
+      },
+      "source_ids": [
+        "book_17_11"
+      ]
+    },
+    {
+      "id": "book_volume_price_quadrant",
+      "name": "量价四象限",
+      "summary": "同时看当根价格方向与相对前根成交量方向。",
+      "example": "涨价放量和跌价放量是不同象限，都不能识别买方身份。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {},
+      "source_ids": [
+        "book_18_01"
+      ]
+    },
+    {
+      "id": "book_emv",
+      "name": "EMV / EOM",
+      "summary": "中间价移动除以箱体成交量，表示价格移动的容易程度。",
+      "example": "同样位移，在更小成交量下EMV更大；数值受量单位影响。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 14
+      },
+      "source_ids": [
+        "book_18_11"
+      ]
+    },
+    {
+      "id": "book_pvi",
+      "name": "NVI 与 PVI",
+      "summary": "只在成交量增加的K线上更新价格变化累计指数。",
+      "example": "基值1000，放量上涨2%变为1020；缩量日保持。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {},
+      "source_ids": [
+        "book_18_13"
+      ]
+    },
+    {
+      "id": "book_cdp",
+      "name": "CDP",
+      "summary": "用上一交易时段高低收计算逆势操作参考价。",
+      "example": "H110 L90 C100时CDP100，AH120、AL80。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "previous_high": 110.0,
+        "previous_low": 90.0,
+        "previous_close": 100.0
+      },
+      "source_ids": [
+        "book_20_04"
+      ]
+    },
+    {
+      "id": "book_gann_angle",
+      "name": "甘氏线与甘氏角度",
+      "summary": "在明确的每根价格单位下计算角度线，图形缩放改变视觉角度。",
+      "example": "起点100、每根涨1，10根后的1×1线为110。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "anchor_price": 100.0,
+        "bars_elapsed": 10.0,
+        "price_per_bar": 1.0,
+        "angle_ratio": 1.0
+      },
+      "source_ids": [
+        "book_20_07"
+      ]
+    },
+    {
+      "id": "book_chart_pattern_validation",
+      "name": "自动形态识别",
+      "summary": "检查人工标注的双顶/双底和颈线突破，不冒充通用自动形态识别。",
+      "example": "两个高点100和101、颈线90，最新收盘89才确认双顶突破。",
+      "formula": "",
+      "input_kind": "manual_annotation",
+      "defaults": {
+        "first_extreme": 100.0,
+        "second_extreme": 101.0,
+        "neckline": 90.0,
+        "current_price": 89.0,
+        "tolerance_fraction": 0.02,
+        "is_double_top": true
+      },
+      "source_ids": [
+        "book_20_09"
+      ]
+    },
+    {
+      "id": "book_advances_declines",
+      "name": "涨跌家数",
+      "summary": "对同一个市场成分集合，逐股比较收盘和前收。",
+      "example": "三只股票涨、跌、平各一只，上涨家数为1。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "current_prices": [
+          101,
+          99,
+          100
+        ],
+        "previous_prices": [
+          100,
+          100,
+          100
+        ]
+      },
+      "source_ids": [
+        "book_21_01"
+      ]
+    },
+    {
+      "id": "book_advance_decline_ratio",
+      "name": "涨跌比",
+      "summary": "上涨家数除以下跌家数，下跌为零时不返回伪零。",
+      "example": "3000家涨、1000家跌，涨跌比3。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "advances": 3000.0,
+        "declines": 1000.0
+      },
+      "source_ids": [
+        "book_21_03",
+        "appendix_051"
+      ]
+    },
+    {
+      "id": "book_mcclellan_sum",
+      "name": "McClellan Summation Index",
+      "summary": "把已计算的McClellan振荡器逐期累加。",
+      "example": "振荡器10、-3、5，初始0时累计12。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "oscillator": [
+          10,
+          -3,
+          5
+        ],
+        "initial_value": 0.0
+      },
+      "source_ids": [
+        "book_21_07"
+      ]
+    },
+    {
+      "id": "book_percent_above_ma",
+      "name": "成分股站上 MA50/MA200 比例",
+      "summary": "统计市场成分股中价格高于各自均线的比例。",
+      "example": "10只中6只站上MA50，比例60%。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "prices": [
+          101,
+          99,
+          105,
+          98
+        ],
+        "ma50": [
+          100,
+          100,
+          100,
+          100
+        ],
+        "ma200": [
+          95,
+          100,
+          102,
+          99
+        ]
+      },
+      "source_ids": [
+        "book_21_09"
+      ]
+    },
+    {
+      "id": "book_relative_strength_line",
+      "name": "相对强弱线 Relative Strength Line",
+      "summary": "个股价格除以同步基准价格，不是RSI。",
+      "example": "股票100、指数2000，相对强弱比0.05。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "asset_prices": [
+          100,
+          102,
+          105,
+          104,
+          110
+        ],
+        "benchmark_prices": [
+          2000,
+          2020,
+          2040,
+          2030,
+          2050
+        ]
+      },
+      "source_ids": [
+        "book_22_01"
+      ]
+    },
+    {
+      "id": "book_mansfield_rs",
+      "name": "Mansfield Relative Strength",
+      "summary": "相对强弱比除以其均值再减1，观察是否高于长期相对趋势。",
+      "example": "RS比值高于均值10%，Mansfield RS=10。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "asset_prices": [
+          100,
+          102,
+          105,
+          104,
+          110
+        ],
+        "benchmark_prices": [
+          2000,
+          2020,
+          2040,
+          2030,
+          2050
+        ],
+        "period": 3
+      },
+      "source_ids": [
+        "book_22_02"
+      ]
+    },
+    {
+      "id": "book_rrg_coordinates",
+      "name": "RRG",
+      "summary": "读取明确提供的标准化RS-Ratio/RS-Momentum，判断四象限；不伪造专有标准化公式。",
+      "example": "两个坐标都大于100落在领先象限。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "rs_ratio": 103.0,
+        "rs_momentum": 101.0
+      },
+      "source_ids": [
+        "book_22_03"
+      ]
+    },
+    {
+      "id": "book_pair_spread",
+      "name": "配对价差与价差 Z-Score",
+      "summary": "按指定对冲比构造价差并计算历史标准分数。",
+      "example": "A100、B50、对冲比2，价差0。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "asset_a": [
+          100,
+          102,
+          103,
+          105,
+          104
+        ],
+        "asset_b": [
+          50,
+          50,
+          51,
+          51,
+          52
+        ],
+        "hedge_ratio": 2.0,
+        "period": 3
+      },
+      "source_ids": [
+        "book_22_06"
+      ]
+    },
+    {
+      "id": "book_cointegration_diagnostic",
+      "name": "协整 Cointegration",
+      "summary": "先用两资产估计对冲比例，再检查对冲后价差是否有回复倾向。计算含截距OLS残差和零差分滞后的残差单位根统计量；负统计量本身不能证明协整。",
+      "example": "x=[8,9,10,11,12]、y=[17,17,20,21,25]：对冲比例2、截距0，残差[1,-1,0,-1,1]，残差DF统计量为−√15。样本很小，且尚无协整专用临界值，不能据此宣布两资产协整。",
+      "formula": "OLS: y=c+b×x+e；残差DF(无截距，零差分滞后): Δe=γ×e滞后+u；t=γ/√[(Σu²/(n−2))/Σe滞后²]。p值与5%临界值未校准，返回null；禁止套普通t分布。",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "asset_x": [
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "asset_y": [
+          17,
+          17,
+          20,
+          21,
+          25
+        ]
+      },
+      "source_ids": [
+        "book_22_07"
+      ]
+    },
+    {
+      "id": "book_factor_score",
+      "name": "因子分数",
+      "summary": "将明确的标准化因子值按权重相加，披露方向。",
+      "example": "价值分1、动量分0.5、各占一半，总分0.75。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "standardized_scores": [
+          1.0,
+          0.5,
+          -0.2
+        ],
+        "weights": [
+          0.4,
+          0.4,
+          0.2
+        ]
+      },
+      "source_ids": [
+        "book_22_09"
+      ]
+    },
+    {
+      "id": "book_annualized_volatility",
+      "name": "年化波动率",
+      "summary": "同频收益标准差乘年期数平方根。",
+      "example": "日波动1%，按252日年化约15.87%。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "returns": [
+          0.01,
+          -0.01,
+          0.02,
+          -0.02
+        ],
+        "periods_per_year": 252.0
+      },
+      "source_ids": [
+        "book_23_03"
+      ]
+    },
+    {
+      "id": "book_r_squared",
+      "name": "𝑅2",
+      "summary": "一元含截距回归中，策略与基准收益相关系数的平方。",
+      "example": "完全线性关系R²=1，但不证明策略有超额收益。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "strategy_returns": [
+          0.01,
+          0.02,
+          -0.01,
+          0.03
+        ],
+        "benchmark_returns": [
+          0.005,
+          0.01,
+          -0.005,
+          0.015
+        ]
+      },
+      "source_ids": [
+        "book_23_06"
+      ]
+    },
+    {
+      "id": "book_option_value_components",
+      "name": "内在价值与时间价值",
+      "summary": "把期权价格拆成内在价值和剩余价值，标明欧式折现会影响直观解释。",
+      "example": "现价110、行权100、看涨价12：内在10、剩余2。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "spot": 110.0,
+        "strike": 100.0,
+        "premium": 12.0,
+        "is_call": true
+      },
+      "source_ids": [
+        "book_24_01"
+      ]
+    },
+    {
+      "id": "book_option_moneyness",
+      "name": "ITM、ATM、OTM",
+      "summary": "按现价和行权价区分实值、平值、虚值，方向取决于看涨或看跌。",
+      "example": "现价110、行权100的看涨为实值；看跌为虚值。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "spot": 110.0,
+        "strike": 100.0,
+        "is_call": true,
+        "atm_tolerance_fraction": 0.001
+      },
+      "source_ids": [
+        "book_24_02"
+      ]
+    },
+    {
+      "id": "book_option_dte",
+      "name": "到期日与 DTE",
+      "summary": "用评估与到期时间之差计算剩余日历天数。",
+      "example": "相差864000秒为10天；过期合约DTE=0。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "evaluation_seconds": 0.0,
+        "expiry_seconds": 864000.0
+      },
+      "source_ids": [
+        "book_24_03"
+      ]
+    },
+    {
+      "id": "book_option_volume_oi",
+      "name": "成交量与未平仓量 OI",
+      "summary": "把成交量、未平仓量和OI变化分开，成交并不一定新增仓位。",
+      "example": "当日成交1000、OI只增加100，不能把1000当净开仓。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "volume": 1000.0,
+        "open_interest": 5100.0,
+        "previous_open_interest": 5000.0
+      },
+      "source_ids": [
+        "book_24_04"
+      ]
+    },
+    {
+      "id": "book_iv_percentile",
+      "name": "IV Percentile",
+      "summary": "当前IV高于历史多少比例观测，与IV Rank不同。",
+      "example": "5个历史IV中4个低于当前，IV分位80%。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "current_iv": 0.3,
+        "historical_iv": [
+          0.1,
+          0.15,
+          0.2,
+          0.25,
+          0.35
+        ]
+      },
+      "source_ids": [
+        "book_24_07"
+      ]
+    },
+    {
+      "id": "book_iv_smile",
+      "name": "Skew 与 Smile",
+      "summary": "并列不同执行价的IV，计算左右翼相对平值的高度。",
+      "example": "两翼30%、平值20%形成凸起微笑。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "strikes": [
+          90,
+          100,
+          110
+        ],
+        "ivs": [
+          0.3,
+          0.2,
+          0.28
+        ],
+        "spot": 100.0
+      },
+      "source_ids": [
+        "book_24_08"
+      ]
+    },
+    {
+      "id": "book_implied_move",
+      "name": "隐含波动区间",
+      "summary": "用年化IV与时间平方根估算一个标准差量级，不是价格保证区间。",
+      "example": "现价100、IV20%、一年，近似一个标准差幅度20。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "spot": 100.0,
+        "iv": 0.2,
+        "time_years": 1.0
+      },
+      "source_ids": [
+        "book_24_10"
+      ]
+    },
+    {
+      "id": "book_rho",
+      "name": "Rho",
+      "summary": "利率上升一个百分点时欧式期权价格的局部变化。",
+      "example": "Rho0.5表示其他条件不变时利率+1个百分点价格约+0.5。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "spot": 100.0,
+        "strike": 100.0,
+        "time_years": 1.0,
+        "rate": 0.05,
+        "volatility": 0.2,
+        "is_call": true
+      },
+      "source_ids": [
+        "book_24_15"
+      ]
+    },
+    {
+      "id": "book_second_order_greeks",
+      "name": "二阶 Greeks",
+      "summary": "用Black–Scholes局部导数观察Vanna、Charm、Vomma，注明各自尺度。",
+      "example": "Vanna衡量波动率改变Delta；Charm衡量时间流逝改变Delta。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "spot": 100.0,
+        "strike": 100.0,
+        "time_years": 1.0,
+        "rate": 0.05,
+        "volatility": 0.2,
+        "is_call": true
+      },
+      "source_ids": [
+        "book_24_16"
+      ]
+    },
+    {
+      "id": "book_news_sentiment",
+      "name": "新闻情绪分数",
+      "summary": "聚合已提供文本模型分数，同时展示样本数量，不伪造新闻情绪。",
+      "example": "三条新闻分数1、0、-1，平均0。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "scores": [
+          0.8,
+          -0.2,
+          0.1
+        ],
+        "weights": [
+          1,
+          1,
+          1
+        ]
+      },
+      "source_ids": [
+        "book_25_04"
+      ]
+    },
+    {
+      "id": "book_social_attention",
+      "name": "社交热度",
+      "summary": "比较当前提及次数与历史均量和离散程度。",
+      "example": "当前200次、平时100次，热度倍数2，但热度不等于看多。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "current_mentions": 200.0,
+        "historical_mentions": [
+          90,
+          100,
+          110,
+          95,
+          105
+        ]
+      },
+      "source_ids": [
+        "book_25_05"
+      ]
+    },
+    {
+      "id": "book_pitfall_order_imbalance",
+      "name": "委比高不代表必涨",
+      "summary": "展示委托不平衡与实际成交的差异，挂单可撤销。",
+      "example": "买盘900卖盘100产生80%委比，但下一秒撤单会改变。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "bid_size": 900.0,
+        "ask_size": 100.0,
+        "cancelled_bid_size": 850.0
+      },
+      "source_ids": [
+        "book_28_08"
+      ]
+    },
+    {
+      "id": "book_pitfall_timeframe",
+      "name": "指标必须使用同一时间尺度",
+      "summary": "检验两个输入序列是否同频、同截止时间。",
+      "example": "5分钟指标不能当成与日线同一周期的独立确认。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "first_interval_seconds": 300.0,
+        "second_interval_seconds": 86400.0,
+        "first_asof_seconds": 1000.0,
+        "second_asof_seconds": 1000.0
+      },
+      "source_ids": [
+        "book_28_12"
+      ]
+    },
+    {
+      "id": "book_pitfall_open_candle",
+      "name": "未收盘 K 线会变化",
+      "summary": "同一根未收盘K线的临时收盘变化会改变观察值。",
+      "example": "暂收102变99，涨跌方向也会翻转。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "previous_close": 100.0,
+        "provisional_close": 102.0,
+        "final_close": 99.0,
+        "is_closed": false
+      },
+      "source_ids": [
+        "book_28_13"
+      ]
+    },
+    {
+      "id": "book_pitfall_repainting",
+      "name": "ZigZag、分形和部分自动形态会重画或延迟确认",
+      "summary": "区分形态发生时点与确认可用时点。",
+      "example": "峰值在第10根，右侧2根确认，则最早第12根才可用。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "pivot_index": 10.0,
+        "confirmation_index": 12.0,
+        "decision_index": 11.0
+      },
+      "source_ids": [
+        "book_28_14"
+      ]
+    },
+    {
+      "id": "book_pitfall_adjustment",
+      "name": "不复权价格会制造虚假跳空",
+      "summary": "将拆分比例纳入收益计算，避免拆股制造虚假暴跌。",
+      "example": "100元一拆二后50元，未复权收益-50%，经济收益0%。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "previous_price": 100.0,
+        "current_price": 50.0,
+        "new_shares_per_old_share": 2.0,
+        "cash_dividend_per_old_share": 0.0
+      },
+      "source_ids": [
+        "book_28_15"
+      ]
+    },
+    {
+      "id": "book_pitfall_formula_variant",
+      "name": "数据供应商公式可能不同",
+      "summary": "对比提供的两家供应商结果，显示差值而不宣称某一方必错。",
+      "example": "MACD柱体1倍与2倍口径不同，不能直接比较数值。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "provider_a": [
+          1,
+          2,
+          3
+        ],
+        "provider_b": [
+          2,
+          4,
+          6
+        ]
+      },
+      "source_ids": [
+        "book_28_16"
+      ]
+    },
+    {
+      "id": "book_backtest_data_audit",
+      "name": "回测结果容易被污染",
+      "summary": "核查数据可得时间、是否含退市样本、执行滞后和交易成本。",
+      "example": "财报发布日之后才允许策略使用；零成本报告须明确不是净收益。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "observation_times": [
+          1,
+          2,
+          3
+        ],
+        "available_times": [
+          1,
+          3,
+          3
+        ],
+        "decision_times": [
+          1,
+          2,
+          3
+        ],
+        "includes_delisted": false,
+        "execution_lag_bars": 1.0,
+        "fee_fraction": 0.001
+      },
+      "source_ids": [
+        "book_28_17"
+      ]
+    },
+    {
+      "id": "book_aroon_oscillator",
+      "name": "Aroon Oscillator",
+      "summary": "Aroon Up减Down，把两条线压缩为方向差。",
+      "example": "Up100、Down20，振荡值80。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 14
+      },
+      "source_ids": [
+        "appendix_002"
+      ]
+    },
+    {
+      "id": "book_auto_key_levels",
+      "name": "Auto key levels",
+      "summary": "从已确认局部枢轴收集关键价位，确认之前不回画成可交易信息。",
+      "example": "第10根高点在第12根确认，只能第12根以后使用。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "right_bars": 2
+      },
+      "source_ids": [
+        "appendix_004"
+      ]
+    },
+    {
+      "id": "book_pitchfork",
+      "name": "Auto Pitchfork",
+      "summary": "对提供的三个人工确认锚点构造中线与平行线，不冒称自动选择唯一锚点。",
+      "example": "第一锚点连向后二锚点中点决定中线。",
+      "formula": "",
+      "input_kind": "manual_annotation",
+      "defaults": {
+        "x": [
+          0,
+          5,
+          10
+        ],
+        "y": [
+          100,
+          110,
+          102
+        ],
+        "evaluate_x": 15.0
+      },
+      "source_ids": [
+        "appendix_005"
+      ]
+    },
+    {
+      "id": "book_bbtrend",
+      "name": "BBTrend",
+      "summary": "按短长布林下轨距离和上轨距离之差衡量趋势。",
+      "example": "短通道整体抬升时下轨距离增大、上轨距离减小。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "short": 20,
+        "long": 50,
+        "multiplier": 2.0
+      },
+      "source_ids": [
+        "appendix_007"
+      ]
+    },
+    {
+      "id": "book_bollinger_bars",
+      "name": "Bollinger Bars",
+      "summary": "这是K线绘制样式，不是布林带；输出实体和上下影线几何。",
+      "example": "开100收103高105低99：实体3，上影2，下影1。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {},
+      "source_ids": [
+        "appendix_008"
+      ]
+    },
+    {
+      "id": "book_chande_kroll",
+      "name": "Chande Kroll Stop",
+      "summary": "先用ATR构造初始止损，再对初始止损做第二窗口极值。",
+      "example": "两个窗口和ATR倍数必须同时披露，不能当普通ATR止损。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 10,
+        "stop_period": 9,
+        "multiplier": 1.0
+      },
+      "source_ids": [
+        "appendix_009"
+      ]
+    },
+    {
+      "id": "book_chop_zone",
+      "name": "Chop Zone",
+      "summary": "输出标准化EMA斜率作为明确的趋势观察，颜色由显示端决定。",
+      "example": "斜率接近0表明均线较平；颜色阈值可因平台而异。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 34,
+        "range_period": 30
+      },
+      "source_ids": [
+        "appendix_010"
+      ]
+    },
+    {
+      "id": "book_choppiness",
+      "name": "Choppiness Index (CHOP)",
+      "summary": "累计TR相对于区间宽度越大，来回震荡越多。",
+      "example": "走过很长路径却首尾没走远，CHOP通常更高。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 14
+      },
+      "source_ids": [
+        "appendix_011"
+      ]
+    },
+    {
+      "id": "book_connors_rsi",
+      "name": "Connors RSI (CRSI)",
+      "summary": "平均短RSI、连涨跌长度RSI和单期涨幅百分位。",
+      "example": "三个子项30、60、90时CRSI=60。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "price_period": 3,
+        "streak_period": 2,
+        "rank_period": 100
+      },
+      "source_ids": [
+        "appendix_012"
+      ]
+    },
+    {
+      "id": "book_cumulative_volume_index",
+      "name": "Cumulative Volume Index (CVI)",
+      "summary": "累计整个市场上涨股成交量减下跌股成交量。",
+      "example": "两天净上涨量100和-40，累计60。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "up_volume": [
+          200,
+          100,
+          250
+        ],
+        "down_volume": [
+          100,
+          140,
+          150
+        ]
+      },
+      "source_ids": [
+        "appendix_013",
+        "appendix_052"
+      ]
+    },
+    {
+      "id": "book_mcginley",
+      "name": "McGinley Dynamic",
+      "summary": "用价格与当前动态均线的比值改变追随速度。",
+      "example": "价格偏离越大，分母也随比例的四次方改变。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 14,
+        "k": 0.6
+      },
+      "source_ids": [
+        "appendix_016"
+      ]
+    },
+    {
+      "id": "book_rolling_median",
+      "name": "Median",
+      "summary": "中位数降低单个极端价格的影响。",
+      "example": "10、10、11、12、100的中位数为11。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 5
+      },
+      "source_ids": [
+        "appendix_017"
+      ]
+    },
+    {
+      "id": "book_multi_timeframe",
+      "name": "Multi-Time Period Charts indicator",
+      "summary": "把连续低周期K线合成完整高周期区间，末尾未完成组不作为已完成数据。",
+      "example": "四根15分钟K线合成1小时OHLCV。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "bars_per_group": 4
+      },
+      "source_ids": [
+        "appendix_018"
+      ]
+    },
+    {
+      "id": "book_net_volume",
+      "name": "Net Volume",
+      "summary": "用真实上涨/下跌Tick量之差观察成交方向，不用主图涨跌替代。",
+      "example": "上涨Tick量150、下跌100，净量50。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "uptick_volume": [
+          150,
+          120
+        ],
+        "downtick_volume": [
+          100,
+          130
+        ]
+      },
+      "source_ids": [
+        "appendix_019"
+      ]
+    },
+    {
+      "id": "book_pvo",
+      "name": "Percentage Volume Oscillator (PVO)",
+      "summary": "成交量快慢EMA之差除以慢EMA，并计算信号线。",
+      "example": "快均量120、慢均量100，PVO20%。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "fast": 12,
+        "slow": 26,
+        "signal": 9
+      },
+      "source_ids": [
+        "appendix_020"
+      ]
+    },
+    {
+      "id": "book_performance",
+      "name": "Performance",
+      "summary": "按选定锚点把价格归一为累计百分比。",
+      "example": "10到12与100到120都为+20%。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "anchor_index": 0
+      },
+      "source_ids": [
+        "appendix_021",
+        "appendix_054"
+      ]
+    },
+    {
+      "id": "book_pivot_high_low",
+      "name": "Pivot Points High Low",
+      "summary": "左/右窗口都成立才确认局部枢轴，输出发生与确认时点。",
+      "example": "需要右侧2根时，最后两根不能成为已确认枢轴。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "right_bars": 2
+      },
+      "source_ids": [
+        "appendix_022"
+      ]
+    },
+    {
+      "id": "book_pmo",
+      "name": "Price Momentum Oscillator (PMO)",
+      "summary": "单期ROC两次特殊EMA平滑，再生成信号线。",
+      "example": "采用alpha=2/period的PMO平滑，和普通EMA 2/(period+1)区分。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "first_period": 35,
+        "second_period": 20,
+        "signal": 10
+      },
+      "source_ids": [
+        "appendix_023"
+      ]
+    },
+    {
+      "id": "book_special_k",
+      "name": "Pring’s Special K",
+      "summary": "按明确的多周期ROC和平滑长度及权重求和，不省略长期预热。",
+      "example": "多个周期都向上时综合动量可为正。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "roc_periods": [
+          10,
+          15,
+          20,
+          30,
+          40,
+          65,
+          75,
+          100,
+          195,
+          265,
+          390,
+          530
+        ],
+        "smooth_periods": [
+          10,
+          10,
+          10,
+          15,
+          50,
+          65,
+          75,
+          100,
+          130,
+          130,
+          130,
+          195
+        ],
+        "weights": [
+          1,
+          2,
+          3,
+          4,
+          1,
+          2,
+          3,
+          4,
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      "source_ids": [
+        "appendix_024"
+      ]
+    },
+    {
+      "id": "book_rci",
+      "name": "Rank Correlation Index (RCI)",
+      "summary": "价格排名与时间排名的Spearman相关，平价采用平均名次。",
+      "example": "价格逐根严格上涨得到+100。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 9
+      },
+      "source_ids": [
+        "appendix_025"
+      ]
+    },
+    {
+      "id": "book_rci_ribbon",
+      "name": "RCI Ribbon",
+      "summary": "并列三个周期RCI，长短窗口分别预热。",
+      "example": "短周期转负而长期仍正表示相对时间尺度不同。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "periods": [
+          9,
+          26,
+          52
+        ]
+      },
+      "source_ids": [
+        "appendix_026"
+      ]
+    },
+    {
+      "id": "book_relative_volatility_index",
+      "name": "Relative Volatility Index",
+      "summary": "按价格涨跌方向分配标准差，再做Wilder平滑。",
+      "example": "上行波动占总平滑波动60%时RVI=60。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 10,
+        "smooth_period": 14
+      },
+      "source_ids": [
+        "appendix_027"
+      ]
+    },
+    {
+      "id": "book_relative_volume_at_time",
+      "name": "Relative Volume at Time",
+      "summary": "只比较相同交易时刻的累计量，避免把早盘和全天混比。",
+      "example": "今天10点量250、历日同刻均量100，RVAT=2.5。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "current_cumulative_volume": 250.0,
+        "historical_same_time_volume": [
+          90,
+          100,
+          110
+        ]
+      },
+      "source_ids": [
+        "appendix_028"
+      ]
+    },
+    {
+      "id": "book_rob_booker_adx",
+      "name": "Rob Booker - ADX Breakout",
+      "summary": "核验用户导入的该指标信号：确认时间、后续已实现收益和成本；不虚构平台未披露的专有算法。分别核验ADX由压缩转强、背离与RSI过滤、未触及枢轴、趋势动量反转、或外部隐藏价位可得时点；这些是明示教学诊断，不声称平台原版信号。",
+      "example": "信号发生在10、确认在12、交易在11则存在提前使用，不能计作合法历史信号。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "signal_indices": [
+          10,
+          20
+        ],
+        "confirmed_indices": [
+          12,
+          20
+        ],
+        "entry_indices": [
+          12,
+          21
+        ],
+        "entry_prices": [
+          100,
+          110
+        ],
+        "exit_prices": [
+          105,
+          108
+        ],
+        "cost_fraction": 0.002,
+        "sides": [
+          1,
+          -1
+        ],
+        "adx_before": [
+          18,
+          16
+        ],
+        "adx_now": [
+          26,
+          28
+        ],
+        "price_breakout_flags": [
+          1,
+          1
+        ],
+        "compression_threshold": 20.0,
+        "trend_threshold": 25.0
+      },
+      "source_ids": [
+        "appendix_029"
+      ]
+    },
+    {
+      "id": "book_knoxville",
+      "name": "Rob Booker - Knoxville Divergence",
+      "summary": "核验用户导入的该指标信号：确认时间、后续已实现收益和成本；不虚构平台未披露的专有算法。分别核验ADX由压缩转强、背离与RSI过滤、未触及枢轴、趋势动量反转、或外部隐藏价位可得时点；这些是明示教学诊断，不声称平台原版信号。",
+      "example": "信号发生在10、确认在12、交易在11则存在提前使用，不能计作合法历史信号。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "signal_indices": [
+          10,
+          20
+        ],
+        "confirmed_indices": [
+          12,
+          20
+        ],
+        "entry_indices": [
+          12,
+          21
+        ],
+        "entry_prices": [
+          100,
+          110
+        ],
+        "exit_prices": [
+          105,
+          108
+        ],
+        "cost_fraction": 0.002,
+        "sides": [
+          -1,
+          1
+        ],
+        "price_extreme_changes": [
+          0.05,
+          -0.04
+        ],
+        "momentum_extreme_changes": [
+          -0.02,
+          0.03
+        ],
+        "rsi_at_signal": [
+          75,
+          25
+        ]
+      },
+      "source_ids": [
+        "appendix_030"
+      ]
+    },
+    {
+      "id": "book_missed_pivots",
+      "name": "Rob Booker Missed Pivot Points",
+      "summary": "核验用户导入的该指标信号：确认时间、后续已实现收益和成本；不虚构平台未披露的专有算法。分别核验ADX由压缩转强、背离与RSI过滤、未触及枢轴、趋势动量反转、或外部隐藏价位可得时点；这些是明示教学诊断，不声称平台原版信号。",
+      "example": "信号发生在10、确认在12、交易在11则存在提前使用，不能计作合法历史信号。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "signal_indices": [
+          10,
+          20
+        ],
+        "confirmed_indices": [
+          12,
+          20
+        ],
+        "entry_indices": [
+          12,
+          21
+        ],
+        "entry_prices": [
+          100,
+          110
+        ],
+        "exit_prices": [
+          105,
+          108
+        ],
+        "cost_fraction": 0.002,
+        "sides": [
+          1,
+          -1
+        ],
+        "pivot_prices": [
+          95,
+          112
+        ],
+        "prior_touch_counts": [
+          0,
+          2
+        ]
+      },
+      "source_ids": [
+        "appendix_032"
+      ]
+    },
+    {
+      "id": "book_booker_reversal",
+      "name": "Rob Booker Reversal",
+      "summary": "核验用户导入的该指标信号：确认时间、后续已实现收益和成本；不虚构平台未披露的专有算法。分别核验ADX由压缩转强、背离与RSI过滤、未触及枢轴、趋势动量反转、或外部隐藏价位可得时点；这些是明示教学诊断，不声称平台原版信号。",
+      "example": "信号发生在10、确认在12、交易在11则存在提前使用，不能计作合法历史信号。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "signal_indices": [
+          10,
+          20
+        ],
+        "confirmed_indices": [
+          12,
+          20
+        ],
+        "entry_indices": [
+          12,
+          21
+        ],
+        "entry_prices": [
+          100,
+          110
+        ],
+        "exit_prices": [
+          105,
+          108
+        ],
+        "cost_fraction": 0.002,
+        "sides": [
+          -1,
+          1
+        ],
+        "prior_trend_signs": [
+          1,
+          -1
+        ],
+        "current_trend_signs": [
+          -1,
+          1
+        ],
+        "prior_momentum": [
+          0.03,
+          -0.02
+        ],
+        "current_momentum": [
+          -0.01,
+          0.01
+        ]
+      },
+      "source_ids": [
+        "appendix_033"
+      ]
+    },
+    {
+      "id": "book_ghost_pivots",
+      "name": "Rob Booker Ziv Ghost Pivots",
+      "summary": "核验用户导入的该指标信号：确认时间、后续已实现收益和成本；不虚构平台未披露的专有算法。分别核验ADX由压缩转强、背离与RSI过滤、未触及枢轴、趋势动量反转、或外部隐藏价位可得时点；这些是明示教学诊断，不声称平台原版信号。",
+      "example": "信号发生在10、确认在12、交易在11则存在提前使用，不能计作合法历史信号。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "signal_indices": [
+          10,
+          20
+        ],
+        "confirmed_indices": [
+          12,
+          20
+        ],
+        "entry_indices": [
+          12,
+          21
+        ],
+        "entry_prices": [
+          100,
+          110
+        ],
+        "exit_prices": [
+          105,
+          108
+        ],
+        "cost_fraction": 0.002,
+        "sides": [
+          1,
+          -1
+        ],
+        "provided_levels": [
+          95,
+          115
+        ],
+        "level_available_indices": [
+          12,
+          20
+        ],
+        "low_since_available": [
+          96,
+          112
+        ],
+        "high_since_available": [
+          104,
+          118
+        ]
+      },
+      "source_ids": [
+        "appendix_034"
+      ]
+    },
+    {
+      "id": "book_seasonality",
+      "name": "Seasonality / Seasonals",
+      "summary": "按用户提供的相同季节窗口历史收益计算均值、离散和样本量。",
+      "example": "三年11月收益1%、-2%、4%，平均1%，不能保证今年。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "same_season_returns": [
+          0.01,
+          -0.02,
+          0.04
+        ]
+      },
+      "source_ids": [
+        "appendix_036"
+      ]
+    },
+    {
+      "id": "book_smi_ergodic_oscillator",
+      "name": "SMI Ergodic Oscillator",
+      "summary": "TSI式主线减其信号EMA形成柱体。",
+      "example": "主线20、信号15，柱体5。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "long": 25,
+        "short": 13,
+        "signal": 7
+      },
+      "source_ids": [
+        "appendix_038"
+      ]
+    },
+    {
+      "id": "book_stochastic_momentum_index",
+      "name": "Stochastic Momentum Index (SMI)",
+      "summary": "收盘距高低中点之差和平滑半区间之比。",
+      "example": "位于区间上缘时未平滑值为+100。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 10,
+        "first_smooth": 3,
+        "second_smooth": 3
+      },
+      "source_ids": [
+        "appendix_039"
+      ]
+    },
+    {
+      "id": "book_technical_ratings",
+      "name": "Technical Ratings",
+      "summary": "聚合明确提供的MA与振荡器投票，各类别先平均再等权合成。",
+      "example": "MA组全看多、振荡器组全看空，合成评级0。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "ma_votes": [
+          1,
+          1,
+          0
+        ],
+        "oscillator_votes": [
+          -1,
+          0,
+          1
+        ]
+      },
+      "source_ids": [
+        "appendix_040"
+      ]
+    },
+    {
+      "id": "book_twap",
+      "name": "Time Weighted Average Price (TWAP)",
+      "summary": "对等长时间片的典型价等权累计平均。",
+      "example": "两时间片价格100、104，TWAP102，不看成交量大小。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "anchor_index": 0
+      },
+      "source_ids": [
+        "appendix_041"
+      ]
+    },
+    {
+      "id": "book_trading_sessions",
+      "name": "Trading Sessions",
+      "summary": "用UTC时段选择K线并报告区间高低；时区和夏令时由输入明确转换。",
+      "example": "UTC 8点至16点为一个示例时段，不能静默假设交易所本地时间。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "start_utc_hour": 8,
+        "end_utc_hour": 16
+      },
+      "source_ids": [
+        "appendix_042"
+      ]
+    },
+    {
+      "id": "book_trend_strength_index",
+      "name": "Trend Strength Index",
+      "summary": "价格与递增时间序号的Pearson相关，和True Strength Index不同。",
+      "example": "严格线性上涨的相关为+1。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 20
+      },
+      "source_ids": [
+        "appendix_043"
+      ]
+    },
+    {
+      "id": "book_lower_timeframe_volume",
+      "name": "Up/Down Volume",
+      "summary": "按提供的低周期OHLC方向估算涨跌量，明确是代理分类而不是逐笔主动成交。",
+      "example": "低周期上涨量150减下跌量100，估算Delta50。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {},
+      "source_ids": [
+        "appendix_044",
+        "appendix_047"
+      ]
+    },
+    {
+      "id": "book_visible_average_price",
+      "name": "Visible Average Price",
+      "summary": "对指定可见起止索引内价格求均值，窗口变化数值会变。",
+      "example": "可见100、102、104均价102。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "start_index": 0,
+        "end_index": 20
+      },
+      "source_ids": [
+        "appendix_045"
+      ]
+    },
+    {
+      "id": "book_volatility_stop",
+      "name": "Volatility Stop",
+      "summary": "以滚动收盘极值和标准差倍数构造明确的参考止损。",
+      "example": "最高收盘110、标准差2、倍数2，多头参考106。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 20,
+        "multiplier": 2.0
+      },
+      "source_ids": [
+        "appendix_046"
+      ]
+    },
+    {
+      "id": "book_woodies_cci",
+      "name": "Woodies CCI",
+      "summary": "并列短长CCI与零轴方向；不把两条线冒充Woodies完整主观模式系统。",
+      "example": "长CCI正、短CCI回零可观察回调，但需自己的明示规则。",
+      "formula": "",
+      "input_kind": "market_bars",
+      "defaults": {
+        "fast": 6,
+        "slow": 14
+      },
+      "source_ids": [
+        "appendix_049"
+      ]
+    },
+    {
+      "id": "book_moon_phases",
+      "name": "Moon Phases",
+      "summary": "对用户提供的天文事件时间计算距新月/满月的天数，不把价格推导为月相。",
+      "example": "当前时间距给定新月86400秒，显示1天；无收益因果保证。",
+      "formula": "",
+      "input_kind": "independent_inputs",
+      "defaults": {
+        "current_seconds": 86400.0,
+        "new_moon_seconds": 0.0,
+        "full_moon_seconds": 1274400.0
+      },
+      "source_ids": [
+        "appendix_050"
+      ]
+    },
+    {
+      "id": "book_auto_fib",
+      "name": "Auto Fib Extension / Auto Fib Retracement",
+      "summary": "使用最近两个已确认局部枢轴作为自动候选波段，并明确确认延迟。",
+      "example": "高点100到低点80，回撤位由这段20元波幅推导。",
+      "formula": "使用最近两个已确认局部枢轴作为自动候选波段，并明确确认延迟。",
+      "input_kind": "market_bars",
+      "defaults": {
+        "right_bars": 2
+      },
+      "source_ids": [
+        "appendix_003"
+      ]
+    },
+    {
+      "id": "book_auto_trendlines",
+      "name": "Auto Trendlines",
+      "summary": "连接最近两个已确认低点和高点，分别延伸支撑与阻力。",
+      "example": "两个低点100和102间隔2根，候选支撑斜率每根1元。",
+      "formula": "连接最近两个已确认低点和高点，分别延伸支撑与阻力。",
+      "input_kind": "market_bars",
+      "defaults": {
+        "right_bars": 2
+      },
+      "source_ids": [
+        "appendix_006"
+      ]
+    },
+    {
+      "id": "book_rsi_divergence",
+      "name": "RSI divergence indicator",
+      "summary": "比较最近两个已确认价格枢轴与当时RSI，不把端点变化冒充峰谷背离。",
+      "example": "第二高点价格更高但RSI更低，在右侧确认完成时才报告。",
+      "formula": "比较最近两个已确认价格枢轴与当时RSI，不把端点变化冒充峰谷背离。",
+      "input_kind": "market_bars",
+      "defaults": {
+        "period": 14,
+        "right_bars": 2
+      },
+      "source_ids": [
+        "appendix_035"
+      ]
+    },
+    {
+      "id": "book_smi_ergodic_indicator",
+      "name": "SMI Ergodic Indicator",
+      "summary": "双重平滑价格变化/绝对变化的比值与信号EMA并列。",
+      "example": "主线20信号15可观察动量差5。",
+      "formula": "双重平滑价格变化/绝对变化的比值与信号EMA并列。",
+      "input_kind": "market_bars",
+      "defaults": {
+        "long": 25,
+        "short": 13,
+        "signal": 7
+      },
+      "source_ids": [
+        "appendix_037"
+      ]
+    },
+    {
+      "id": "book_auto_anchored_vwap",
+      "name": "VWAP Auto Anchored",
+      "summary": "在截至当前观察时点的数据内选择最高成交量K线作为明确自动锚点规则。",
+      "example": "该规则只是一种可复现自动锚定方式，不声称识别财报等未输入事件。",
+      "formula": "在截至当前观察时点的数据内选择最高成交量K线作为明确自动锚点规则。",
+      "input_kind": "market_bars",
+      "defaults": {},
+      "source_ids": [
+        "appendix_048"
+      ]
+    }
+  ],
+  "source_mappings": [
+    {
+      "source_id": "appendix_001",
+      "concept_ids": [
+        "target_upside"
+      ]
+    },
+    {
+      "source_id": "appendix_002",
+      "concept_ids": [
+        "book_aroon_oscillator"
+      ]
+    },
+    {
+      "source_id": "appendix_003",
+      "concept_ids": [
+        "book_auto_fib"
+      ]
+    },
+    {
+      "source_id": "appendix_004",
+      "concept_ids": [
+        "book_auto_key_levels"
+      ]
+    },
+    {
+      "source_id": "appendix_005",
+      "concept_ids": [
+        "book_pitchfork"
+      ]
+    },
+    {
+      "source_id": "appendix_006",
+      "concept_ids": [
+        "book_auto_trendlines"
+      ]
+    },
+    {
+      "source_id": "appendix_007",
+      "concept_ids": [
+        "book_bbtrend"
+      ]
+    },
+    {
+      "source_id": "appendix_008",
+      "concept_ids": [
+        "book_bollinger_bars"
+      ]
+    },
+    {
+      "source_id": "appendix_009",
+      "concept_ids": [
+        "book_chande_kroll"
+      ]
+    },
+    {
+      "source_id": "appendix_010",
+      "concept_ids": [
+        "book_chop_zone"
+      ]
+    },
+    {
+      "source_id": "appendix_011",
+      "concept_ids": [
+        "book_choppiness"
+      ]
+    },
+    {
+      "source_id": "appendix_012",
+      "concept_ids": [
+        "book_connors_rsi"
+      ]
+    },
+    {
+      "source_id": "appendix_013",
+      "concept_ids": [
+        "book_cumulative_volume_index"
+      ]
+    },
+    {
+      "source_id": "appendix_014",
+      "concept_ids": [
+        "book_regression_channel"
+      ]
+    },
+    {
+      "source_id": "appendix_015",
+      "concept_ids": [
+        "pitfall_golden_cross"
+      ]
+    },
+    {
+      "source_id": "appendix_016",
+      "concept_ids": [
+        "book_mcginley"
+      ]
+    },
+    {
+      "source_id": "appendix_017",
+      "concept_ids": [
+        "book_rolling_median"
+      ]
+    },
+    {
+      "source_id": "appendix_018",
+      "concept_ids": [
+        "book_multi_timeframe"
+      ]
+    },
+    {
+      "source_id": "appendix_019",
+      "concept_ids": [
+        "book_net_volume"
+      ]
+    },
+    {
+      "source_id": "appendix_020",
+      "concept_ids": [
+        "book_pvo"
+      ]
+    },
+    {
+      "source_id": "appendix_021",
+      "concept_ids": [
+        "book_performance"
+      ]
+    },
+    {
+      "source_id": "appendix_022",
+      "concept_ids": [
+        "book_pivot_high_low"
+      ]
+    },
+    {
+      "source_id": "appendix_023",
+      "concept_ids": [
+        "book_pmo"
+      ]
+    },
+    {
+      "source_id": "appendix_024",
+      "concept_ids": [
+        "book_special_k"
+      ]
+    },
+    {
+      "source_id": "appendix_025",
+      "concept_ids": [
+        "book_rci"
+      ]
+    },
+    {
+      "source_id": "appendix_026",
+      "concept_ids": [
+        "book_rci_ribbon"
+      ]
+    },
+    {
+      "source_id": "appendix_027",
+      "concept_ids": [
+        "book_relative_volatility_index"
+      ]
+    },
+    {
+      "source_id": "appendix_028",
+      "concept_ids": [
+        "book_relative_volume_at_time"
+      ]
+    },
+    {
+      "source_id": "appendix_029",
+      "concept_ids": [
+        "book_rob_booker_adx"
+      ]
+    },
+    {
+      "source_id": "appendix_030",
+      "concept_ids": [
+        "book_knoxville"
+      ]
+    },
+    {
+      "source_id": "appendix_031",
+      "concept_ids": [
+        "pivot_points"
+      ]
+    },
+    {
+      "source_id": "appendix_032",
+      "concept_ids": [
+        "book_missed_pivots"
+      ]
+    },
+    {
+      "source_id": "appendix_033",
+      "concept_ids": [
+        "book_booker_reversal"
+      ]
+    },
+    {
+      "source_id": "appendix_034",
+      "concept_ids": [
+        "book_ghost_pivots"
+      ]
+    },
+    {
+      "source_id": "appendix_035",
+      "concept_ids": [
+        "book_rsi_divergence"
+      ]
+    },
+    {
+      "source_id": "appendix_036",
+      "concept_ids": [
+        "book_seasonality"
+      ]
+    },
+    {
+      "source_id": "appendix_037",
+      "concept_ids": [
+        "book_smi_ergodic_indicator"
+      ]
+    },
+    {
+      "source_id": "appendix_038",
+      "concept_ids": [
+        "book_smi_ergodic_oscillator"
+      ]
+    },
+    {
+      "source_id": "appendix_039",
+      "concept_ids": [
+        "book_stochastic_momentum_index"
+      ]
+    },
+    {
+      "source_id": "appendix_040",
+      "concept_ids": [
+        "book_technical_ratings"
+      ]
+    },
+    {
+      "source_id": "appendix_041",
+      "concept_ids": [
+        "book_twap"
+      ]
+    },
+    {
+      "source_id": "appendix_042",
+      "concept_ids": [
+        "book_trading_sessions"
+      ]
+    },
+    {
+      "source_id": "appendix_043",
+      "concept_ids": [
+        "book_trend_strength_index"
+      ]
+    },
+    {
+      "source_id": "appendix_044",
+      "concept_ids": [
+        "book_lower_timeframe_volume"
+      ]
+    },
+    {
+      "source_id": "appendix_045",
+      "concept_ids": [
+        "book_visible_average_price"
+      ]
+    },
+    {
+      "source_id": "appendix_046",
+      "concept_ids": [
+        "book_volatility_stop"
+      ]
+    },
+    {
+      "source_id": "appendix_047",
+      "concept_ids": [
+        "book_lower_timeframe_volume"
+      ]
+    },
+    {
+      "source_id": "appendix_048",
+      "concept_ids": [
+        "book_auto_anchored_vwap"
+      ]
+    },
+    {
+      "source_id": "appendix_049",
+      "concept_ids": [
+        "book_woodies_cci"
+      ]
+    },
+    {
+      "source_id": "appendix_050",
+      "concept_ids": [
+        "book_moon_phases"
+      ]
+    },
+    {
+      "source_id": "appendix_051",
+      "concept_ids": [
+        "book_advance_decline_ratio"
+      ]
+    },
+    {
+      "source_id": "appendix_052",
+      "concept_ids": [
+        "book_cumulative_volume_index"
+      ]
+    },
+    {
+      "source_id": "appendix_054",
+      "concept_ids": [
+        "book_performance"
+      ]
+    },
+    {
+      "source_id": "book_12_01",
+      "concept_ids": [
+        "sma"
+      ]
+    },
+    {
+      "source_id": "book_12_02",
+      "concept_ids": [
+        "ema"
+      ]
+    },
+    {
+      "source_id": "book_12_03",
+      "concept_ids": [
+        "wma"
+      ]
+    },
+    {
+      "source_id": "book_12_04",
+      "concept_ids": [
+        "rma"
+      ]
+    },
+    {
+      "source_id": "book_12_05",
+      "concept_ids": [
+        "vwma"
+      ]
+    },
+    {
+      "source_id": "book_12_06",
+      "concept_ids": [
+        "dema",
+        "book_tema"
+      ]
+    },
+    {
+      "source_id": "book_12_07",
+      "concept_ids": [
+        "hma"
+      ]
+    },
+    {
+      "source_id": "book_12_08",
+      "concept_ids": [
+        "book_kama"
+      ]
+    },
+    {
+      "source_id": "book_12_09",
+      "concept_ids": [
+        "book_alma"
+      ]
+    },
+    {
+      "source_id": "book_12_10",
+      "concept_ids": [
+        "bbi"
+      ]
+    },
+    {
+      "source_id": "book_12_11",
+      "concept_ids": [
+        "book_gmma"
+      ]
+    },
+    {
+      "source_id": "book_12_12",
+      "concept_ids": [
+        "alligator"
+      ]
+    },
+    {
+      "source_id": "book_12_13",
+      "concept_ids": [
+        "bias"
+      ]
+    },
+    {
+      "source_id": "book_13_01",
+      "concept_ids": [
+        "book_macd_zero"
+      ]
+    },
+    {
+      "source_id": "book_13_02",
+      "concept_ids": [
+        "book_macd_cross"
+      ]
+    },
+    {
+      "source_id": "book_13_03",
+      "concept_ids": [
+        "book_macd_histogram"
+      ]
+    },
+    {
+      "source_id": "book_13_04",
+      "concept_ids": [
+        "book_macd_divergence"
+      ]
+    },
+    {
+      "source_id": "book_13_05",
+      "concept_ids": [
+        "book_macd_regime"
+      ]
+    },
+    {
+      "source_id": "book_14_01",
+      "concept_ids": [
+        "dmi_adx"
+      ]
+    },
+    {
+      "source_id": "book_14_02",
+      "concept_ids": [
+        "aroon"
+      ]
+    },
+    {
+      "source_id": "book_14_03",
+      "concept_ids": [
+        "book_vortex"
+      ]
+    },
+    {
+      "source_id": "book_14_04",
+      "concept_ids": [
+        "parabolic_sar"
+      ]
+    },
+    {
+      "source_id": "book_14_05",
+      "concept_ids": [
+        "supertrend"
+      ]
+    },
+    {
+      "source_id": "book_14_06",
+      "concept_ids": [
+        "book_chandelier_exit"
+      ]
+    },
+    {
+      "source_id": "book_14_07",
+      "concept_ids": [
+        "donchian"
+      ]
+    },
+    {
+      "source_id": "book_14_08",
+      "concept_ids": [
+        "keltner"
+      ]
+    },
+    {
+      "source_id": "book_14_09",
+      "concept_ids": [
+        "book_ma_envelope"
+      ]
+    },
+    {
+      "source_id": "book_14_10",
+      "concept_ids": [
+        "book_regression_channel"
+      ]
+    },
+    {
+      "source_id": "book_14_11",
+      "concept_ids": [
+        "zigzag"
+      ]
+    },
+    {
+      "source_id": "book_14_12",
+      "concept_ids": [
+        "fractal"
+      ]
+    },
+    {
+      "source_id": "book_14_13",
+      "concept_ids": [
+        "book_ppo_apo"
+      ]
+    },
+    {
+      "source_id": "book_14_14",
+      "concept_ids": [
+        "book_dma"
+      ]
+    },
+    {
+      "source_id": "book_14_15",
+      "concept_ids": [
+        "book_trix"
+      ]
+    },
+    {
+      "source_id": "book_15_01",
+      "concept_ids": [
+        "ichimoku"
+      ]
+    },
+    {
+      "source_id": "book_15_02",
+      "concept_ids": [
+        "ichimoku"
+      ]
+    },
+    {
+      "source_id": "book_15_03",
+      "concept_ids": [
+        "ichimoku"
+      ]
+    },
+    {
+      "source_id": "book_15_04",
+      "concept_ids": [
+        "ichimoku"
+      ]
+    },
+    {
+      "source_id": "book_15_05",
+      "concept_ids": [
+        "book_ichimoku_chikou"
+      ]
+    },
+    {
+      "source_id": "book_15_06",
+      "concept_ids": [
+        "ichimoku"
+      ]
+    },
+    {
+      "source_id": "book_16_01",
+      "concept_ids": [
+        "rsi"
+      ]
+    },
+    {
+      "source_id": "book_16_02",
+      "concept_ids": [
+        "stochastic"
+      ]
+    },
+    {
+      "source_id": "book_16_03",
+      "concept_ids": [
+        "kdj"
+      ]
+    },
+    {
+      "source_id": "book_16_04",
+      "concept_ids": [
+        "stoch_rsi"
+      ]
+    },
+    {
+      "source_id": "book_16_05",
+      "concept_ids": [
+        "cci"
+      ]
+    },
+    {
+      "source_id": "book_16_06",
+      "concept_ids": [
+        "williams_r"
+      ]
+    },
+    {
+      "source_id": "book_16_07",
+      "concept_ids": [
+        "momentum"
+      ]
+    },
+    {
+      "source_id": "book_16_08",
+      "concept_ids": [
+        "roc"
+      ]
+    },
+    {
+      "source_id": "book_16_09",
+      "concept_ids": [
+        "cmo"
+      ]
+    },
+    {
+      "source_id": "book_16_10",
+      "concept_ids": [
+        "tsi"
+      ]
+    },
+    {
+      "source_id": "book_16_11",
+      "concept_ids": [
+        "ultimate"
+      ]
+    },
+    {
+      "source_id": "book_16_12",
+      "concept_ids": [
+        "kst"
+      ]
+    },
+    {
+      "source_id": "book_16_13",
+      "concept_ids": [
+        "dpo"
+      ]
+    },
+    {
+      "source_id": "book_16_14",
+      "concept_ids": [
+        "fisher_transform"
+      ]
+    },
+    {
+      "source_id": "book_16_15",
+      "concept_ids": [
+        "rvi"
+      ]
+    },
+    {
+      "source_id": "book_16_16",
+      "concept_ids": [
+        "demarker"
+      ]
+    },
+    {
+      "source_id": "book_16_17",
+      "concept_ids": [
+        "awesome"
+      ]
+    },
+    {
+      "source_id": "book_16_18",
+      "concept_ids": [
+        "book_accelerator"
+      ]
+    },
+    {
+      "source_id": "book_16_19",
+      "concept_ids": [
+        "elder_ray"
+      ]
+    },
+    {
+      "source_id": "book_16_20",
+      "concept_ids": [
+        "bop"
+      ]
+    },
+    {
+      "source_id": "book_16_21",
+      "concept_ids": [
+        "coppock"
+      ]
+    },
+    {
+      "source_id": "book_16_22",
+      "concept_ids": [
+        "psy"
+      ]
+    },
+    {
+      "source_id": "book_16_23",
+      "concept_ids": [
+        "arbr"
+      ]
+    },
+    {
+      "source_id": "book_16_24",
+      "concept_ids": [
+        "cr"
+      ]
+    },
+    {
+      "source_id": "book_16_25",
+      "concept_ids": [
+        "book_osc"
+      ]
+    },
+    {
+      "source_id": "book_16_26",
+      "concept_ids": [
+        "td_sequential"
+      ]
+    },
+    {
+      "source_id": "book_17_01",
+      "concept_ids": [
+        "book_true_range"
+      ]
+    },
+    {
+      "source_id": "book_17_02",
+      "concept_ids": [
+        "atr"
+      ]
+    },
+    {
+      "source_id": "book_17_03",
+      "concept_ids": [
+        "atr_percent"
+      ]
+    },
+    {
+      "source_id": "book_17_04",
+      "concept_ids": [
+        "hv"
+      ]
+    },
+    {
+      "source_id": "book_17_05",
+      "concept_ids": [
+        "bbands"
+      ]
+    },
+    {
+      "source_id": "book_17_06",
+      "concept_ids": [
+        "squeeze"
+      ]
+    },
+    {
+      "source_id": "book_17_07",
+      "concept_ids": [
+        "book_adr"
+      ]
+    },
+    {
+      "source_id": "book_17_08",
+      "concept_ids": [
+        "chaikin_vol"
+      ]
+    },
+    {
+      "source_id": "book_17_09",
+      "concept_ids": [
+        "mass_index"
+      ]
+    },
+    {
+      "source_id": "book_17_10",
+      "concept_ids": [
+        "ulcer_index"
+      ]
+    },
+    {
+      "source_id": "book_17_11",
+      "concept_ids": [
+        "book_ohlc_volatility"
+      ]
+    },
+    {
+      "source_id": "book_18_01",
+      "concept_ids": [
+        "book_volume_price_quadrant"
+      ]
+    },
+    {
+      "source_id": "book_18_02",
+      "concept_ids": [
+        "vwap"
+      ]
+    },
+    {
+      "source_id": "book_18_03",
+      "concept_ids": [
+        "anchored_vwap"
+      ]
+    },
+    {
+      "source_id": "book_18_04",
+      "concept_ids": [
+        "obv"
+      ]
+    },
+    {
+      "source_id": "book_18_05",
+      "concept_ids": [
+        "adl"
+      ]
+    },
+    {
+      "source_id": "book_18_06",
+      "concept_ids": [
+        "cmf"
+      ]
+    },
+    {
+      "source_id": "book_18_07",
+      "concept_ids": [
+        "chaikin_osc"
+      ]
+    },
+    {
+      "source_id": "book_18_08",
+      "concept_ids": [
+        "mfi"
+      ]
+    },
+    {
+      "source_id": "book_18_09",
+      "concept_ids": [
+        "pvt"
+      ]
+    },
+    {
+      "source_id": "book_18_10",
+      "concept_ids": [
+        "force_index"
+      ]
+    },
+    {
+      "source_id": "book_18_11",
+      "concept_ids": [
+        "book_emv"
+      ]
+    },
+    {
+      "source_id": "book_18_12",
+      "concept_ids": [
+        "klinger"
+      ]
+    },
+    {
+      "source_id": "book_18_13",
+      "concept_ids": [
+        "nvi",
+        "book_pvi"
+      ]
+    },
+    {
+      "source_id": "book_18_14",
+      "concept_ids": [
+        "vol_osc"
+      ]
+    },
+    {
+      "source_id": "book_18_15",
+      "concept_ids": [
+        "vroc"
+      ]
+    },
+    {
+      "source_id": "book_18_16",
+      "concept_ids": [
+        "vr"
+      ]
+    },
+    {
+      "source_id": "book_18_17",
+      "concept_ids": [
+        "wvad"
+      ]
+    },
+    {
+      "source_id": "book_19_01",
+      "concept_ids": [
+        "volume_profile"
+      ]
+    },
+    {
+      "source_id": "book_19_02",
+      "concept_ids": [
+        "tpo"
+      ]
+    },
+    {
+      "source_id": "book_19_03",
+      "concept_ids": [
+        "chip_distribution"
+      ]
+    },
+    {
+      "source_id": "book_19_04",
+      "concept_ids": [
+        "cvd"
+      ]
+    },
+    {
+      "source_id": "book_19_05",
+      "concept_ids": [
+        "footprint"
+      ]
+    },
+    {
+      "source_id": "book_19_06",
+      "concept_ids": [
+        "ddx_ddy_ddz"
+      ]
+    },
+    {
+      "source_id": "book_20_01",
+      "concept_ids": [
+        "support_resistance"
+      ]
+    },
+    {
+      "source_id": "book_20_02",
+      "concept_ids": [
+        "trendline"
+      ]
+    },
+    {
+      "source_id": "book_20_03",
+      "concept_ids": [
+        "pivot_points"
+      ]
+    },
+    {
+      "source_id": "book_20_04",
+      "concept_ids": [
+        "book_cdp"
+      ]
+    },
+    {
+      "source_id": "book_20_05",
+      "concept_ids": [
+        "fibonacci_retracement"
+      ]
+    },
+    {
+      "source_id": "book_20_06",
+      "concept_ids": [
+        "fibonacci_extension"
+      ]
+    },
+    {
+      "source_id": "book_20_07",
+      "concept_ids": [
+        "book_gann_angle"
+      ]
+    },
+    {
+      "source_id": "book_20_08",
+      "concept_ids": [
+        "elliott_wave"
+      ]
+    },
+    {
+      "source_id": "book_20_09",
+      "concept_ids": [
+        "book_chart_pattern_validation"
+      ]
+    },
+    {
+      "source_id": "book_20_10",
+      "concept_ids": [
+        "k_pattern_hammer",
+        "k_pattern_doji",
+        "k_pattern_engulfing",
+        "k_pattern_star"
+      ]
+    },
+    {
+      "source_id": "book_21_01",
+      "concept_ids": [
+        "book_advances_declines"
+      ]
+    },
+    {
+      "source_id": "book_21_02",
+      "concept_ids": [
+        "ad_line"
+      ]
+    },
+    {
+      "source_id": "book_21_03",
+      "concept_ids": [
+        "book_advance_decline_ratio"
+      ]
+    },
+    {
+      "source_id": "book_21_04",
+      "concept_ids": [
+        "up_down_volume"
+      ]
+    },
+    {
+      "source_id": "book_21_05",
+      "concept_ids": [
+        "new_high_low"
+      ]
+    },
+    {
+      "source_id": "book_21_06",
+      "concept_ids": [
+        "mcclellan"
+      ]
+    },
+    {
+      "source_id": "book_21_07",
+      "concept_ids": [
+        "book_mcclellan_sum"
+      ]
+    },
+    {
+      "source_id": "book_21_08",
+      "concept_ids": [
+        "trin"
+      ]
+    },
+    {
+      "source_id": "book_21_09",
+      "concept_ids": [
+        "book_percent_above_ma"
+      ]
+    },
+    {
+      "source_id": "book_21_10",
+      "concept_ids": [
+        "bullish_percent"
+      ]
+    },
+    {
+      "source_id": "book_21_11",
+      "concept_ids": [
+        "tick"
+      ]
+    },
+    {
+      "source_id": "book_21_12",
+      "concept_ids": [
+        "breadth_thrust"
+      ]
+    },
+    {
+      "source_id": "book_22_01",
+      "concept_ids": [
+        "book_relative_strength_line"
+      ]
+    },
+    {
+      "source_id": "book_22_02",
+      "concept_ids": [
+        "book_mansfield_rs"
+      ]
+    },
+    {
+      "source_id": "book_22_03",
+      "concept_ids": [
+        "book_rrg_coordinates"
+      ]
+    },
+    {
+      "source_id": "book_22_04",
+      "concept_ids": [
+        "z_score"
+      ]
+    },
+    {
+      "source_id": "book_22_05",
+      "concept_ids": [
+        "rolling_correlation"
+      ]
+    },
+    {
+      "source_id": "book_22_06",
+      "concept_ids": [
+        "book_pair_spread"
+      ]
+    },
+    {
+      "source_id": "book_22_07",
+      "concept_ids": [
+        "book_cointegration_diagnostic"
+      ]
+    },
+    {
+      "source_id": "book_22_08",
+      "concept_ids": [
+        "hurst"
+      ]
+    },
+    {
+      "source_id": "book_22_09",
+      "concept_ids": [
+        "book_factor_score"
+      ]
+    },
+    {
+      "source_id": "book_23_01",
+      "concept_ids": [
+        "total_return"
+      ]
+    },
+    {
+      "source_id": "book_23_02",
+      "concept_ids": [
+        "cagr"
+      ]
+    },
+    {
+      "source_id": "book_23_03",
+      "concept_ids": [
+        "book_annualized_volatility"
+      ]
+    },
+    {
+      "source_id": "book_23_04",
+      "concept_ids": [
+        "beta"
+      ]
+    },
+    {
+      "source_id": "book_23_05",
+      "concept_ids": [
+        "alpha"
+      ]
+    },
+    {
+      "source_id": "book_23_06",
+      "concept_ids": [
+        "book_r_squared"
+      ]
+    },
+    {
+      "source_id": "book_23_07",
+      "concept_ids": [
+        "sharpe"
+      ]
+    },
+    {
+      "source_id": "book_23_08",
+      "concept_ids": [
+        "sortino"
+      ]
+    },
+    {
+      "source_id": "book_23_09",
+      "concept_ids": [
+        "information_ratio"
+      ]
+    },
+    {
+      "source_id": "book_23_10",
+      "concept_ids": [
+        "treynor"
+      ]
+    },
+    {
+      "source_id": "book_23_11",
+      "concept_ids": [
+        "max_drawdown"
+      ]
+    },
+    {
+      "source_id": "book_23_12",
+      "concept_ids": [
+        "calmar"
+      ]
+    },
+    {
+      "source_id": "book_23_13",
+      "concept_ids": [
+        "tracking_error"
+      ]
+    },
+    {
+      "source_id": "book_23_14",
+      "concept_ids": [
+        "var"
+      ]
+    },
+    {
+      "source_id": "book_23_15",
+      "concept_ids": [
+        "cvar"
+      ]
+    },
+    {
+      "source_id": "book_23_16",
+      "concept_ids": [
+        "capture_ratio"
+      ]
+    },
+    {
+      "source_id": "book_23_17",
+      "concept_ids": [
+        "skewness",
+        "kurtosis"
+      ]
+    },
+    {
+      "source_id": "book_24_01",
+      "concept_ids": [
+        "book_option_value_components"
+      ]
+    },
+    {
+      "source_id": "book_24_02",
+      "concept_ids": [
+        "book_option_moneyness"
+      ]
+    },
+    {
+      "source_id": "book_24_03",
+      "concept_ids": [
+        "book_option_dte"
+      ]
+    },
+    {
+      "source_id": "book_24_04",
+      "concept_ids": [
+        "book_option_volume_oi"
+      ]
+    },
+    {
+      "source_id": "book_24_05",
+      "concept_ids": [
+        "iv"
+      ]
+    },
+    {
+      "source_id": "book_24_06",
+      "concept_ids": [
+        "iv_rank"
+      ]
+    },
+    {
+      "source_id": "book_24_07",
+      "concept_ids": [
+        "book_iv_percentile"
+      ]
+    },
+    {
+      "source_id": "book_24_08",
+      "concept_ids": [
+        "skew",
+        "book_iv_smile"
+      ]
+    },
+    {
+      "source_id": "book_24_09",
+      "concept_ids": [
+        "iv_term_structure"
+      ]
+    },
+    {
+      "source_id": "book_24_10",
+      "concept_ids": [
+        "book_implied_move"
+      ]
+    },
+    {
+      "source_id": "book_24_11",
+      "concept_ids": [
+        "delta"
+      ]
+    },
+    {
+      "source_id": "book_24_12",
+      "concept_ids": [
+        "gamma"
+      ]
+    },
+    {
+      "source_id": "book_24_13",
+      "concept_ids": [
+        "theta"
+      ]
+    },
+    {
+      "source_id": "book_24_14",
+      "concept_ids": [
+        "vega"
+      ]
+    },
+    {
+      "source_id": "book_24_15",
+      "concept_ids": [
+        "book_rho"
+      ]
+    },
+    {
+      "source_id": "book_24_16",
+      "concept_ids": [
+        "book_second_order_greeks"
+      ]
+    },
+    {
+      "source_id": "book_24_17",
+      "concept_ids": [
+        "put_call_ratio"
+      ]
+    },
+    {
+      "source_id": "book_24_18",
+      "concept_ids": [
+        "max_pain"
+      ]
+    },
+    {
+      "source_id": "book_24_19",
+      "concept_ids": [
+        "gex_dex"
+      ]
+    },
+    {
+      "source_id": "book_25_01",
+      "concept_ids": [
+        "consensus"
+      ]
+    },
+    {
+      "source_id": "book_25_02",
+      "concept_ids": [
+        "target_upside"
+      ]
+    },
+    {
+      "source_id": "book_25_03",
+      "concept_ids": [
+        "forecast_dispersion"
+      ]
+    },
+    {
+      "source_id": "book_25_04",
+      "concept_ids": [
+        "book_news_sentiment"
+      ]
+    },
+    {
+      "source_id": "book_25_05",
+      "concept_ids": [
+        "book_social_attention"
+      ]
+    },
+    {
+      "source_id": "book_28_01",
+      "concept_ids": [
+        "pitfall_low_pe"
+      ]
+    },
+    {
+      "source_id": "book_28_02",
+      "concept_ids": [
+        "pitfall_high_pe"
+      ]
+    },
+    {
+      "source_id": "book_28_03",
+      "concept_ids": [
+        "pitfall_rsi"
+      ]
+    },
+    {
+      "source_id": "book_28_04",
+      "concept_ids": [
+        "pitfall_golden_cross"
+      ]
+    },
+    {
+      "source_id": "book_28_05",
+      "concept_ids": [
+        "pitfall_divergence"
+      ]
+    },
+    {
+      "source_id": "book_28_06",
+      "concept_ids": [
+        "pitfall_multi_osc"
+      ]
+    },
+    {
+      "source_id": "book_28_07",
+      "concept_ids": [
+        "pitfall_main_flow"
+      ]
+    },
+    {
+      "source_id": "book_28_08",
+      "concept_ids": [
+        "book_pitfall_order_imbalance"
+      ]
+    },
+    {
+      "source_id": "book_28_09",
+      "concept_ids": [
+        "pitfall_volume"
+      ]
+    },
+    {
+      "source_id": "book_28_10",
+      "concept_ids": [
+        "pitfall_params"
+      ]
+    },
+    {
+      "source_id": "book_28_11",
+      "concept_ids": [
+        "pitfall_industry"
+      ]
+    },
+    {
+      "source_id": "book_28_12",
+      "concept_ids": [
+        "book_pitfall_timeframe"
+      ]
+    },
+    {
+      "source_id": "book_28_13",
+      "concept_ids": [
+        "book_pitfall_open_candle"
+      ]
+    },
+    {
+      "source_id": "book_28_14",
+      "concept_ids": [
+        "book_pitfall_repainting"
+      ]
+    },
+    {
+      "source_id": "book_28_15",
+      "concept_ids": [
+        "book_pitfall_adjustment"
+      ]
+    },
+    {
+      "source_id": "book_28_16",
+      "concept_ids": [
+        "book_pitfall_formula_variant"
+      ]
+    },
+    {
+      "source_id": "book_28_17",
+      "concept_ids": [
+        "book_backtest_data_audit"
+      ]
+    }
+  ]
+}

@@ -14,7 +14,7 @@ use crate::metrics::compute_metrics;
 use crate::portfolio::{Portfolio, PortfolioConfig};
 use crate::risk::{RiskConfig, RiskManager};
 use crate::strategy::Strategy;
-use crate::types::{BacktestResult, Bar, EquityPoint, Fill, Order, Side, Signal};
+use crate::types::{BacktestResult, Bar, EquityPoint, Fill, Side, Signal};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -54,15 +54,14 @@ pub struct BacktestEngine {
 
 impl BacktestEngine {
     pub fn new(config: EngineConfig, risk_config: RiskConfig) -> Self {
-        Self { config, risk_config }
+        Self {
+            config,
+            risk_config,
+        }
     }
 
     /// 在给定的 K 线序列上跑策略,产出 BacktestResult。
-    pub fn run(
-        &self,
-        strategy: &mut dyn Strategy,
-        bars: &[Bar],
-    ) -> BacktestResult {
+    pub fn run(&self, strategy: &mut dyn Strategy, bars: &[Bar]) -> BacktestResult {
         strategy.reset();
 
         let broker = SimulatedBroker::new(
@@ -90,71 +89,61 @@ impl BacktestEngine {
 
         let total = bars.len();
 
-        for (i, bar) in bars.iter().enumerate() {
-            // 1. 更新市场价
-            portfolio.broker.set_market_price(&self.config.symbol, bar.close);
-
-            // 2. 策略产生信号
-            let signal = strategy.on_bar(bar);
-            signals.push(signal.clone());
-
-            // 3. 决定下单
-            let mut order: Option<Order> = None;
-
-            // 3a. 风控是否强制平仓
-            if let Some(reason) = risk.force_close_reason(&portfolio, &*portfolio.broker) {
-                if !portfolio.is_flat() {
-                    order = portfolio.on_signal(Side::Sell, bar.close, bar.timestamp, 1.0);
-                }
-                // 标记最后一条 signal 为"风控"
-                if let Some(last) = signals.last_mut() {
-                    *last = Signal {
+        let mut pending_signal: Option<Signal> = None;
+        for bar in bars {
+            // A signal is known only after its source candle closes. Execute
+            // the previous signal at this candle's open, never at that close.
+            portfolio
+                .broker
+                .set_market_price(&self.config.symbol, bar.open);
+            let previous_signal = pending_signal.take();
+            let execution_signal =
+                if let Some(reason) = risk.force_close_reason(&portfolio, &*portfolio.broker) {
+                    Some(Signal {
+                        timestamp: bar.timestamp,
                         side: Side::Sell,
                         strength: 1.0,
                         reason: format!("[风控] {}", reason),
                         target_size: None,
-                        timestamp: signal.timestamp,
-                    };
-                }
-            } else if signal.side != Side::Hold {
-                // 3b. 按策略信号决定
-                order = portfolio.on_signal(
-                    signal.side,
-                    bar.close,
-                    bar.timestamp,
-                    signal.strength,
-                );
-            }
-
-            // 4. 风控检查
-            if let Some(ref o) = order {
-                let (allowed, _) = risk.allow_order(o, &portfolio, &*portfolio.broker);
-                if !allowed {
-                    order = None;
-                }
-            }
-
-            // 5. 下单成交
-            if let Some(o) = order {
-                let fill = portfolio.broker.place_order(o);
-                if fill.size > 0.0 {
-                    fills.push(fill.clone());
-                    portfolio.on_fill(&fill);
+                    })
+                } else {
+                    previous_signal
+                };
+            if let Some(signal) = execution_signal {
+                if signal.side != Side::Hold {
+                    if let Some(order) =
+                        portfolio.on_signal(signal.side, bar.open, bar.timestamp, signal.strength)
+                    {
+                        let (allowed, _) = risk.allow_order(&order, &portfolio, &*portfolio.broker);
+                        if allowed {
+                            let fill = portfolio.broker.place_order(order);
+                            if fill.size > 0.0 {
+                                fills.push(fill.clone());
+                                portfolio.on_fill(&fill);
+                            }
+                        }
+                    }
                 }
             }
 
-            // 6. 快照净值
-            let price = portfolio.broker.get_market_price(&self.config.symbol)
-                .unwrap_or(bar.close);
+            // Mark to the completed candle close, then create an intention for
+            // the following open. The final intention deliberately remains unfilled.
+            portfolio
+                .broker
+                .set_market_price(&self.config.symbol, bar.close);
+            let signal = strategy.on_bar(bar);
+            signals.push(signal.clone());
+            if signal.side != Side::Hold {
+                pending_signal = Some(signal);
+            }
+
             let pos = portfolio.position();
             equity_curve.push(EquityPoint {
                 timestamp: bar.timestamp,
                 cash: portfolio.broker.get_cash(),
-                position_value: pos.market_value(price),
+                position_value: pos.market_value(bar.close),
                 equity: portfolio.equity(),
             });
-
-            let _ = i;
         }
 
         BacktestResult {
@@ -188,7 +177,9 @@ impl MultiStrategyResult {
     pub fn best_by(&self, metric: &str) -> Option<(String, &BacktestResult)> {
         let mut best: Option<(String, f64, &BacktestResult)> = None;
         for (name, result) in &self.results {
-            let v = result.metrics.get(metric)
+            let v = result
+                .metrics
+                .get(metric)
                 .and_then(|v| v.as_f64())
                 .unwrap_or(f64::NEG_INFINITY);
             match &best {

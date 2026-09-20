@@ -1,0 +1,189 @@
+//! Exercise the actual axum router without external market dependencies.
+use axiom::{api, app_state::AppState, config::default_config};
+use axum::{
+    body::{to_bytes, Body},
+    http::{Request, StatusCode},
+};
+use serde_json::{json, Value};
+use std::{path::PathBuf, sync::Arc};
+use tower::ServiceExt;
+
+fn app() -> axum::Router {
+    api::router(Arc::new(AppState::new(
+        default_config(),
+        PathBuf::from("target/test-data"),
+    )))
+}
+
+async fn request(method: &str, path: &str, body: Value) -> (StatusCode, Value) {
+    let response = app()
+        .oneshot(
+            Request::builder()
+                .method(method)
+                .uri(path)
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = to_bytes(response.into_body(), 20_000_000).await.unwrap();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or_else(|_| json!(String::from_utf8_lossy(&bytes))),
+    )
+}
+
+#[tokio::test]
+async fn malformed_market_requests_are_rejected_before_fetching() {
+    for path in [
+        "/api/data?source=unknown",
+        "/api/data?source=synthetic&limit=0",
+        "/api/data?source=synthetic&limit=999999",
+        "/api/data?source=synthetic&symbol=..%2Fsecret",
+        "/api/indicators?source=synthetic&indicators=rsi_0",
+        "/api/indicators?source=synthetic&indicators=unknown",
+        "/api/indicators?source=synthetic&indicators=ema_-1",
+        "/api/patterns?source=synthetic&limit=0",
+    ] {
+        let (status, body) = request("GET", path, Value::Null).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{path}: {body}");
+    }
+}
+
+#[tokio::test]
+async fn indicator_identifiers_with_underscores_preserve_their_meaning() {
+    let (status, body) = request("GET", "/api/indicators?source=synthetic&limit=60&indicators=williams_r_14,atr_14,atr_percent_14,z_score_20,alligator", Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let indicators = &body["indicators"];
+    for id in [
+        "williams_r_14",
+        "atr_14",
+        "atr_percent_14",
+        "z_score_20",
+        "alligator_jaw",
+    ] {
+        assert_eq!(indicators[id].as_array().unwrap().len(), 60, "{id}");
+    }
+    let i = 59;
+    let wr = indicators["williams_r_14"][i]["y"].as_f64().unwrap();
+    assert!((-100.0..=0.0).contains(&wr));
+    let atr = indicators["atr_14"][i]["y"].as_f64().unwrap();
+    let pct = indicators["atr_percent_14"][i]["y"].as_f64().unwrap();
+    let close = body["bars"][i]["close"].as_f64().unwrap();
+    assert!((pct - atr / close * 100.0).abs() < 1e-10);
+    assert!(
+        indicators["alligator_jaw"][19].is_null(),
+        "13-period SMMA shifted 8 bars needs 20 warm-up slots"
+    );
+}
+
+#[tokio::test]
+async fn backtest_rejects_invalid_configuration_instead_of_panicking_or_clamping() {
+    let cases = [
+        json!({"initial_capital":0}),
+        json!({"commission_rate":-0.1}),
+        json!({"slippage_rate":1.0}),
+        json!({"max_position_pct":1.1}),
+        json!({"stop_loss_pct":-0.1}),
+        json!({"limit":0}),
+        json!({"params":{"fast":0,"slow":20}}),
+        json!({"params":{"fast":2.5,"slow":20}}),
+        json!({"params":{"fast":20,"slow":5}}),
+        json!({"params":{"typo":12}}),
+    ];
+    for patch in cases {
+        let mut req = json!({"strategy":"sma_cross","source":"synthetic","limit":50});
+        req.as_object_mut()
+            .unwrap()
+            .extend(patch.as_object().unwrap().clone());
+        let (status, response) = request("POST", "/api/backtest", req.clone()).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{req}: {response}");
+    }
+}
+
+#[tokio::test]
+async fn compare_can_reuse_exactly_the_same_bars_and_initial_capital() {
+    let (_, data) = request("GET", "/api/data?source=synthetic&limit=100", Value::Null).await;
+    for strategy in [
+        "buy_and_hold",
+        "sma_cross",
+        "rsi",
+        "random",
+        "macd",
+        "bollinger",
+        "supertrend",
+        "donchian_breakout",
+        "vwap_reversion",
+        "kdj",
+        "ichimoku",
+        "ppo",
+        "vortex",
+        "elder_ray",
+    ] {
+        let (status, result) = request(
+            "POST",
+            "/api/backtest",
+            json!({
+                "strategy":strategy,"source":"synthetic","bars":data["bars"],"initial_capital":10000
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{strategy}: {result}");
+        assert_eq!(
+            result["bars"], data["bars"],
+            "{strategy} changed the comparison dataset"
+        );
+        assert_eq!(result["metrics"]["初始资金"], 10000.0);
+        assert_eq!(result["equity_curve"].as_array().unwrap().len(), 100);
+    }
+}
+
+#[tokio::test]
+async fn supplied_bars_must_be_finite_valid_and_strictly_chronological() {
+    let good = json!({"timestamp":"2024-01-01T00:00:00Z","open":100,"high":110,"low":90,"close":105,"volume":1});
+    let mut invalid = good.clone();
+    invalid["high"] = json!(99);
+    for bars in [
+        json!([]),
+        json!([good.clone(), good.clone()]),
+        json!([invalid]),
+    ] {
+        let (status, _) = request(
+            "POST",
+            "/api/backtest",
+            json!({"strategy":"buy_and_hold","source":"synthetic","bars":bars}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+}
+
+#[tokio::test]
+async fn paper_controls_persist_and_reject_unknown_strategy() {
+    let router = app();
+    for (path, running) in [("/api/paper/start", true), ("/api/paper/stop", false)] {
+        let response = router
+            .clone()
+            .oneshot(Request::post(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let snapshot = router
+            .clone()
+            .oneshot(
+                Request::get("/api/paper/snapshot")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let snapshot: Value =
+            serde_json::from_slice(&to_bytes(snapshot.into_body(), 1_000_000).await.unwrap())
+                .unwrap();
+        assert_eq!(snapshot["is_running"], running);
+    }
+    let (status, _) = request("POST", "/api/paper/strategy", json!({"strategy":"typo"})).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
