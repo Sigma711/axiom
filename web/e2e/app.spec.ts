@@ -419,3 +419,10 @@ test('each of the four K-line patterns draws its actual candle structure', async
   }
 });
 
+test('learning path has a shareable URL and remains selected after navigation', async ({ page }) => {
+  await page.goto('/learn');
+  await page.getByRole('button', { name: '学习路径', exact: true }).click();
+  await expect(page).toHaveURL(/\/learn\/path$/);
+  await expect(page.getByRole('heading', { name: '源码阅读顺序' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '学习路径', exact: true })).toHaveClass(/active/);
+});

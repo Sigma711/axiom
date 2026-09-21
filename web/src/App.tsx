@@ -81,13 +81,14 @@ const TABS: { id: TabId; label: string }[] = [
 ];
 
 function routeFor(tab: TabId, sub: LearnSub = 'knowledge', concept?: string) {
-  const base = tab === 'learn' ? (sub === 'book' ? '/learn/book' : '/learn') : `/${tab}`;
+  const learnPaths: Record<LearnSub, string> = { knowledge: '/learn', book: '/learn/book', concepts: '/learn/concepts', build: '/learn/build', path: '/learn/path' };
+  const base = tab === 'learn' ? learnPaths[sub] : `/${tab}`;
   return concept ? `${base}?concept=${encodeURIComponent(concept)}` : base;
 }
 function readRoute() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/';
   const tab = ({ '/data': 'data', '/backtest': 'backtest', '/paper': 'paper', '/compare': 'compare' } as Record<string, TabId>)[path] || 'learn';
-  const sub: LearnSub = path === '/learn/book' ? 'book' : 'knowledge';
+  const sub = ({ '/learn/book': 'book', '/learn/concepts': 'concepts', '/learn/build': 'build', '/learn/path': 'path' } as Record<string, LearnSub>)[path] || 'knowledge';
   return { tab, sub, concept: new URLSearchParams(window.location.search).get('concept') || undefined };
 }
 
