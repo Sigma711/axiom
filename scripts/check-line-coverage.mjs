@@ -19,11 +19,26 @@ async function collect(path) {
   return records;
 }
 
-const merged = new Map([...(await collect(rustPath)), ...(await collect(browserPath))]);
-const covered = [...merged.values()].filter((count) => count > 0).length;
-const total = merged.size;
-const percentage = total === 0 ? 0 : covered / total * 100;
-console.log(`Verified executable-source line coverage: ${covered}/${total} (${percentage.toFixed(2)}%)`);
-if (percentage < 95) {
-  throw new Error(`coverage ${percentage.toFixed(2)}% is below the required 95.00%`);
+function summarize(label, records) {
+  const covered = [...records.values()].filter((count) => count > 0).length;
+  const total = records.size;
+  const percentage = total === 0 ? 0 : covered / total * 100;
+  console.log(`${label} executable-source line coverage: ${covered}/${total} (${percentage.toFixed(2)}%)`);
+  if (percentage < 95) {
+    throw new Error(`${label} coverage ${percentage.toFixed(2)}% is below the required 95.00%`);
+  }
+  return { covered, total };
+}
+
+const rust = await collect(rustPath);
+const browser = await collect(browserPath);
+const rustResult = summarize('Rust', rust);
+const browserResult = summarize('Browser', browser);
+const combined = new Map([...rust, ...browser]);
+const combinedResult = summarize('Combined', combined);
+if (
+  combinedResult.covered !== rustResult.covered + browserResult.covered ||
+  combinedResult.total !== rustResult.total + browserResult.total
+) {
+  throw new Error('Rust and browser coverage records must not overlap');
 }

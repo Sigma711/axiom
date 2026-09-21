@@ -35,7 +35,7 @@ jobs:
         run: make ci
       - name: Install coverage tool
         run: make tools
-      - name: Whole-project coverage (95% required)
+      - name: Rust and browser coverage (each 95% required)
         run: make coverage
       - name: Browser evidence and coverage
         if: always()
