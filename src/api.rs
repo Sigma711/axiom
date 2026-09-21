@@ -852,7 +852,13 @@ async fn get_indicators(
     let requested_str = q
         .indicators
         .unwrap_or_else(|| "sma_20,ema_50,rsi_14".to_string());
-    let requested: Vec<&str> = requested_str.split(',').map(|s| s.trim()).collect();
+    // An empty selection intentionally means "price chart only". Filter empty
+    // tokens so the multi-select's “全部取消” state remains a valid request.
+    let requested: Vec<&str> = requested_str
+        .split(',')
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+        .collect();
 
     let mut series: HashMap<String, Vec<Option<f64>>> = HashMap::new();
 

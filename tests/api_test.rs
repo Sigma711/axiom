@@ -53,6 +53,19 @@ async fn malformed_market_requests_are_rejected_before_fetching() {
 }
 
 #[tokio::test]
+async fn an_empty_indicator_selection_returns_a_price_only_chart() {
+    let (status, body) = request(
+        "GET",
+        "/api/indicators?source=synthetic&limit=60&indicators=",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["bars"].as_array().unwrap().len(), 60);
+    assert_eq!(body["indicators"].as_object().unwrap().len(), 0);
+}
+
+#[tokio::test]
 async fn indicator_identifiers_with_underscores_preserve_their_meaning() {
     let (status, body) = request("GET", "/api/indicators?source=synthetic&limit=60&indicators=williams_r_14,atr_14,atr_percent_14,z_score_20,alligator", Value::Null).await;
     assert_eq!(status, StatusCode::OK, "{body}");

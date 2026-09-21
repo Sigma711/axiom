@@ -115,7 +115,7 @@ function TabBar({ active, onChange }: { active: TabId; onChange: (t: TabId) => v
 // ===================================================================
 interface DropdownProps<T> {
   label: string;
-  options: { v: T; l: string }[];
+  options: readonly { v: T; l: string }[];
   value: T;
   onChange: (v: T) => void;
   minWidth?: number;
@@ -174,6 +174,72 @@ function Dropdown<T extends string | number>({ label, options, value, onChange, 
     </div>
   );
 }
+
+interface MultiSelectDropdownProps<T> {
+  label: string;
+  options: readonly { v: T; l: string }[];
+  values: T[];
+  onChange: (values: T[]) => void;
+  minWidth?: number;
+}
+function MultiSelectDropdown<T extends string | number>({ label, options, values, onChange, minWidth = 180 }: MultiSelectDropdownProps<T>) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = new Set(values);
+  const allSelected = options.length > 0 && options.every(option => selected.has(option.v));
+  const visibleOptions = options.filter(option => option.l.toLowerCase().includes(query.trim().toLowerCase()));
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const toggle = (value: T) => onChange(selected.has(value) ? values.filter(item => item !== value) : [...values, value]);
+  const clearOrSelectAll = () => onChange(allSelected ? [] : options.map(option => option.v));
+  const triggerLabel = values.length === 0 ? '未选择指标' : values.length === 1 ? options.find(option => option.v === values[0])?.l || '已选 1 项' : `已选 ${values.length} 项`;
+
+  return (
+    <div className={'ax-dropdown ax-multi-select' + (open ? ' open' : '')} ref={ref} style={{ minWidth }} onKeyDown={event => {
+      if (event.key === 'Escape') { setOpen(false); ref.current?.querySelector<HTMLButtonElement>('.ax-dd-trigger')?.focus(); }
+    }}>
+      <button type="button" className="ax-dd-trigger" aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={() => { setOpen(value => !value); setQuery(''); }}>
+        <span>{triggerLabel}</span>
+      </button>
+      {open && (
+        <div className="ax-dd-menu ax-multi-menu" role="listbox" aria-label={label} aria-multiselectable="true">
+          <div className="ax-multi-actions">
+            <button type="button" className="ax-multi-action" onClick={clearOrSelectAll}>{allSelected ? '全部取消' : '全选'}</button>
+            <span aria-live="polite">已选 {values.length} / {options.length}</span>
+          </div>
+          <input className="ax-dd-search" placeholder="搜索指标..." aria-label="搜索指标" autoFocus value={query} onChange={event => setQuery(event.target.value)} />
+          {visibleOptions.map(option => {
+            const isSelected = selected.has(option.v);
+            return <button type="button" role="option" aria-selected={isSelected} key={String(option.v)}
+              className={'ax-dd-item ax-multi-option' + (isSelected ? ' selected' : '')} onClick={() => toggle(option.v)}>
+              <span className="ax-multi-check" aria-hidden="true">{isSelected ? '✓' : ''}</span>{option.l}
+            </button>;
+          })}
+          {visibleOptions.length === 0 && <p className="ax-multi-empty">没有匹配的指标</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const INDICATOR_OPTIONS = [
+  { v: 'sma_20', l: 'SMA (20)' }, { v: 'ema_50', l: 'EMA (50)' }, { v: 'rsi_14', l: 'RSI (14)' },
+  { v: 'bbands_20', l: '布林带 (20)' }, { v: 'macd', l: 'MACD' }, { v: 'vwap', l: 'VWAP' },
+  { v: 'vwma_20', l: 'VWMA (20)' }, { v: 'atr_14', l: 'ATR (14)' }, { v: 'atr_percent_14', l: 'ATR % (14)' },
+  { v: 'obv', l: 'OBV' }, { v: 'zscore_20', l: 'Z-Score (20)' }, { v: 'ichimoku', l: '一目均衡表' },
+  { v: 'kdj', l: 'KDJ' }, { v: 'stoch_14', l: '随机指标 (14)' }, { v: 'williams_r_14', l: 'Williams %R (14)' },
+  { v: 'cci_20', l: 'CCI (20)' }, { v: 'adx_14', l: 'ADX (14)' }, { v: 'bbi', l: 'BBI' },
+  { v: 'alligator', l: '鳄鱼线' }, { v: 'ppo', l: 'PPO' }, { v: 'vortex_14', l: 'Vortex (14)' },
+] as const;
 
 // ===================================================================
 // 学习中心: 4 个子标签
@@ -626,7 +692,8 @@ function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 
   const [limit, setLimit] = useState(200);
   const [source, setSource] = useState<SourceType>('real');
   const [chartType, setChartType] = useState<ChartType>('candle');
-  const [indicatorSet, setIndicatorSet] = useState('sma_20,rsi_14,bbands_20,macd,atr_14');
+  const [selectedIndicators, setSelectedIndicators] = useState<string[]>(['sma_20', 'rsi_14', 'bbands_20', 'macd', 'atr_14']);
+  const appliedIndicators = useRef<string[]>(['sma_20', 'rsi_14', 'bbands_20', 'macd', 'atr_14']);
   const [chartData, setChartData] = useState<{ bars: Bar[]; indicators: Record<string, Array<{ x: string; y: number } | null>>; symbol: string; source: string } | null>(null);
   const [summary, setSummary] = useState<{ open: number; close: number; high: number; low: number; return_pct: number; avg_volume: number; count: number; source: string } | null>(null);
   const [patterns, setPatterns] = useState<Array<{ pattern: string; timestamp: string }>>([]);
@@ -643,13 +710,13 @@ function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 
     }).catch(e => setError(String(e)));
   }, []);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (requestedIndicators = appliedIndicators.current) => {
     const id = ++requestId.current;
     const sym = (customSymbol || symbol || 'BTCUSDT').toUpperCase();
     setLoading(true);
     setError('');
     try {
-      const data = await api.getIndicators(sym, indicatorSet, limit, source);
+      const data = await api.getIndicators(sym, requestedIndicators.join(','), limit, source);
       if (chartType === 'heikin_ashi') {
         try {
           const ha = await api.getHeikinAshi(sym, limit, source);
@@ -688,7 +755,7 @@ function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 
     } finally {
       if (id === requestId.current) setLoading(false);
     }
-  }, [symbol, customSymbol, limit, source, indicatorSet, chartType]);
+  }, [symbol, customSymbol, limit, source, chartType]);
 
   useEffect(() => { if (symbol) loadData(); }, [loadData, symbol]);
 
@@ -791,9 +858,9 @@ function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 
             value={chartType} onChange={(v: ChartType) => setChartType(v)} minWidth={140} />
         </label>
         <label>指标叠加
-          <input type="text" value={indicatorSet} onChange={e => setIndicatorSet(e.target.value)} style={{ width: 220 }} />
+          <MultiSelectDropdown label="指标叠加" options={INDICATOR_OPTIONS} values={selectedIndicators} onChange={setSelectedIndicators} minWidth={210} />
         </label>
-        <button className="ax-btn primary" onClick={loadData} disabled={loading}>
+        <button className="ax-btn primary" onClick={() => { appliedIndicators.current = selectedIndicators; loadData(selectedIndicators); }} disabled={loading}>
           {loading ? '加载中...' : '加载数据'}
         </button>
       </div>

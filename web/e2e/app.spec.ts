@@ -236,6 +236,27 @@ test('selecting a dropdown option closes it and Escape dismisses it', async ({ p
   await expect(page.locator('.ax-dd-menu')).toHaveCount(0);
 });
 
+test('indicator overlay selector supports multi-select, select all, and clear all', async ({ page }) => {
+  const indicatorRequests: string[] = [];
+  await page.route('**/api/indicators**', async route => {
+    indicatorRequests.push(new URL(route.request().url()).searchParams.get('indicators') || '');
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ symbol: 'BTCUSDT', source: 'synthetic', bars, indicators: {} }) });
+  });
+  await page.goto('/data');
+  const trigger = page.getByRole('button', { name: '指标叠加', exact: true });
+  await trigger.click();
+  await expect(page.getByRole('button', { name: '全选', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '全选', exact: true }).click();
+  await expect(trigger).toContainText('已选 21 项');
+  await page.getByRole('button', { name: '全部取消', exact: true }).click();
+  await expect(trigger).toContainText('未选择指标');
+  await page.getByRole('option', { name: /RSI \(14\)/ }).click();
+  await trigger.press('Escape');
+  await expect(page.locator('.ax-dd-menu')).toHaveCount(0);
+  await page.getByRole('button', { name: '加载数据', exact: true }).click();
+  await expect.poll(() => indicatorRequests.at(-1)).toBe('rsi_14');
+});
+
 test('primary controls retain readable contrast on hover in both themes', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', {name:'数据探索', exact:true}).click();
