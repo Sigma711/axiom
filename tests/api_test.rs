@@ -93,6 +93,47 @@ async fn indicator_identifiers_with_underscores_preserve_their_meaning() {
 }
 
 #[tokio::test]
+async fn every_published_strategy_runs_through_the_public_backtest_api() {
+    let (status, catalog) = request("GET", "/api/strategies", Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{catalog}");
+    let strategies = catalog["strategies"]
+        .as_array()
+        .expect("strategy catalog array");
+    assert!(!strategies.is_empty());
+
+    for strategy in strategies {
+        let name = strategy["name"].as_str().expect("strategy name");
+        let params = strategy["params"]
+            .as_array()
+            .expect("strategy parameter array")
+            .iter()
+            .map(|parameter| {
+                (
+                    parameter["key"].as_str().expect("parameter key").to_owned(),
+                    parameter["default"].clone(),
+                )
+            })
+            .collect::<serde_json::Map<_, _>>();
+        let (status, result) = request(
+            "POST",
+            "/api/backtest",
+            json!({
+                "strategy": name,
+                "source": "synthetic",
+                "limit": 200,
+                "initial_capital": 10_000.0,
+                "params": params,
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{name}: {result}");
+        assert_eq!(result["config"]["strategy"], name);
+        assert_eq!(result["equity_curve"].as_array().unwrap().len(), 200);
+        assert!(!result["metrics"].as_object().unwrap().is_empty());
+    }
+}
+
+#[tokio::test]
 async fn backtest_rejects_invalid_configuration_instead_of_panicking_or_clamping() {
     let cases = [
         json!({"initial_capital":0}),
