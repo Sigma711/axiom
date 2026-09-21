@@ -493,3 +493,23 @@ test('every visible learning source reference is requested through the AST-backe
     'src/strategy.rs::Strategy', 'src/types.rs::Bar', 'src/workflows.rs::entries',
   ]);
 });
+
+
+test('long dropdown menus stay above subsequent control groups', async ({ page }) => {
+  const longStrategies = Array.from({ length: 12 }, (_, index) => ({ name: `long_${index}`, display_name: index === 8 ? '一目均衡表 Ichimoku' : `策略 ${index + 1}`, description: 'fixture', params: index === 8 ? [{ key: 'fast', label: '转换线周期', default: 9, min: 2, max: 30 }] : [] }));
+  await page.route('**/api/strategies', route => route.fulfill({ json: { strategies: longStrategies } }));
+  await page.goto('/backtest');
+  const trigger = page.getByRole('button', { name: '策略', exact: true });
+  await trigger.click();
+  await page.getByRole('option', { name: '一目均衡表 Ichimoku', exact: true }).click();
+  await expect(page.getByLabel('转换线周期')).toBeVisible();
+  await trigger.click();
+  const menu = page.locator('.ax-dd-menu');
+  await expect(menu).toBeVisible();
+  const coveredByMenu = await menu.evaluate(node => {
+    const rect = node.getBoundingClientRect();
+    const point = document.elementFromPoint(rect.left + 20, rect.top + Math.min(155, rect.height - 12));
+    return point?.closest('.ax-dd-menu') === node;
+  });
+  expect(coveredByMenu).toBe(true);
+});

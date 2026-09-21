@@ -137,7 +137,7 @@ body {
 .ax-dd-item.selected { background: var(--bg-elev); color: var(--accent); border-left-color: var(--accent); font-weight: 500; }
 
 /* === 控件区 === */
-.ax-controls { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 0.85rem 1rem; display: flex; flex-wrap: wrap; gap: 0.65rem 1rem; align-items: center; margin-bottom: 1.5rem; position: relative; z-index: 1; }
+.ax-controls { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 0.85rem 1rem; display: flex; flex-wrap: wrap; gap: 0.65rem 1rem; align-items: center; margin-bottom: 1.5rem; position: relative; }
 .ax-controls > label { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; }
 .ax-controls input[type="text"], .ax-controls input[type="number"] { background: var(--bg-input); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 0.4rem 0.6rem; font-size: 0.875rem; font-family: inherit; min-width: 100px; }
 .ax-controls input:focus { outline: none; border-color: var(--accent); }
