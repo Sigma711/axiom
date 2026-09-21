@@ -10,7 +10,7 @@ import type {
   PracticeResult,
 } from './types';
 
-export const appBase = (import.meta.env.VITE_API_BASE ?? import.meta.env.BASE_URL ?? '/').replace(/\/+$/, '').replace(/^\/?$/, '');
+export const appBase = (import.meta.env.VITE_APP_BASE ?? '').replace(/\/+$/, '');
 export const appPath = (path: string) => `${appBase}${path}`;
 const BASE = appBase;  // 同源或受部署子路径约束
 
