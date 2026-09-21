@@ -10,7 +10,9 @@ import type {
   PracticeResult,
 } from './types';
 
-const BASE = '';  // 同源
+export const appBase = (import.meta.env.VITE_API_BASE ?? import.meta.env.BASE_URL ?? '/').replace(/\/+$/, '').replace(/^\/?$/, '');
+export const appPath = (path: string) => `${appBase}${path}`;
+const BASE = appBase;  // 同源或受部署子路径约束
 
 export type CodeLocation = { url?: string; github_url?: string; source_url?: string; path: string; line: number; end_line?: number; };
 export function preferredCodeLocationUrl(location: CodeLocation): string {

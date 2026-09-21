@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import Plotly from 'plotly.js-dist-min';
-import { api, fmtPct, fmtNum, fmtMoney, preferredCodeLocationUrl } from './api';
+import { api, appBase, appPath, fmtPct, fmtNum, fmtMoney, preferredCodeLocationUrl } from './api';
 import { performanceInputs } from './performance';
 import { KnowledgeSeriesVisual } from './KnowledgeSeriesVisual';
 import { indicatorPanel, validSeries, type IndicatorPanel } from './chart';
@@ -83,10 +83,12 @@ const TABS: { id: TabId; label: string }[] = [
 function routeFor(tab: TabId, sub: LearnSub = 'knowledge', concept?: string) {
   const learnPaths: Record<LearnSub, string> = { knowledge: '/learn', book: '/learn/book', concepts: '/learn/concepts', build: '/learn/build', path: '/learn/path' };
   const base = tab === 'learn' ? learnPaths[sub] : `/${tab}`;
-  return concept ? `${base}?concept=${encodeURIComponent(concept)}` : base;
+  const path = appPath(base);
+  return concept ? `${path}?concept=${encodeURIComponent(concept)}` : path;
 }
 function readRoute() {
-  const path = window.location.pathname.replace(/\/+$/, '') || '/';
+  const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
+  const path = (appBase && pathname.startsWith(appBase) ? pathname.slice(appBase.length) : pathname) || '/';
   const tab = ({ '/data': 'data', '/backtest': 'backtest', '/paper': 'paper', '/compare': 'compare' } as Record<string, TabId>)[path] || 'learn';
   const sub = ({ '/learn/book': 'book', '/learn/concepts': 'concepts', '/learn/build': 'build', '/learn/path': 'path' } as Record<string, LearnSub>)[path] || 'knowledge';
   return { tab, sub, concept: new URLSearchParams(window.location.search).get('concept') || undefined };
@@ -262,7 +264,7 @@ function BookReader() {
     {tocOpen && <nav aria-label="原书目录"><h3>原书目录</h3>{toc.map(([label, target]) => <button key={target} type="button" className={page === target ? 'active' : ''} onClick={() => setPage(target)}>{label}<small>第 {target} 页</small></button>)}</nav>}
   </aside><section className="ax-book-page" aria-label="股票交易软件专业指标全解阅读器">
     <p className="ax-practice-note">仅提供本书阅读。点击目录定位页码；阅读区会按宽度适配，并可在 PDF 内上下滚动。</p>
-    <iframe key={page} title="股票交易软件专业指标全解" src={`/api/book/pdf#page=${page}&view=FitH`} />
+    <iframe key={page} title="股票交易软件专业指标全解" src={appPath(`/api/book/pdf#page=${page}&view=FitH`)} />
   </section></div>;
 }
 
@@ -1123,7 +1125,7 @@ function PaperTrading({ targetConcept, theme }: { targetConcept?: string; theme:
   // WebSocket
   useEffect(() => {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${proto}://${location.host}/api/paper/ws`);
+    const ws = new WebSocket(`${proto}://${location.host}${appPath('/api/paper/ws')}`);
     wsRef.current = ws;
     ws.onmessage = (e) => {
       try { setSnapshot(JSON.parse(e.data)); } catch {}
