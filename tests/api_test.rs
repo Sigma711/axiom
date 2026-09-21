@@ -241,3 +241,170 @@ async fn paper_controls_persist_and_reject_unknown_strategy() {
     let (status, _) = request("POST", "/api/paper/strategy", json!({"strategy":"typo"})).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn all_supported_indicator_overlays_have_full_length_public_series() {
+    let ids = [
+        "sma_20",
+        "ema_20",
+        "rsi_14",
+        "vwma_20",
+        "bbands_20",
+        "macd",
+        "vwap",
+        "atr_14",
+        "atr_percent_14",
+        "obv",
+        "zscore_20",
+        "ichimoku",
+        "kdj",
+        "stoch_14",
+        "williams_r_14",
+        "cci_20",
+        "adx_14",
+        "bbi",
+        "alligator",
+        "ppo",
+        "vortex_14",
+    ];
+    let path = format!(
+        "/api/indicators?source=synthetic&limit=120&indicators={}",
+        ids.join(",")
+    );
+    let (status, body) = request("GET", &path, Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["bars"].as_array().unwrap().len(), 120);
+
+    let overlays = body["indicators"].as_object().expect("indicator object");
+    for key in [
+        "sma_20",
+        "ema_20",
+        "rsi_14",
+        "vwma_20",
+        "bbands_20_upper",
+        "bbands_20_middle",
+        "bbands_20_lower",
+        "macd_dif",
+        "macd_dea",
+        "macd_hist",
+        "vwap",
+        "atr_14",
+        "atr_percent_14",
+        "obv",
+        "zscore_20",
+        "ichimoku_tenkan",
+        "ichimoku_kijun",
+        "ichimoku_senkou_a",
+        "ichimoku_senkou_b",
+        "ichimoku_chikou",
+        "kdj_k",
+        "kdj_d",
+        "kdj_j",
+        "stoch_k",
+        "stoch_d",
+        "williams_r_14",
+        "cci_20",
+        "adx_plus_di",
+        "adx_minus_di",
+        "adx_adx",
+        "bbi",
+        "alligator_jaw",
+        "alligator_teeth",
+        "alligator_lips",
+        "ppo",
+        "vortex_plus",
+        "vortex_minus",
+    ] {
+        let points = overlays[key].as_array().expect(key);
+        assert_eq!(points.len(), 120, "{key}");
+        assert!(
+            points
+                .iter()
+                .filter(|point| !point.is_null())
+                .all(|point| point["x"].is_string() && point["y"].is_number()),
+            "{key} contains a malformed finite point"
+        );
+    }
+}
+
+#[tokio::test]
+async fn public_learning_and_exploration_reads_return_complete_safe_documents() {
+    let (status, config) = request("GET", "/api/config", Value::Null).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(config["trading"]["symbol"], "BTCUSDT");
+
+    let (status, data) = request("GET", "/api/data?source=synthetic&limit=25", Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{data}");
+    assert_eq!(data["bars"].as_array().unwrap().len(), 25);
+
+    let (status, patterns) = request(
+        "GET",
+        "/api/patterns?source=synthetic&limit=25",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{patterns}");
+    assert_eq!(patterns["patterns"].as_array().unwrap().len(), 20);
+    assert!(patterns["patterns"][0]["pattern_code"].is_string());
+
+    let (status, heikin_ashi) = request(
+        "GET",
+        "/api/heikin_ashi?source=synthetic&limit=25",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{heikin_ashi}");
+    assert_eq!(heikin_ashi["chart"], "heikin_ashi");
+    assert_eq!(heikin_ashi["bars"].as_array().unwrap().len(), 25);
+
+    let (status, knowledge) = request("GET", "/api/knowledge", Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{knowledge}");
+    assert!(knowledge["total"].as_u64().unwrap() > 100);
+    assert!(!knowledge["categories"].as_object().unwrap().is_empty());
+
+    let (status, location) = request(
+        "GET",
+        "/api/code_loc?ref=src%2Findicators%2Fma.rs%3A%3Asma",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(location["ok"], true);
+    assert!(location["line"].as_u64().unwrap() > 0);
+    assert!(!location["url"].as_str().unwrap().is_empty());
+
+    let (status, missing) = request("GET", "/api/code_loc?ref=not-real", Value::Null).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(missing["ok"], false);
+
+    let router = app();
+    let source = router
+        .clone()
+        .oneshot(
+            Request::get("/api/code/source?path=src%2Findicators%2Fma.rs&line=1&end_line=2")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(source.status(), StatusCode::OK);
+    let source_html = String::from_utf8(
+        to_bytes(source.into_body(), 2_000_000)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(source_html.contains("id=\"L1\""));
+    assert!(source_html.contains("固定版本源码快照") || source_html.contains("含本地改动"));
+
+    let denied = router
+        .oneshot(
+            Request::get("/api/code/source?path=..%2FCargo.toml")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::NOT_FOUND);
+}

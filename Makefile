@@ -17,7 +17,7 @@ AXIOM_PORT ?= 8080
 
 .PHONY: help setup browser-deps build build-web build-rust build-debug run-debug dev serve serve-test test test-rust test-one test-web test-e2e test-e2e-real test-visual lint lint-rust lint-web check-format fmt check ci coverage tools verify-published
 help:
-	@printf '%s\n' 'make setup      Install locked frontend dependencies and browser' 'make build      Build frontend and Rust release' 'make serve      Run the production app (AXIOM_PORT=8080)' 'make dev        Run the frontend dev server' 'make test       Rust, frontend unit tests, real-browser E2E and visual checks' 'make check      Formatting, lint, typecheck, build and every test' 'make coverage   Rust LCOV and HTML coverage report' 'make fmt        Format Rust source'
+	@printf '%s\n' 'make setup      Install locked frontend dependencies and browser' 'make build      Build frontend and Rust release' 'make serve      Run the production app (AXIOM_PORT=8080)' 'make dev        Run the frontend dev server' 'make test       Rust, frontend unit tests, real-browser E2E and visual checks' 'make check      Formatting, lint, typecheck, build and every test' 'make coverage   Rust plus Chromium executable-source coverage, enforced at 95%' 'make fmt        Format Rust source'
 
 setup:
 	cd web && $(NPM) ci
@@ -76,9 +76,13 @@ ci: check
 tools:
 	rustup component add rustfmt clippy llvm-tools-preview
 	cargo install cargo-llvm-cov --locked
-coverage:
-	mkdir -p coverage
-	cargo llvm-cov --all-targets --locked --lcov --output-path coverage/lcov.info
+coverage: build-web
+	rm -rf coverage/rust coverage/web-e2e coverage/lcov.info coverage/html
+	mkdir -p coverage/rust
+	cargo llvm-cov --all-targets --locked --lcov --output-path coverage/rust/lcov.info
+	bash scripts/run-browser-coverage.sh
+	cat coverage/rust/lcov.info coverage/web-e2e/lcov.info > coverage/lcov.info
+	node scripts/check-line-coverage.mjs coverage/rust/lcov.info coverage/web-e2e/lcov.info
 	cargo llvm-cov report --html --output-dir coverage/html
 
 # Run after committing and pushing; rebuilds the AST map against that revision.

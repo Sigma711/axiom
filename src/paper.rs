@@ -85,6 +85,7 @@ pub struct PaperState {
     fills_count: usize,
     pending_signal: Option<Signal>,
     generation: u64,
+    source: &'static str,
     pub equity_curve: Vec<EquityPoint>,
     bars: Vec<Bar>,
     pub log: Vec<PaperLogEntry>,
@@ -130,6 +131,11 @@ impl PaperState {
             fills_count: 0,
             pending_signal: None,
             generation: 0,
+            source: if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
+                "synthetic"
+            } else {
+                "real"
+            },
             equity_curve: Vec::new(),
             bars: Vec::new(),
             log: Vec::new(),
@@ -252,12 +258,7 @@ impl PaperState {
             .unwrap_or(0.0);
         PaperSnapshot {
             symbol: self.config.symbol.clone(),
-            source: if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
-                "synthetic"
-            } else {
-                "real"
-            }
-            .into(),
+            source: self.source.into(),
             initial_capital: self.config.initial_capital,
             strategy: self.strategy.name().into(),
             is_running: self.is_running,
@@ -353,6 +354,10 @@ pub async fn run_paper_loop<F: AsyncDataFeed>(feed: Arc<F>, state: Arc<RwLock<Pa
 pub async fn run_offline_paper_loop(state: Arc<RwLock<PaperState>>) {
     use crate::data::{DataFeed, SyntheticFeed};
     use chrono::TimeZone;
+    {
+        let mut s = state.write().await;
+        s.source = "synthetic";
+    }
     let bars = SyntheticFeed::default()
         .fetch_historical(
             "OFFLINE",

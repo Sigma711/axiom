@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './v8-coverage';
 
 test('real Rust service supports the four-module learning journey', async ({ page }, testInfo) => {
   test.setTimeout(120_000);

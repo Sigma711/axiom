@@ -112,3 +112,52 @@ async fn stop_while_market_fetch_is_pending_does_not_process_the_late_response()
     assert!(state.read().await.snapshot().current_bar.is_none());
     worker.abort();
 }
+
+#[test]
+fn paper_state_switches_strategy_and_keeps_a_bounded_newest_first_audit_log() {
+    use axiom::paper::PaperLogLevel;
+    let mut paper = PaperState::new(PaperConfigP::default(), Box::new(BuyAndHoldStrategy::new()));
+    assert!(!paper.snapshot().is_running);
+    paper.set_running(true);
+    paper.set_running(true);
+    paper.replace_strategy(Box::new(RandomStrategy::new(7, 0.1, 0.2)));
+    assert_eq!(paper.snapshot().strategy, "random");
+    for level in [
+        PaperLogLevel::Info,
+        PaperLogLevel::Warn,
+        PaperLogLevel::Error,
+        PaperLogLevel::Fill,
+    ] {
+        paper.log(level, level.as_str().to_owned());
+    }
+    assert_eq!(paper.snapshot().log[0].level, "FILL");
+    assert_eq!(paper.snapshot().log[3].level, "INFO");
+
+    for index in 0..1_001 {
+        paper.log(PaperLogLevel::Info, format!("entry-{index}"));
+    }
+    let snapshot = paper.snapshot();
+    assert_eq!(snapshot.log.len(), 100);
+    assert_eq!(snapshot.log[0].message, "entry-1000");
+    assert_eq!(paper.log.len(), 1000);
+    assert_eq!(paper.log[0].message, "entry-1");
+}
+
+#[tokio::test]
+async fn offline_paper_loop_marks_its_snapshot_as_synthetic_and_processes_closed_bars() {
+    use axiom::paper::run_offline_paper_loop;
+    use tokio::time::{sleep, Duration};
+
+    let state = Arc::new(RwLock::new(PaperState::new(
+        PaperConfigP::default(),
+        Box::new(BuyAndHoldStrategy::new()),
+    )));
+    state.write().await.set_running(true);
+    let worker = tokio::spawn(run_offline_paper_loop(state.clone()));
+    sleep(Duration::from_millis(1100)).await;
+    let snapshot = state.read().await.snapshot();
+    assert_eq!(snapshot.source, "synthetic");
+    assert!(snapshot.current_bar.is_some());
+    assert!(!snapshot.bars.is_empty());
+    worker.abort();
+}
