@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import Plotly from 'plotly.js-dist-min';
 import { api, fmtPct, fmtNum, fmtMoney } from './api';
 import { performanceInputs } from './performance';
@@ -79,6 +79,17 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'paper', label: '模拟盘' },
   { id: 'compare', label: '策略对比' },
 ];
+
+function routeFor(tab: TabId, sub: LearnSub = 'knowledge', concept?: string) {
+  const base = tab === 'learn' ? (sub === 'book' ? '/learn/book' : '/learn') : `/${tab}`;
+  return concept ? `${base}?concept=${encodeURIComponent(concept)}` : base;
+}
+function readRoute() {
+  const path = window.location.pathname.replace(/\/+$/, '') || '/';
+  const tab = ({ '/data': 'data', '/backtest': 'backtest', '/paper': 'paper', '/compare': 'compare' } as Record<string, TabId>)[path] || 'learn';
+  const sub: LearnSub = path === '/learn/book' ? 'book' : 'knowledge';
+  return { tab, sub, concept: new URLSearchParams(window.location.search).get('concept') || undefined };
+}
 
 function TabBar({ active, onChange }: { active: TabId; onChange: (t: TabId) => void }) {
   return (
@@ -166,16 +177,28 @@ function Dropdown<T extends string | number>({ label, options, value, onChange, 
 // ===================================================================
 // 学习中心: 4 个子标签
 // ===================================================================
-type LearnSub = 'knowledge' | 'concepts' | 'build' | 'path';
+type LearnSub = 'knowledge' | 'concepts' | 'build' | 'path' | 'book';
 const LEARN_SUBS: { id: LearnSub; label: string }[] = [
   { id: 'knowledge', label: '指标大全' },
   { id: 'concepts', label: '概念速览' },
   { id: 'build', label: '创建策略' },
+  { id: 'book', label: '原书阅读' },
   { id: 'path', label: '学习路径' },
 ];
 
-function LearnCenter({ onPractice }: { onPractice: (conceptId: string, module: TabId) => void }) {
-  const [sub, setSub] = useState<LearnSub>('knowledge');
+function LearnCenter({ sub, onSubChange, onPractice }: { sub: LearnSub; onSubChange: (sub: LearnSub) => void; onPractice: (conceptId: string) => void }) {
+function BookReader() {
+  const toc = [['封面与目录', 1], ['指标基础与均线', 6], ['趋势与动量指标', 18], ['摆动与超买超卖', 31], ['成交量与量价关系', 43], ['K 线形态', 55], ['图表与实战方法', 67], ['附录与索引', 78]] as const;
+  const [tocOpen, setTocOpen] = useState(true), [page, setPage] = useState(1);
+  return <div className="ax-book-reader"><aside className={'ax-book-toc' + (tocOpen ? '' : ' collapsed')}>
+    <button className="ax-book-toc-toggle" type="button" aria-expanded={tocOpen} onClick={() => setTocOpen(open => !open)}>{tocOpen ? '收起目录' : '展开目录'}</button>
+    {tocOpen && <nav aria-label="原书目录"><h3>原书目录</h3>{toc.map(([label, target]) => <button key={target} type="button" className={page === target ? 'active' : ''} onClick={() => setPage(target)}>{label}<small>第 {target} 页</small></button>)}</nav>}
+  </aside><section className="ax-book-page" aria-label="股票交易软件专业指标全解阅读器">
+    <p className="ax-practice-note">仅提供本书阅读。点击目录定位页码；阅读区会按宽度适配，并可在 PDF 内上下滚动。</p>
+    <iframe key={page} title="股票交易软件专业指标全解" src={`/api/book/pdf#page=${page}&view=FitH`} />
+  </section></div>;
+}
+
   return (
     <section className="ax-section">
       <h2>学习中心</h2>
@@ -184,11 +207,12 @@ function LearnCenter({ onPractice }: { onPractice: (conceptId: string, module: T
         {LEARN_SUBS.map(s => (
           <button key={s.id}
             className={'ax-learn-sub' + (s.id === sub ? ' active' : '')}
-            onClick={() => setSub(s.id)}>{s.label}</button>
+            onClick={() => onSubChange(s.id)}>{s.label}</button>
         ))}
       </nav>
       {sub === 'knowledge' && <KnowledgeView onPractice={onPractice} />}
       {sub === 'concepts' && <ConceptsView />}
+      {sub === 'book' && <BookReader />}
       {sub === 'build' && <BuildView />}
       {sub === 'path' && <PathView />}
     </section>
@@ -196,9 +220,11 @@ function LearnCenter({ onPractice }: { onPractice: (conceptId: string, module: T
 }
 
 // 指标大全
-function KnowledgeView({ onPractice }: { onPractice: (conceptId: string, module: TabId) => void }) {
+function KnowledgeView({ onPractice }: { onPractice: (conceptId: string) => void }) {
   const [data, setData] = useState<KnowledgeResponse | null>(null);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(0);
+  const [openId, setOpenId] = useState<string>();
   const [activeCat, setActiveCat] = useState('');
 
   useEffect(() => { api.listKnowledge().then(setData).catch(console.error); }, []);
@@ -215,6 +241,9 @@ function KnowledgeView({ onPractice }: { onPractice: (conceptId: string, module:
     (e.example || '').toLowerCase().includes(q)
   ) : list;
 
+  const pageSize = 24, pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, pageCount - 1);
+  const visible = filtered.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
   return (
     <div>
       <div className="ax-search-bar">
@@ -222,16 +251,16 @@ function KnowledgeView({ onPractice }: { onPractice: (conceptId: string, module:
           type="text"
           placeholder="搜索 概念 / 公式 / 关键词"
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={e => { setSearch(e.target.value); setPage(0); setOpenId(undefined); }}
         />
       </div>
       <div className="ax-cat-pills">
-        <button className={'ax-pill' + (!activeCat ? ' active' : '')} onClick={() => setActiveCat('')}>
+        <button className={'ax-pill' + (!activeCat ? ' active' : '')} onClick={() => { setActiveCat(''); setPage(0); setOpenId(undefined); }}>
           全部 ({data.total})
         </button>
         {cats.map(c => (
           <button key={c} className={'ax-pill' + (activeCat === c ? ' active' : '')}
-            onClick={() => setActiveCat(c)}>
+            onClick={() => { setActiveCat(c); setPage(0); setOpenId(undefined); }}>
             {c} ({data.categories[c].length})
           </button>
         ))}
@@ -239,25 +268,23 @@ function KnowledgeView({ onPractice }: { onPractice: (conceptId: string, module:
       <p style={{ color: 'var(--text-dim)', fontSize: '0.82rem', margin: '0.4rem 0 0.8rem' }}>
         {filtered.length} 条结果
       </p>
-      {filtered.map(e => <KbCard key={e.id} e={e} onPractice={onPractice} />)}
+      {visible.map(e => <KbCard key={e.id} e={e} onPractice={onPractice} open={openId === e.id} onOpenChange={open => setOpenId(open ? e.id : undefined)} />)}
+      {pageCount > 1 && <nav className="ax-pagination" aria-label="指标大全分页"><button disabled={currentPage === 0} onClick={() => { setPage(currentPage - 1); setOpenId(undefined); }}>上一页</button><span>第 {currentPage + 1} / {pageCount} 页</span><button disabled={currentPage + 1 >= pageCount} onClick={() => { setPage(currentPage + 1); setOpenId(undefined); }}>下一页</button></nav>}
     </div>
   );
 }
 
-function KbCard({ e, onPractice }: { e: KnowledgeEntry; onPractice: (conceptId: string, module: TabId) => void }) {
-  const [open, setOpen] = useState(false);
+function KbCard({ e, onPractice, open, onOpenChange }: { e: KnowledgeEntry; onPractice: (conceptId: string) => void; open: boolean; onOpenChange: (open: boolean) => void }) {
+  // The parent keeps exactly one expensive detail panel mounted.
   return (
     <div className="ax-kb-card">
-      <div className="ax-kb-header">
-        <h4>{e.name}</h4>
-        <CodeLink entry={e} />
-      </div>
+      <div className="ax-kb-header"><h4>{e.name}</h4></div>
       <div className="ax-kb-summary">{e.summary}</div>
       <div className="ax-kb-practice" aria-label={`${e.name} 实践入口`}>
-        {(['data', 'backtest', 'paper', 'compare'] as const).map(module => <button key={module} onClick={() => onPractice(e.id, module)}>在{({ data: '数据探索', backtest: '回测', paper: '模拟盘', compare: '策略对比' })[module]}中实践</button>)}
+        <button onClick={() => onPractice(e.id)}>在数据探索中实践</button>
       </div>
-      <details onToggle={event => setOpen((event.currentTarget as HTMLDetailsElement).open)}>
-        <summary className={`ax-kb-details${open ? ' is-open' : ''}`} aria-label={open ? `收起 ${e.name} 详情` : `展开 ${e.name} 详情`}>
+      <details key={open ? 'open' : 'closed'} open={open}>
+        <summary className={`ax-kb-details${open ? ' is-open' : ''}`} aria-label={open ? `收起 ${e.name} 详情` : `展开 ${e.name} 详情`} onClick={event => { event.preventDefault(); onOpenChange(!open); }}>
           <span className="ax-kb-details-icon" aria-hidden="true">{open ? '⌃' : '⌄'}</span>
           {open ? '收起详情' : '展开详情'}
         </summary>
@@ -341,6 +368,15 @@ function BookChartVisual({ chart, name }: { chart: NonNullable<PracticeResult['c
 }
 
 function KnowledgeVisual({ concept }: { concept: KnowledgeEntry }) {
+function CandlePatternVisual({ concept }: { concept: KnowledgeEntry }) {
+  const kind = concept.id.replace('k_pattern_', '');
+  if (!['hammer', 'doji', 'engulfing', 'star'].includes(kind)) return null;
+  const candle = (x: number, top: number, bottom: number, up: boolean, wickTop = 18, wickBottom = 98) => <g className={up ? 'up' : 'down'}><line x1={x + 14} x2={x + 14} y1={wickTop} y2={wickBottom} /><rect x={x} y={top} width="28" height={bottom - top} rx="2" /></g>;
+  const drawing = kind === 'hammer' ? <g>{candle(190, 42, 58, true, 30, 105)}</g> : kind === 'doji' ? <g className="up"><line x1="204" x2="204" y1="20" y2="102" /><line x1="187" x2="221" y1="62" y2="62" strokeWidth="5" /></g> : kind === 'engulfing' ? <g>{candle(150, 44, 75, false, 30, 94)}{candle(205, 28, 88, true, 16, 103)}</g> : <g>{candle(118, 32, 82, false, 18, 96)}{candle(196, 57, 62, true, 42, 84)}{candle(274, 26, 76, true, 12, 92)}</g>;
+  const caption = ({ hammer: '小实体靠近高位，长下影线显示低位买盘回收。', doji: '开盘与收盘接近，十字实体表示方向犹豫。', engulfing: '后一根实体完全包住前一根，才是吞没。', star: '大实体、星体、反向大实体组成三根确认。' } as Record<string, string>)[kind];
+  return <figure className="ax-knowledge-chart ax-candle-pattern"><svg data-candle-pattern={kind} viewBox="0 0 420 116" role="img" aria-label={`${concept.name} K线形态图`}>{drawing}<line className="axis" x1="20" x2="400" y1="108" y2="108" /></svg><figcaption>{caption} 绿色为收涨，红色为收跌。</figcaption></figure>;
+}
+
   const [result, setResult] = useState<PracticeResult | null>(null);
   const [practiceConcept, setPracticeConcept] = useState<PracticeConcept | null>(null);
   const [error, setError] = useState('');
@@ -357,9 +393,10 @@ function KnowledgeVisual({ concept }: { concept: KnowledgeEntry }) {
   const values = series?.values.filter((value): value is number => value != null) ?? [];
   const scalar = Object.entries(result.values).find(([, value]) => value != null);
   const inputs = practiceConcept?.inputs || concept.inputs || [];
+  const isCandlePattern = ['k_pattern_hammer', 'k_pattern_doji', 'k_pattern_engulfing', 'k_pattern_star'].includes(concept.id);
   return <Section label="可计算示例" highlight>
     <p className="ax-practice-note">{result.provenance === 'provided_market_bars' ? '基于合成教学行情计算，用来观察数值变化，不代表当前币种行情。' : '基于可编辑教学输入计算，不代表当前币种行情。'}</p>
-    {result.chart ? <BookChartVisual chart={result.chart} name={concept.name} /> : series && values.length > 1 ? <KnowledgeSeriesVisual name={concept.name} result={result} /> : <ScalarKnowledgeDiagram concept={concept} inputs={inputs} scalar={scalar} unit={scalar ? result.units?.[scalar[0]] : undefined} />}
+    {isCandlePattern ? <CandlePatternVisual concept={concept} /> : (result.chart ? <BookChartVisual chart={result.chart} name={concept.name} /> : series && values.length > 1 ? <KnowledgeSeriesVisual name={concept.name} result={result} /> : <ScalarKnowledgeDiagram concept={concept} inputs={inputs} scalar={scalar} unit={scalar ? result.units?.[scalar[0]] : undefined} />)}
     <p className="ax-practice-reading">{resultSentence(concept.name, result.values, result.units, Boolean(series && values.length > 1))}</p>
     {result.notes.slice(0, 1).map(note => <p className="ax-practice-note" key={note}>{note}</p>)}
   </Section>;
@@ -390,9 +427,11 @@ function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}
   useEffect(() => {
     api.listPractice().then(data => {
       setConcepts(data.concepts);
-      selectConcept(targetConcept && data.concepts.some(item => item.id === targetConcept) ? targetConcept : data.concepts[0]?.id ?? '', data.concepts);
+      if (targetConcept && data.concepts.some(item => item.id === targetConcept)) {
+        selectConcept(targetConcept, data.concepts);
+      }
     }).catch(e => setError(`无法加载实践目录：${String(e)}`));
-  }, []);
+  }, [targetConcept]);
 
   useEffect(() => {
     if (targetConcept && targetConcept !== appliedTarget.current && concepts.some(item => item.id === targetConcept)) {
@@ -427,12 +466,10 @@ function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}
 
   return (
     <aside className="ax-practice" aria-label="概念实践">
-      <div><h3>概念实践</h3><p>用当前模块的上下文检验一个概念；绩效概念会优先使用本页已产生的净值和收益，其他可编辑输入会清楚标为教学示例。</p></div>
+      <div><h3>概念实践</h3><p>{targetConcept ? '从指标大全直接进入。行情类概念使用当前数据探索的 K 线；其余概念明确使用可编辑教学输入，不冒充策略、回测或模拟盘结果。' : '从指标大全的“在数据探索中实践”进入一个有明确数据来源的练习。'}</p></div>
       {error && <div className="ax-error">{error}</div>}
       {concepts.length > 0 && <>
-        <label>概念
-          <Dropdown label="概念" options={concepts.map(item => ({ v: item.id, l: `${item.name} · ${item.category}` }))} value={conceptId} onChange={selectConcept} minWidth={260} />
-        </label>
+        <h4>{concept?.name} <small>· {concept?.category}</small></h4>
         {concept && <>
           <p className="ax-practice-note">{concept.notes}</p>
           {concept.input_kind !== 'market_bars' && <p className="ax-practice-provenance">教学示例：这些可编辑输入不是 {symbol || '当前交易对'} 的实时或历史行情。</p>}
@@ -1344,24 +1381,32 @@ function CompareStrategies({ targetConcept, theme }: { targetConcept?: string; t
 // 主应用
 // ===================================================================
 export default function App() {
-  const [tab, setTab] = useState<TabId>('learn');
+  const [route, setRoute] = useState(readRoute);
+  const { tab, sub: learnSub, concept: practiceTarget } = route;
+  const navigate = (nextTab: TabId, nextSub: LearnSub = 'knowledge', concept?: string) => { window.history.pushState({}, '', routeFor(nextTab, nextSub, concept)); setRoute(readRoute()); };
+  const openPractice = (conceptId: string) => navigate('data', 'knowledge', conceptId);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => localStorage.getItem('axiom-theme') === 'light' ? 'light' : 'dark');
-  const [practiceTarget, setPracticeTarget] = useState<string>();
-  const openPractice = (conceptId: string, module: TabId) => {
-    setPracticeTarget(conceptId);
-    setTab(module);
-  };
-  useEffect(() => {
+  void practiceTarget;
+  void navigate;
+  // URL routing owns the selected practice concept.
+  // Kept as declarative routing state above.
+  // No secondary practice selector is rendered.
+  useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('axiom-theme', theme);
   }, [theme]);
 
+  useEffect(() => {
+    const onPopState = () => setRoute(readRoute());
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
   return (
     <div className="ax-app">
       <Header theme={theme} onToggleTheme={() => setTheme(current => current === 'dark' ? 'light' : 'dark')} />
-      <TabBar active={tab} onChange={setTab} />
+      <TabBar active={tab} onChange={nextTab => navigate(nextTab)} />
       <main className="ax-main">
-        {tab === 'learn' && <LearnCenter onPractice={openPractice} />}
+        {tab === 'learn' && <LearnCenter sub={learnSub} onSubChange={nextSub => navigate('learn', nextSub)} onPractice={openPractice} />}
         {tab === 'data' && <DataExplore targetConcept={practiceTarget} theme={theme} />}
         {tab === 'backtest' && <Backtest targetConcept={practiceTarget} theme={theme} />}
         {tab === 'paper' && <PaperTrading targetConcept={practiceTarget} theme={theme} />}

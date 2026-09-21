@@ -36,6 +36,7 @@ htmlcov/
 # 日志
 *.log
 
+/static/book/
 # Frontend dependencies, generated assets, and test artifacts
 /web/node_modules/
 /web/*.tsbuildinfo

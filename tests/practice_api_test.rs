@@ -40,7 +40,7 @@ async fn request(app: &axum::Router, path: &str, value: Value) -> (StatusCode, V
 }
 
 #[tokio::test]
-async fn every_knowledge_concept_executes_in_all_four_modules_against_the_same_snapshot() {
+async fn every_knowledge_concept_has_one_canonical_data_exploration_practice() {
     let app = app();
     let bars = SyntheticFeed::new(31)
         .fetch_historical(
@@ -51,7 +51,7 @@ async fn every_knowledge_concept_executes_in_all_four_modules_against_the_same_s
         .unwrap();
     for concept in practice::catalog() {
         let mut first: Option<Value> = None;
-        for module in ["data", "backtest", "paper", "compare"] {
+        for module in ["data"] {
             let(status,out)=request(&app,"/api/practice",json!({"concept_id":concept.id,"module":module,"symbol":"BTCUSDT","source":"synthetic","bars":bars,"inputs":{}})).await;
             assert_eq!(status, StatusCode::OK, "{} {module}: {out}", concept.id);
             assert_eq!(out["concept_id"], concept.id);
@@ -105,7 +105,7 @@ async fn every_knowledge_concept_executes_in_all_four_modules_against_the_same_s
 #[tokio::test]
 async fn external_exercises_do_not_fetch_market_bars_and_invalid_requests_are_explicit() {
     let app = app();
-    let (status,out)=request(&app,"/api/practice",json!({"concept_id":"book_funding","module":"paper","source":"real","inputs":{"is_long":false}})).await;
+    let (status,out)=request(&app,"/api/practice",json!({"concept_id":"book_funding","module":"data","source":"real","inputs":{"is_long":false}})).await;
     assert_eq!(status, StatusCode::OK, "{out}");
     assert_eq!(out["values"]["payment"], -1.0);
     assert_eq!(out["bars"], json!([]));
@@ -122,7 +122,7 @@ async fn external_exercises_do_not_fetch_market_bars_and_invalid_requests_are_ex
     let (status, out) = request(
         &app,
         "/api/practice",
-        json!({"concept_id":"rsi","module":"paper","bars":[]}),
+        json!({"concept_id":"rsi","module":"data","bars":[]}),
     )
     .await;
     assert_eq!(status, StatusCode::OK);

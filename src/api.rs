@@ -83,9 +83,20 @@ async fn market_bars(
 // 路由器
 // -----------------------------------------------------------------------------
 
+// SPA routes are registered below with the application router.
+// /learn/book
+// /data
+// /backtest
+// /paper
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/", get(serve_index))
+        .route("/learn", get(serve_index))
+        .route("/learn/book", get(serve_index))
+        .route("/data", get(serve_index))
+        .route("/backtest", get(serve_index))
+        .route("/paper", get(serve_index))
+        .route("/compare", get(serve_index))
         .route("/static/*file", get(serve_static))
         .nest_service(
             "/assets",
@@ -100,6 +111,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/paper/stop", post(post_paper_stop))
         .route("/api/paper/strategy", post(post_paper_strategy))
         .route("/api/paper/ws", get(ws_paper))
+        .route("/api/book/pdf", get(serve_book_pdf))
         .route("/api/knowledge", get(get_knowledge))
         .route("/api/practice", get(get_practice).post(post_practice))
         .route(
@@ -140,6 +152,13 @@ async fn serve_index() -> Response {
     }
 }
 
+async fn serve_book_pdf() -> Response {
+    serve_static(axum::extract::Path(
+        "book/股票交易软件专业指标全解_完整版.pdf".to_owned(),
+    ))
+    .await
+}
+
 async fn serve_static(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
     if std::path::Path::new(&file)
         .components()
@@ -162,6 +181,8 @@ async fn serve_static(axum::extract::Path(file): axum::extract::Path<String>) ->
                 "image/svg+xml"
             } else if file.ends_with(".png") {
                 "image/png"
+            } else if file.ends_with(".pdf") {
+                "application/pdf"
             } else {
                 "application/octet-stream"
             };
@@ -1260,9 +1281,7 @@ pub fn locate_symbol_for_test(reference: &str) -> Option<usize> {
 
 async fn get_practice() -> Json<Value> {
     let concepts = crate::practice::catalog();
-    Json(
-        json!({"total":concepts.len(),"concepts":concepts,"modules":["data","backtest","paper","compare"]}),
-    )
+    Json(json!({"total":concepts.len(),"concepts":concepts,"modules":["data"]}))
 }
 
 #[derive(Deserialize)]
@@ -1281,7 +1300,7 @@ async fn post_practice(
     State(state): State<Arc<AppState>>,
     Json(req): Json<PracticeRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    if !["data", "backtest", "paper", "compare"].contains(&req.module.as_str()) {
+    if req.module != "data" {
         return Err(validate::bad("invalid practice module"));
     }
     let symbol = req

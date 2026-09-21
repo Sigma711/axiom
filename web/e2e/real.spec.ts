@@ -81,7 +81,7 @@ test('real Rust service supports the four-module learning journey', async ({ pag
   expect(errors).toEqual([]);
 });
 
-test('every live knowledge concept opens a meaningful SVG illustration', async ({ page }) => {
+test('every rendered knowledge card opens one meaningful SVG illustration without retaining hidden charts', async ({ page }) => {
   test.setTimeout(180_000);
   await page.goto('/');
   const cards = page.locator('.ax-kb-card');
@@ -91,7 +91,7 @@ test('every live knowledge concept opens a meaningful SVG illustration', async (
   for (let index = 0; index < total; index += 1) {
     await cards.nth(index).locator('.ax-kb-details').click();
     await expect(cards.nth(index).locator('.ax-knowledge-chart svg')).toBeVisible({ timeout: 30_000 });
-    if (process.env.CI) await expect(cards.nth(index).locator('.ax-gh-btn')).toHaveAttribute('href', /^https:\/\/github\.com\/Sigma711\/axiom\/blob\/[0-9a-f]{40}\/src\/.+#L[1-9]\d*-L[1-9]\d*$/);
+    if (process.env.CI) await expect(cards.nth(index).locator('.ax-code-link')).toHaveAttribute('href', /^https:\/\/github\.com\/Sigma711\/axiom\/blob\/[0-9a-f]{40}\/src\/.+#L[1-9]\d*-L[1-9]\d*$/);
   }
-  await expect(page.locator('.ax-knowledge-chart svg')).toHaveCount(total);
+  await expect(page.locator('.ax-knowledge-chart svg')).toHaveCount(1);
 });
