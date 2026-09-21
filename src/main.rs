@@ -4,7 +4,7 @@ use axiom::api;
 use axiom::app_state::AppState;
 use axiom::config::{default_config, load_config};
 use axiom::paper::run_paper_loop;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing_subscriber::EnvFilter;
@@ -44,7 +44,10 @@ async fn main() -> anyhow::Result<()> {
     let port: u16 = std::env::var("AXIOM_PORT")
         .unwrap_or_else(|_| "8080".into())
         .parse()?;
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    let host: IpAddr = std::env::var("AXIOM_HOST")
+        .unwrap_or_else(|_| "0.0.0.0".into())
+        .parse()?;
+    let addr = SocketAddr::new(host, port);
     tracing::info!("◆ AXIOM 已启动,监听 {}", addr);
     tracing::info!("→ 打开浏览器访问 http://localhost:8080");
 
