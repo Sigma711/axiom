@@ -12,6 +12,11 @@ import type {
 
 const BASE = '';  // 同源
 
+export type CodeLocation = { url?: string; github_url?: string; source_url?: string; path: string; line: number; end_line?: number; };
+export function preferredCodeLocationUrl(location: CodeLocation): string {
+  return location.github_url || location.url || location.source_url || '';
+}
+
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const opts: RequestInit = {
     method,
@@ -49,7 +54,7 @@ export const api = {
   getHeikinAshi: (symbol: string, limit: number, source: SourceType) =>
     call<{ symbol: string; bars: Bar[]; chart: string }>(
       'GET', `/api/heikin_ashi?symbol=${encodeURIComponent(symbol)}&limit=${limit}&source=${source}`),
-  getCodeLocation: (ref: string) => call<Record<string, unknown>>('GET', `/api/code_loc?ref=${encodeURIComponent(ref)}`),
+  getCodeLocation: (ref: string) => call<CodeLocation>('GET', `/api/code_loc?ref=${encodeURIComponent(ref)}`),
   runBacktest: (req: {
     strategy: string; params?: Record<string, number>;
     symbol: string; source: SourceType; limit: number; initial_capital: number;

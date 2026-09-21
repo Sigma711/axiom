@@ -16,7 +16,7 @@ async function mockApi(page: Page) {
     if (path === '/api/strategies') return json({ strategies });
     if (path === '/api/indicators') return json({ symbol: 'BTCUSDT', source: 'synthetic', bars, indicators: { sma_20: bars.map((bar, index) => index < 19 ? null : { x: bar.timestamp, y: bar.close - 3 }), rsi_14: bars.map((bar, index) => index < 14 ? null : { x: bar.timestamp, y: 40 + index % 30 }), macd: bars.map((bar, index) => ({ x: bar.timestamp, y: index - 30 })), atr_14: bars.map((bar, index) => ({ x: bar.timestamp, y: 2 + index / 50 })) } });
     if (path === '/api/patterns') return json({ symbol: 'BTCUSDT', patterns: [] });
-    if (path === '/api/code_loc') return json({ ok: true, url: 'https://example.test/repo/src/indicator.rs#L42', path: 'src/indicator.rs', line: 42 });
+    if (path === '/api/code_loc') return json({ ok: true, url: 'https://example.test/repo/src/indicator.rs#L42', github_url: 'https://github.com/Sigma711/axiom/blob/abc123/src/indicator.rs#L42-L48', path: 'src/indicator.rs', line: 42 });
     if (path === '/api/backtest') return json(backtest);
     if (path === '/api/practice' && route.request().method() === 'GET') return json({ concepts, modules: ['data', 'backtest', 'paper', 'compare'], total: 2 });
     if (path === '/api/practice') {
@@ -423,6 +423,73 @@ test('learning path has a shareable URL and remains selected after navigation', 
   await page.goto('/learn');
   await page.getByRole('button', { name: '学习路径', exact: true }).click();
   await expect(page).toHaveURL(/\/learn\/path$/);
-  await expect(page.getByRole('heading', { name: '源码阅读顺序' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '学习路径' })).toBeVisible();
   await expect(page.getByRole('button', { name: '学习路径', exact: true })).toHaveClass(/active/);
+});
+
+test('concept overview visualizes the full research-to-operation workflow and opens real module explanations', async ({ page }) => {
+  await page.goto('/learn/concepts');
+  const workflow = page.getByLabel('量化交易全流程');
+  await expect(workflow).toBeVisible();
+  await expect(workflow).toContainText('数据接入与治理');
+  await expect(workflow).toContainText('清洗、复权、时间对齐');
+  await expect(workflow).toContainText('回测与稳健性');
+  await expect(workflow).toContainText('机器学习与大模型');
+  await expect(workflow).toContainText('上线、监控与复盘');
+
+  await page.getByRole('button', { name: /K线 \(Bar\).*查看模块说明/ }).click();
+  const dialog = page.getByRole('dialog', { name: /K线 \(Bar\) 模块说明/ });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('src/types.rs');
+  await expect(dialog.locator('svg')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+});
+
+test('book contents uses an arrow-only accessible collapse control', async ({ page }) => {
+  await page.goto('/learn/book');
+  const toggle = page.getByRole('button', { name: '收起原书目录' });
+  await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveText('‹');
+  await toggle.click();
+  await expect(page.getByRole('button', { name: '展开原书目录' })).toHaveText('›');
+  await expect(page.locator('.ax-book-reader')).toHaveClass(/toc-collapsed/);
+});
+
+
+test('learning path covers the runnable system and resolves a precise source link', async ({ page }) => {
+  await page.goto('/learn/path');
+  await expect(page.getByRole('heading', { name: '学习路径' })).toBeVisible();
+  const steps = page.locator('.ax-learning-path > li');
+  await expect(steps).toHaveCount(9);
+  await expect(steps.first()).toContainText('动手验证');
+  await expect(steps.nth(8)).toContainText('研究扩展：ML / LLM 与数据存储');
+  const source = steps.first().getByRole('link', { name: '打开精确 GitHub 源码 ↗' });
+  await expect(source).toHaveAttribute('href', /github\.com\/Sigma711\/axiom\/blob\/abc123\/src\/indicator\.rs#L42-L48$/);
+});
+
+
+test('every visible learning source reference is requested through the AST-backed resolver', async ({ page }) => {
+  const refs = new Set<string>();
+  page.on('request', request => {
+    const url = new URL(request.url());
+    if (url.pathname === '/api/code_loc') refs.add(url.searchParams.get('ref') || '');
+  });
+  await page.goto('/learn/concepts');
+  const cards = page.locator('.ax-module-card');
+  await expect(cards).toHaveCount(10);
+  for (let index = 0; index < await cards.count(); index += 1) {
+    await cards.nth(index).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.getByRole('button', { name: '关闭模块说明' }).click();
+  }
+  await page.goto('/learn/path');
+  await expect(page.locator('.ax-learning-path > li')).toHaveCount(9);
+  await expect.poll(() => refs.size).toBe(11);
+  expect([...refs].sort()).toEqual([
+    'src/broker.rs::Broker', 'src/data.rs::DataFeed', 'src/engine.rs::BacktestEngine::run',
+    'src/indicators/ma.rs::sma', 'src/metrics.rs::compute_metrics', 'src/paper.rs::run_paper_loop',
+    'src/portfolio.rs::Portfolio::on_signal', 'src/risk.rs::RiskManager::allow_order',
+    'src/strategy.rs::Strategy', 'src/types.rs::Bar', 'src/workflows.rs::entries',
+  ]);
 });

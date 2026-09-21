@@ -118,3 +118,31 @@ fn published_builds_link_every_concept_to_the_exact_github_revision() {
         assert_eq!(location.github_url.as_deref(), Some(expected.as_str()));
     }
 }
+
+#[test]
+fn learning_navigation_references_resolve_to_exact_source_symbols() {
+    for reference in [
+        "src/types.rs::Bar",
+        "src/data.rs::DataFeed",
+        "src/indicators/ma.rs::sma",
+        "src/strategy.rs::Strategy",
+        "src/risk.rs::RiskManager::allow_order",
+        "src/portfolio.rs::Portfolio::on_signal",
+        "src/broker.rs::Broker",
+        "src/engine.rs::BacktestEngine::run",
+        "src/metrics.rs::compute_metrics",
+        "src/paper.rs::run_paper_loop",
+        "src/workflows.rs::entries",
+    ] {
+        let location =
+            code_links::resolve(reference).unwrap_or_else(|| panic!("missing {reference}"));
+        assert!(
+            location.line > 0 && location.end_line >= location.line,
+            "{reference}"
+        );
+        assert!(
+            !code_links::excerpt(&location).unwrap().trim().is_empty(),
+            "{reference}"
+        );
+    }
+}
