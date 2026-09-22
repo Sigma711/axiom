@@ -1405,9 +1405,57 @@ pub fn locate_symbol_for_test(reference: &str) -> Option<usize> {
 fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
     let financial = matches!(
         concept.category.as_str(),
-        "估值" | "现金流" | "盈利" | "财务质量" | "行业" | "股东" | "分析师"
+        "估值"
+            | "现金流"
+            | "盈利"
+            | "财务质量"
+            | "行业"
+            | "股东"
+            | "分析师"
+            | "原书财务计算"
+            | "原书行业专属指标"
+    ) || matches!(
+        concept.id.as_str(),
+        "book_share_counts"
+            | "book_float_market_cap"
+            | "book_dcf"
+            | "book_revenue"
+            | "book_ebitda_margin"
+            | "book_net_margin"
+            | "book_roce"
+            | "book_yoy"
+            | "book_qoq"
+            | "book_debt_ratio"
+            | "book_de_ratio"
+            | "book_net_debt"
+            | "book_net_debt_ebitda"
+            | "book_cash_ratio"
+            | "book_cfo"
+            | "book_capex"
+            | "book_fcf"
+            | "book_cfo_income"
+            | "book_asset_turnover"
+            | "book_dpo"
+            | "book_ccc"
+            | "book_intangibles_ratio"
+            | "book_diluted_shares"
+            | "book_free_float"
+            | "book_adjustment"
+            | "book_cape"
     );
-    let derivatives = concept.category == "期权";
+    let derivatives = concept.category == "期权"
+        || matches!(
+            concept.id.as_str(),
+            "book_option_value_components"
+                | "book_option_moneyness"
+                | "book_option_dte"
+                | "book_option_volume_oi"
+                | "book_iv_percentile"
+                | "book_iv_smile"
+                | "book_implied_move"
+                | "book_rho"
+                | "book_second_order_greeks"
+        );
     let performance = concept.category == "风险-绩效";
     if concept.input_kind == "market_bars" {
         json!({
@@ -1443,13 +1491,39 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
             "source_policy":"result_required",
             "goal":"从当前回测、模拟盘或策略对比的已提供行情和结果计算绩效；需要基准的指标必须传入同频、同区间的基准收益，不能使用教学默认数组。"
         })
+    } else if matches!(concept.id.as_str(), "book_etf_balances" | "book_etf_flows") {
+        json!({
+            "markets":["us_equity"],
+            "modules":["data"],
+            "required_datasets":["dated_crypto_etf_holdings_or_flows","etf_symbol"],
+            "source_policy":"evidence_required",
+            "goal":"核对美国上市加密资产 ETF 的官方持仓或申赎披露与报告日期；不能从币价或成交量反推持仓与净流入。"
+        })
     } else if financial {
+        let (required_datasets, goal) = match concept.id.as_str() {
+            "book_cape" => (
+                json!(["ten_annual_point_in_time_eps", "ten_annual_cpi", "market_price"]),
+                "使用连续十年的已披露每股收益、同年物价指数和评估时点股价；年度缺口不能用默认教学数组填补。",
+            ),
+            "book_adjustment" => (
+                json!(["dated_corporate_actions", "raw_market_price"]),
+                "用已公布的分红、拆股等行动计算评估时点的复权因子；没有行动记录时不能把教学因子当真实价格。",
+            ),
+            "book_share_counts" | "book_float_market_cap" | "book_free_float" => (
+                json!(["dated_share_register", "market_price"]),
+                "核对相同评估时点的股本披露与行情；自由流通股和总股本的口径必须一致。",
+            ),
+            _ => (
+                json!(["point_in_time_filing", "market_price"]),
+                "将可追溯、已在评估时点公开的财报字段与对应市场价格输入公式；缺少报告时必须明确提示缺什么。",
+            ),
+        };
         json!({
             "markets":["cn_equity","us_equity"],
             "modules":["data"],
-            "required_datasets":["point_in_time_filing","market_price"],
+            "required_datasets":required_datasets,
             "source_policy":"evidence_required",
-            "goal":"将可追溯、已在评估时点公开的财报字段与对应市场价格输入公式；缺少报告时必须明确提示缺什么。"
+            "goal":goal
         })
     } else if derivatives {
         json!({
@@ -1458,6 +1532,14 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
             "required_datasets":["timestamped_option_chain","underlying_price"],
             "source_policy":"evidence_required",
             "goal":"以同一报价时点的期权链和标的价格计算；没有期权链时不伪造结论。"
+        })
+    } else if concept.category == "衍生品与链上" {
+        json!({
+            "markets":["crypto"],
+            "modules":["data"],
+            "required_datasets":["timestamped_derivatives_or_blockchain_observations"],
+            "source_policy":"evidence_required",
+            "goal":"收集该交易对、交易所或链上网络的独立观测，并记录时间和口径；现货 K 线不能代替持仓、资金费率或链上数据。"
         })
     } else {
         json!({

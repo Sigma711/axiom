@@ -283,3 +283,31 @@ test('performance practice derives Sharpe and benchmark metrics from the selecte
     await expect(panel).toContainText('使用当前模块真实结果');
   }
 });
+
+test('five nonstandard chart practices draw only observed market reconstructions', async ({ page }) => {
+  test.setTimeout(120_000);
+  const cases = [
+    ['book_chart_heikin_ashi', 'heikin_ashi', 'ohlc'],
+    ['book_chart_renko', 'renko', 'close'],
+    ['book_chart_point_figure', 'point_figure', 'close'],
+    ['book_chart_kagi', 'kagi', 'close'],
+    ['book_chart_three_line_break', 'three_line_break', 'close'],
+  ] as const;
+  for (const [concept, kind, sourcePrice] of cases) {
+    await page.goto(`/data?concept=${concept}&source=binance`);
+    await page.getByRole('button', { name: '加载数据' }).click();
+    await expect(page.locator('.ax-chart svg.main-svg').first()).toBeVisible({ timeout: 20_000 });
+    const panel = page.getByLabel('概念实践');
+    await expect(panel).not.toContainText('有序收盘价格（元）');
+    const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+    await panel.getByRole('button', { name: '运行实践' }).click();
+    const response = await responsePromise;
+    expect(response.ok(), await response.text()).toBe(true);
+    const payload = await response.json();
+    expect(payload.provenance).toBe('provided_market_bars');
+    expect(payload.chart.source_price).toBe(sourcePrice);
+    expect(payload.chart.source_bar_count).toBeGreaterThan(20);
+    await expect(panel.locator(`svg[data-chart-kind="${kind}"]`)).toBeVisible();
+    await expect(panel).toContainText('图形价不是成交价');
+  }
+});

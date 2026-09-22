@@ -1,203 +1,275 @@
-use axiom::book_charts as charts;
+use axiom::{book_charts as charts, types::Bar};
+use chrono::DateTime;
 use serde_json::json;
 
+fn close_bars(closes: &[f64]) -> Vec<Bar> {
+    closes
+        .iter()
+        .enumerate()
+        .map(|(i, &close)| Bar {
+            timestamp: DateTime::from_timestamp(i as i64 * 60, 0).unwrap(),
+            open: close,
+            high: close + 1.0,
+            low: close - 1.0,
+            close,
+            volume: 100.0,
+        })
+        .collect()
+}
+
 #[test]
-fn each_chart_has_an_independent_worked_answer() {
-    let cases: &[(&str, serde_json::Value, &str, f64)] = &[
+fn market_chart_concepts_use_provided_complete_ohlcv_bars() {
+    let ha_source = vec![Bar {
+        timestamp: DateTime::from_timestamp(0, 0).unwrap(),
+        open: 10.0,
+        high: 12.0,
+        low: 9.0,
+        close: 11.0,
+        volume: 50.0,
+    }];
+    type ChartCase = (
+        &'static str,
+        Vec<Bar>,
+        serde_json::Value,
+        &'static str,
+        f64,
+        &'static str,
+    );
+    let cases: Vec<ChartCase> = vec![
         (
             "book_chart_heikin_ashi",
-            json!({"open":[10.],"high":[12.],"low":[9.],"close":[11.]}),
+            ha_source,
+            json!({}),
             "ha_close",
             10.5,
+            "ohlc",
         ),
         (
             "book_chart_renko",
-            json!({"prices":[10.,12.1],"brick_size":1.}),
+            close_bars(&[10.0, 12.1]),
+            json!({"brick_size": 1.0}),
             "renko_close",
-            12.,
+            12.0,
+            "close",
         ),
         (
             "book_chart_point_figure",
-            json!({"prices":[10.,12.],"box_size":1.,"reversal_boxes":3.}),
+            close_bars(&[10.0, 12.0]),
+            json!({"box_size": 1.0, "reversal_boxes": 3.0}),
             "point_figure_box",
-            12.,
+            12.0,
+            "close",
         ),
         (
             "book_chart_kagi",
-            json!({"prices":[10.,12.,10.8],"reversal_size":1.}),
+            close_bars(&[10.0, 12.0, 10.8]),
+            json!({"reversal_size": 1.0}),
             "kagi_turn",
             10.8,
+            "close",
         ),
         (
             "book_chart_three_line_break",
-            json!({"prices":[10.,9.,8.,7.,11.],"line_count":3.}),
+            close_bars(&[10.0, 9.0, 8.0, 7.0, 11.0]),
+            json!({"line_count": 3.0}),
             "three_line_close",
-            11.,
-        ),
-        (
-            "book_chart_range_bars",
-            json!({"ticks":[10.,10.4,11.],"range_size":1.}),
-            "range_close",
-            11.,
-        ),
-        (
-            "book_chart_tick_bars",
-            json!({"ticks":[10.,11.,12.,13.,14.,15.],"ticks_per_bar":3.}),
-            "tick_close",
-            15.,
+            11.0,
+            "close",
         ),
     ];
-    for (id, input, name, expected) in cases {
-        let r = charts::evaluate(id, &[], input).unwrap_or_else(|e| panic!("{id}: {e}"));
-        assert_eq!(r["values"][name].as_f64(), Some(*expected), "{id}");
+
+    for (id, source, input, name, expected, source_price) in cases {
+        let result = charts::evaluate(id, &source, &input).unwrap_or_else(|e| panic!("{id}: {e}"));
+        assert_eq!(result["input_kind"], "market_bars", "{id}");
+        assert_eq!(result["provenance"], "provided_market_bars", "{id}");
+        assert_eq!(result["chart"]["input"], "provided_ohlcv_bars", "{id}");
+        assert_eq!(result["chart"]["source_price"], source_price, "{id}");
+        assert_eq!(result["chart"]["source_bar_count"], source.len(), "{id}");
+        assert_eq!(result["values"][name].as_f64(), Some(expected), "{id}");
     }
 }
 
 #[test]
-fn chart_outputs_have_real_ohlc_and_stable_completed_prefixes() {
+fn market_chart_outputs_are_causal_and_keep_thresholds_editable() {
     let cases = [
+        ("book_chart_heikin_ashi", json!({})),
+        ("book_chart_renko", json!({"brick_size": 1.0})),
         (
-            "book_chart_heikin_ashi",
-            json!({"open":[10.,11.,12.],"high":[12.,13.,14.],"low":[9.,10.,11.],"close":[11.,12.,13.]}),
+            "book_chart_point_figure",
+            json!({"box_size": 1.0, "reversal_boxes": 3.0}),
         ),
-        ("book_chart_renko", json!({"prices":[10.,12.1,13.1]})),
-        ("book_chart_point_figure", json!({"prices":[10.,12.,13.]})),
-        ("book_chart_kagi", json!({"prices":[10.,12.,13.]})),
-        (
-            "book_chart_three_line_break",
-            json!({"prices":[10.,9.,8.,7.]}),
-        ),
-        (
-            "book_chart_range_bars",
-            json!({"ticks":[10.,10.4,11.,11.2]}),
-        ),
-        (
-            "book_chart_tick_bars",
-            json!({"ticks":[10.,11.,12.,13.,14.,15.]}),
-        ),
+        ("book_chart_kagi", json!({"reversal_size": 1.0})),
+        ("book_chart_three_line_break", json!({"line_count": 3.0})),
     ];
-    for (id, prefix) in cases {
-        let mut full = prefix.clone();
-        let key = if id == "book_chart_heikin_ashi" {
-            "close"
-        } else if id == "book_chart_range_bars" || id == "book_chart_tick_bars" {
-            "ticks"
-        } else {
-            "prices"
-        };
-        full[key].as_array_mut().unwrap().push(json!(99.));
-        if id == "book_chart_heikin_ashi" {
-            full["open"].as_array_mut().unwrap().push(json!(98.));
-            full["high"].as_array_mut().unwrap().push(json!(100.));
-            full["low"].as_array_mut().unwrap().push(json!(97.));
-        }
-        let before = charts::evaluate(id, &[], &prefix).unwrap();
-        let after = charts::evaluate(id, &[], &full).unwrap();
-        let bars = before["chart"]["bars"].as_array().unwrap();
-        assert!(bars.iter().all(|bar| bar["open"].is_number()
-            && bar["high"].is_number()
-            && bar["low"].is_number()
-            && bar["close"].is_number()));
-        assert!(bars.iter().all(|bar| bar["low"].as_f64().unwrap()
-            <= bar["open"]
-                .as_f64()
-                .unwrap()
-                .min(bar["close"].as_f64().unwrap())
-            && bar["high"].as_f64().unwrap()
-                >= bar["open"]
-                    .as_f64()
-                    .unwrap()
-                    .max(bar["close"].as_f64().unwrap())));
+    let prefix = close_bars(&[10.0, 12.0, 10.0, 13.0]);
+    let mut full = prefix.clone();
+    full.push(Bar {
+        timestamp: DateTime::from_timestamp(4 * 60, 0).unwrap(),
+        open: 13.0,
+        high: 100.0,
+        low: 12.0,
+        close: 99.0,
+        volume: 200.0,
+    });
+
+    for (id, input) in cases {
+        let before = charts::evaluate(id, &prefix, &input).unwrap();
+        let after = charts::evaluate(id, &full, &input).unwrap();
+        let before_bars = before["chart"]["bars"].as_array().unwrap();
         assert_eq!(
-            bars.as_slice(),
-            &after["chart"]["bars"].as_array().unwrap()[..bars.len()],
-            "{id} rewrote completed history"
+            before_bars,
+            &after["chart"]["bars"].as_array().unwrap()[..before_bars.len()],
+            "later OHLCV bars changed completed {id} history"
+        );
+    }
+
+    for id in [
+        "book_chart_heikin_ashi",
+        "book_chart_renko",
+        "book_chart_point_figure",
+        "book_chart_kagi",
+        "book_chart_three_line_break",
+    ] {
+        assert_eq!(
+            charts::catalog()
+                .iter()
+                .find(|concept| concept.id == id)
+                .unwrap()
+                .input_kind,
+            "market_bars"
         );
     }
 }
 
 #[test]
-fn reversal_thresholds_and_tick_ohlc_have_independent_oracles() {
+fn market_charts_reject_price_fixtures_and_invalid_or_missing_ohlcv() {
+    let valid = close_bars(&[10.0, 12.0]);
+    assert!(
+        charts::evaluate("book_chart_renko", &valid, &json!({"prices": [10.0, 12.0]})).is_err()
+    );
+    assert!(charts::evaluate("book_chart_renko", &[], &json!({})).is_err());
+
+    let mut invalid = valid.clone();
+    invalid[1].timestamp = invalid[0].timestamp;
+    assert!(charts::evaluate("book_chart_renko", &invalid, &json!({})).is_err());
+    invalid[1].timestamp = DateTime::from_timestamp(60, 0).unwrap();
+    invalid[1].high = invalid[1].open - 0.1;
+    assert!(charts::evaluate("book_chart_renko", &invalid, &json!({})).is_err());
+}
+
+#[test]
+fn market_chart_thresholds_keep_their_established_reversal_rules() {
     let kagi = charts::evaluate(
         "book_chart_kagi",
-        &[],
-        &json!({"prices":[10.,10.2],"reversal_size":1.}),
+        &close_bars(&[10.0, 10.2]),
+        &json!({"reversal_size": 1.0}),
     )
     .unwrap();
-    assert_eq!(
-        kagi["chart"]["bars"],
-        json!([]),
-        "sub-threshold initial movement is not a Kagi line"
-    );
+    assert_eq!(kagi["chart"]["bars"], json!([]));
+
     let kagi_switch = charts::evaluate(
         "book_chart_kagi",
-        &[],
-        &json!({"prices":[10.,12.,10.,13.],"reversal_size":1.}),
+        &close_bars(&[10.0, 12.0, 10.0, 13.0]),
+        &json!({"reversal_size": 1.0}),
     )
     .unwrap();
-    let kagi_bars = kagi_switch["chart"]["bars"].as_array().unwrap();
-    assert_eq!(kagi_bars[2]["line_style"], "yang");
-    assert_eq!(kagi_bars[2]["switch_price"], 12.0);
+    assert_eq!(kagi_switch["chart"]["bars"][2]["line_style"], "yang");
+    assert_eq!(kagi_switch["chart"]["bars"][2]["switch_price"], 12.0);
+
     let renko = charts::evaluate(
         "book_chart_renko",
-        &[],
-        &json!({"prices":[10.,12.,10.],"brick_size":1.}),
+        &close_bars(&[10.0, 12.0, 10.0]),
+        &json!({"brick_size": 1.0}),
     )
     .unwrap();
     assert_eq!(renko["chart"]["bars"][2]["open"], 11.0);
     assert_eq!(renko["chart"]["bars"][2]["close"], 10.0);
+
     let line_break = charts::evaluate(
         "book_chart_three_line_break",
-        &[],
-        &json!({"prices":[10.,9.,8.,7.,9.5],"line_count":3.}),
+        &close_bars(&[10.0, 9.0, 8.0, 7.0, 9.5]),
+        &json!({"line_count": 3.0}),
     )
     .unwrap();
-    assert_eq!(
-        line_break["chart"]["bars"].as_array().unwrap().len(),
-        3,
-        "9.5 must not reverse through the oldest line open of 10"
-    );
-    let startup_reversal = charts::evaluate(
-        "book_chart_three_line_break",
-        &[],
-        &json!({"prices":[10.,9.,11.],"line_count":3}),
-    )
-    .unwrap();
-    assert_eq!(
-        startup_reversal["chart"]["bars"].as_array().unwrap().len(),
-        2,
-        "启动阶段使用已有线的高低；11 突破首条线最高 10 应反转"
-    );
-    let pf = charts::evaluate(
+    assert_eq!(line_break["chart"]["bars"].as_array().unwrap().len(), 3);
+    assert!(charts::evaluate(
         "book_chart_point_figure",
-        &[],
-        &json!({"reversal_boxes":1.5}),
-    );
-    assert!(pf.is_err(), "P&F reversal count must be integral");
-    let ticks = charts::evaluate(
-        "book_chart_tick_bars",
-        &[],
-        &json!({"ticks":[10.,12.,9.,11.],"ticks_per_bar":4.}),
+        &close_bars(&[10.0, 12.0]),
+        &json!({"reversal_boxes": 1.5})
     )
-    .unwrap();
-    assert_eq!(
-        ticks["chart"]["bars"][0],
-        json!({"open":10.0,"high":12.0,"low":9.0,"close":11.0,"direction":1})
-    );
-    let range = charts::evaluate(
-        "book_chart_range_bars",
-        &[],
-        &json!({"ticks":[10.,9.,11.],"range_size":1.}),
-    )
-    .unwrap();
-    assert_eq!(
-        range["chart"]["bars"][0],
-        json!({"open":10.0,"high":10.0,"low":9.0,"close":9.0,"direction":-1})
-    );
+    .is_err());
 }
 
 #[test]
-fn chart_inputs_reject_invalid_thresholds() {
-    assert!(charts::evaluate("book_chart_tick_bars", &[], &json!({"ticks_per_bar":0.0})).is_err());
-    assert!(charts::evaluate("book_chart_renko", &[], &json!({"unknown":1.0})).is_err());
+fn range_bars_need_ordered_trade_prices_and_only_close_on_a_completed_range() {
+    let result = charts::evaluate(
+        "book_chart_range_bars",
+        &[],
+        &json!({"ticks":[10.0,10.4,11.0,10.7,9.5],"range_size":1.0}),
+    )
+    .unwrap();
+    assert_eq!(result["provenance"], "editable_teaching_inputs");
+    assert_eq!(result["chart"]["input"], "explicit_ordered_ticks");
+    assert_eq!(result["chart"]["bars"].as_array().unwrap().len(), 2);
+    assert_eq!(result["chart"]["bars"][0]["high"], 11.0);
+    assert_eq!(result["chart"]["bars"][0]["low"], 10.0);
+    assert_eq!(result["chart"]["bars"][1]["close"], 9.5);
+    assert!(charts::evaluate("book_chart_range_bars", &[], &json!({"range_size":0})).is_err());
+    assert!(charts::evaluate("book_chart_range_bars", &[], &json!({"ticks":[]})).is_err());
+    assert!(charts::evaluate("unknown", &[], &json!({})).is_err());
+}
+
+#[test]
+fn nonstandard_charts_bound_output_size_and_ignore_unchanged_closes() {
+    let runaway = close_bars(&[2.0, 200.0]);
+    assert!(
+        charts::evaluate("book_chart_renko", &runaway, &json!({"brick_size":0.001}))
+            .unwrap_err()
+            .contains("10000")
+    );
+    let repeated = charts::evaluate(
+        "book_chart_three_line_break",
+        &close_bars(&[10.0, 10.0, 11.0]),
+        &json!({}),
+    )
+    .unwrap();
+    assert_eq!(repeated["chart"]["bars"].as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn automatic_threshold_scales_across_very_different_market_prices() {
+    for first in [10.0, 20_000.0] {
+        let bars = close_bars(&[first, first * 1.03]);
+        for (id, field) in [
+            ("book_chart_renko", "brick_size"),
+            ("book_chart_point_figure", "box_size"),
+            ("book_chart_kagi", "reversal_size"),
+        ] {
+            let output = charts::evaluate(id, &bars, &json!({})).unwrap();
+            assert_eq!(
+                output["chart"][field].as_f64(),
+                Some(first * 0.01),
+                "{id}: threshold should be based on the first observed close"
+            );
+            assert!(
+                charts::evaluate(id, &bars, &json!({(field): -1.0})).is_err(),
+                "{id}: negative thresholds must fail"
+            );
+        }
+    }
+}
+
+#[test]
+fn non_market_chart_inputs_remain_unchanged() {
+    let ticks = charts::evaluate(
+        "book_chart_tick_bars",
+        &[],
+        &json!({"ticks": [10.0, 12.0, 9.0, 11.0], "ticks_per_bar": 4.0}),
+    )
+    .unwrap();
+    assert_eq!(ticks["provenance"], "editable_teaching_inputs");
+    assert_eq!(
+        ticks["chart"]["bars"][0],
+        json!({"open": 10.0, "high": 12.0, "low": 9.0, "close": 11.0, "direction": 1})
+    );
 }

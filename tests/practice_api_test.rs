@@ -246,6 +246,178 @@ async fn every_catalog_entry_publishes_a_non_forced_real_practice_plan() {
 }
 
 #[tokio::test]
+async fn book_financial_practices_require_equity_evidence_and_reject_crypto() {
+    let app = app();
+    let response = app
+        .clone()
+        .oneshot(Request::get("/api/practice").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let document: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), 10_000_000).await.unwrap()).unwrap();
+    for id in [
+        "book_current_ratio",
+        "book_bank_nim",
+        "book_dcf",
+        "book_share_counts",
+        "book_adjustment",
+    ] {
+        let concept = document["concepts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|concept| concept["id"] == id)
+            .unwrap();
+        assert_eq!(
+            concept["plan"]["markets"],
+            json!(["cn_equity", "us_equity"]),
+            "{id}"
+        );
+        assert_eq!(concept["plan"]["modules"], json!(["data"]), "{id}");
+        assert_eq!(
+            concept["plan"]["source_policy"], "evidence_required",
+            "{id}"
+        );
+        let (status, _) = request(
+            &app,
+            "/api/practice",
+            json!({"concept_id": id, "module": "data", "symbol": "BTCUSDT", "source": "binance", "inputs": {}}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{id} should reject crypto");
+    }
+    let cross_market = document["concepts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|concept| concept["id"] == "book_log_return")
+        .unwrap();
+    assert_eq!(
+        cross_market["plan"]["markets"],
+        json!(["crypto", "cn_equity", "us_equity"])
+    );
+    let action = document["concepts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|concept| concept["id"] == "book_adjustment")
+        .unwrap();
+    assert_eq!(
+        action["plan"]["required_datasets"],
+        json!(["dated_corporate_actions", "raw_market_price"])
+    );
+    let share_count = document["concepts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|concept| concept["id"] == "book_share_counts")
+        .unwrap();
+    assert_eq!(
+        share_count["plan"]["required_datasets"],
+        json!(["dated_share_register", "market_price"])
+    );
+    let cape = document["concepts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|concept| concept["id"] == "book_cape")
+        .unwrap();
+    assert_eq!(cape["plan"]["markets"], json!(["cn_equity", "us_equity"]));
+    assert_eq!(
+        cape["plan"]["required_datasets"],
+        json!([
+            "ten_annual_point_in_time_eps",
+            "ten_annual_cpi",
+            "market_price"
+        ])
+    );
+    for id in ["book_etf_flows", "book_etf_balances"] {
+        let etf = document["concepts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|concept| concept["id"] == id)
+            .unwrap();
+        assert_eq!(etf["plan"]["markets"], json!(["us_equity"]), "{id}");
+        assert_eq!(
+            etf["plan"]["required_datasets"],
+            json!(["dated_crypto_etf_holdings_or_flows", "etf_symbol"]),
+            "{id}"
+        );
+    }
+    let funding = document["concepts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|concept| concept["id"] == "book_funding")
+        .unwrap();
+    assert_eq!(funding["plan"]["markets"], json!(["crypto"]));
+    assert_eq!(
+        funding["plan"]["required_datasets"],
+        json!(["timestamped_derivatives_or_blockchain_observations"])
+    );
+    for id in [
+        "book_option_dte",
+        "book_iv_smile",
+        "book_second_order_greeks",
+    ] {
+        let option = document["concepts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|concept| concept["id"] == id)
+            .unwrap();
+        assert_eq!(option["plan"]["markets"], json!(["us_equity"]), "{id}");
+        assert_eq!(
+            option["plan"]["required_datasets"],
+            json!(["timestamped_option_chain", "underlying_price"]),
+            "{id}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn five_nonstandard_charts_use_the_selected_real_bar_context() {
+    let app = app();
+    let bars = SyntheticFeed::new(31)
+        .fetch_historical(
+            "BTCUSDT",
+            Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+            20,
+        )
+        .unwrap();
+    for id in [
+        "book_chart_heikin_ashi",
+        "book_chart_renko",
+        "book_chart_point_figure",
+        "book_chart_kagi",
+        "book_chart_three_line_break",
+    ] {
+        let (status, out) = request(
+            &app,
+            "/api/practice",
+            json!({
+                "concept_id": id, "module": "data", "symbol": "BTCUSDT",
+                "source": "synthetic", "bars": bars, "inputs": {}
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{id}: {out}");
+        assert_eq!(out["context"], "module_snapshot", "{id}");
+        assert_eq!(out["provenance"], "provided_market_bars", "{id}");
+        assert_eq!(out["chart"]["input"], "provided_ohlcv_bars", "{id}");
+        assert_eq!(out["chart"]["source_bar_count"], bars.len(), "{id}");
+    }
+    for body in [
+        json!({"concept_id":"book_chart_renko","module":"data","source":"synthetic","bars":bars,"inputs":{"prices":[10,11]}}),
+        json!({"concept_id":"book_chart_heikin_ashi","module":"data","source":"synthetic","bars":[],"inputs":{}}),
+    ] {
+        let (status, _) = request(&app, "/api/practice", body).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+}
+
+#[tokio::test]
 async fn result_practice_rejects_invalid_evidence_without_falling_back_to_teaching_defaults() {
     let app = app();
     let bars = SyntheticFeed::new(31)
