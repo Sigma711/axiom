@@ -425,11 +425,9 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
 .ax-stage-output { display:inline-flex; margin:0 0 .4rem; padding:.18rem .42rem; border-radius:99px; color:var(--accent-2); background:color-mix(in srgb,var(--accent-2) 9%,transparent); font-size:.65rem; font-weight:650; }
 
 /* 证券目录按需检索：菜单中永远只保留一页，完整目录不会拖慢页面。 */
-.ax-symbol-picker { position: relative; min-width: 230px; }
-.ax-symbol-input-wrap { display: grid; gap: 0.25rem; }
-.ax-symbol-picker input { width: 100%; min-width: 230px; box-sizing: border-box; }
-.ax-symbol-current { color: var(--text-dim); font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ax-symbol-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 10000; width: min(430px, calc(100vw - 2rem)); max-height: 390px; overflow: auto; padding: 0.35rem; color: var(--text); background: var(--bg-card); border: 1px solid var(--accent); border-radius: 6px; box-shadow: var(--shadow); }
+.ax-symbol-picker { min-width: 230px; }
+.ax-symbol-picker .ax-dd-trigger { min-width: 230px; max-width: 300px; }
+.ax-symbol-menu { width: min(430px, calc(100vw - 2rem)); max-height: 390px; padding: 0.35rem; }
 .ax-symbol-status, .ax-symbol-empty { margin: 0.2rem 0.35rem 0.45rem; color: var(--text-dim); font-size: 0.75rem; line-height: 1.45; }
 .ax-symbol-option { display: grid; grid-template-columns: 5.8rem 1fr auto; gap: 0.5rem; align-items: baseline; width: 100%; padding: 0.48rem; color: var(--text); background: transparent; border: 0; border-left: 2px solid transparent; text-align: left; cursor: pointer; font: inherit; }
 .ax-symbol-option:hover, .ax-symbol-option.selected { color: var(--accent); background: var(--bg-elev); border-left-color: var(--accent); }

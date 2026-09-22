@@ -61,16 +61,16 @@ export function SymbolPicker({ source, value, onChange }: {
     : result ? '已检索 ' + result.total.toLocaleString() + ' 个匹配标的，目录共 ' + result.universe_count.toLocaleString() + ' 个。' : '';
 
   return (
-    <div className="ax-symbol-picker" ref={root}>
-      <div className="ax-symbol-input-wrap">
-        <input aria-label="搜索交易对" value={query} placeholder={value || '搜代码或名称'}
-          onFocus={() => setOpen(true)}
-          onChange={event => { setQuery(event.target.value); setPage(0); setOpen(true); }}
-          onKeyDown={submit} />
-        {value && <span className="ax-symbol-current" title={value}>已选 {value}</span>}
-      </div>
+    <div className={'ax-dropdown ax-symbol-picker' + (open ? ' open' : '')} ref={root}>
+      <button type="button" className="ax-dd-trigger" aria-label="交易对" aria-haspopup="listbox" aria-expanded={open}
+        onClick={() => setOpen(value => !value)}>
+        <span>{value || '选择交易对…'}</span>
+      </button>
       {open && (
-        <div className="ax-symbol-menu" role="listbox" aria-label="交易对搜索结果">
+        <div className="ax-dd-menu ax-symbol-menu" role="listbox" aria-label="交易对搜索结果">
+          <input className="ax-dd-search" aria-label="搜索交易对" value={query} placeholder="搜索代码或名称"
+            autoFocus onChange={event => { setQuery(event.target.value); setPage(0); }}
+            onKeyDown={submit} />
           <p className="ax-symbol-status">{error || state || '正在读取证券目录…'}</p>
           {result?.items.map(item => (
             <button type="button" role="option" aria-selected={item.symbol === value}

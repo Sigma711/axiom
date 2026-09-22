@@ -203,10 +203,12 @@ test('empty data and stale requests do not replace the latest chart', async ({ p
   });
   await page.goto('/');
   await page.getByRole('button', { name: '数据探索', exact: true }).click();
+  await page.getByRole('button', { name: '交易对', exact: true }).click();
   await page.getByLabel('搜索交易对').fill('EMPTY');
   await page.getByLabel('搜索交易对').press('Enter');
   await page.getByRole('button', { name: '加载数据' }).click();
   await expect(page.locator('.ax-chart-empty')).toBeVisible();
+  await page.getByRole('button', { name: '交易对', exact: true }).click();
   await page.getByLabel('搜索交易对').fill('BTCUSDT');
   await page.getByLabel('搜索交易对').press('Enter');
   await page.getByRole('button', { name: '加载数据' }).click();
