@@ -15,6 +15,24 @@ describe('module performance context', () => {
     expect(data.equity).toEqual([100,98,99]);
     expect(data.periods_per_year).toBe(365);
   });
+
+  it('uses the same completed bars as a timestamp-aligned buy-and-hold benchmark', () => {
+    const points = [point('2024-01-01T00:00:00Z', 100), point('2024-01-02T00:00:00Z', 105), point('2024-01-03T00:00:00Z', 103)];
+    const bars = [100, 110, 99].map((close, index) => ({
+      timestamp: points[index].timestamp, open: close, high: close, low: close, close, volume: 1,
+    }));
+    const data = performanceInputs(points, 100, bars);
+    expect((data.strategy_returns as number[])[0]).toBeCloseTo(0.05);
+    expect((data.strategy_returns as number[])[1]).toBeCloseTo(103 / 105 - 1);
+    expect((data.benchmark_returns as number[])[0]).toBeCloseTo(0.1);
+    expect((data.benchmark_returns as number[])[1]).toBeCloseTo(-0.1);
+  });
+  it('does not invent a benchmark when bars and equity observations do not align', () => {
+    const points = [point('2024-01-01T00:00:00Z', 100), point('2024-01-02T00:00:00Z', 101)];
+    const bars = [{ timestamp: points[0].timestamp, open: 100, high: 100, low: 100, close: 100, volume: 1 }];
+    expect(performanceInputs(points, 100, bars)).not.toHaveProperty('benchmark_returns');
+    expect(performanceInputs(points, 100, [{ ...bars[0], timestamp: points[1].timestamp, close: 0 }])).not.toHaveProperty('benchmark_returns');
+  });
   it('does not override teaching inputs with absent or malformed snapshots', () => {
     expect(performanceInputs(undefined, 100)).toEqual({});
     expect(performanceInputs([], 100)).toEqual({});

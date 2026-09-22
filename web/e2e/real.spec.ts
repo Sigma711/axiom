@@ -232,3 +232,54 @@ test('real market selections stay aligned across backtest comparison and paper',
     await expect(page.locator('.ax-paper-stats')).not.toContainText(/\u6570\u636e\u6e90\s+—/);
   }
 });
+
+
+test('knowledge practice opens the applicable module and market instead of forcing data exploration', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/');
+  const search = page.getByPlaceholder('搜索 概念 / 公式 / 关键词');
+  await search.fill('Sharpe 夏普比率');
+  const sharpe = page.locator('.ax-kb-card').filter({ has: page.getByRole('heading', { name: 'Sharpe 夏普比率', exact: true }) });
+  await sharpe.getByRole('button', { name: '在回测中实践' }).click();
+  await expect(page).toHaveURL(/\/backtest\?concept=sharpe&source=binance/);
+  await expect(page.getByLabel('概念实践')).toContainText('Sharpe 夏普比率');
+  await page.goto('/');
+  await search.fill('ROE 净资产收益率');
+  const roe = page.locator('.ax-kb-card').filter({ has: page.getByRole('heading', { name: 'ROE 净资产收益率', exact: true }) });
+  await roe.getByRole('button', { name: '在数据探索中实践' }).click();
+  await expect(page).toHaveURL(/\/data\?concept=roe&source=a_share/);
+  await expect(page.getByRole('button', { name: '数据源', exact: true })).toContainText('A 股');
+  await expect(page.getByRole('button', { name: '交易对' })).toContainText('600519');
+  await expect(page.getByLabel('概念实践')).toContainText('ROE 净资产收益率');
+  await expect(page.getByLabel('概念实践')).toContainText('教学示例');
+});
+
+
+test('performance practice derives Sharpe and benchmark metrics from the selected real backtest', async ({ page }) => {
+  test.setTimeout(120_000);
+  for (const concept of ['sharpe', 'information_ratio']) {
+    await page.goto(`/backtest?concept=${concept}&source=binance`);
+    const panel = page.getByLabel('概念实践');
+    await expect(panel.getByRole('button', { name: '运行实践' })).toBeVisible();
+    const premature = page.waitForRequest(request => request.url().includes('/api/practice') && request.method() === 'POST', { timeout: 500 }).catch(() => null);
+    await panel.getByRole('button', { name: '运行实践' }).click();
+    expect(await premature).toBeNull();
+    await expect(panel).toContainText('先在当前模块运行真实回测');
+    await page.getByRole('button', { name: '运行回测' }).click();
+    await expect(page.locator('.ax-metrics')).toBeVisible({ timeout: 30_000 });
+    const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+    await panel.getByRole('button', { name: '运行实践' }).click();
+    const response = await responsePromise;
+    expect(response.ok(), await response.text()).toBe(true);
+    const request = response.request().postDataJSON();
+    expect(request.module).toBe('backtest');
+    expect(request.bars.length).toBeGreaterThan(40);
+    if (concept === 'information_ratio') {
+      expect(request.inputs.strategy_returns.length).toBeGreaterThan(1);
+      expect(request.inputs.benchmark_returns.length).toBe(request.inputs.strategy_returns.length);
+    }
+    const payload = await response.json();
+    expect(payload.provenance).toBe('provided_result_context');
+    await expect(panel).toContainText('使用当前模块真实结果');
+  }
+});

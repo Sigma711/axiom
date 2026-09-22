@@ -130,7 +130,7 @@ export interface PracticeResult {
   status: 'computed' | 'undefined';
   reason: string | null;
   input_kind: PracticeConcept['input_kind'];
-  provenance: 'provided_market_bars' | 'editable_teaching_inputs';
+  provenance: 'provided_market_bars' | 'provided_result_context' | 'editable_teaching_inputs';
   values: Record<string, number | null>;
   units?: Record<string, string>;
   series: Array<{ name: string; values: Array<number | null> }>;

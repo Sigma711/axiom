@@ -4,7 +4,7 @@ const bars = Array.from({ length: 60 }, (_, index) => ({ timestamp: new Date(Dat
 const strategies = [{ name: 'sma_cross', display_name: '均线交叉', description: 'demo', params: [{ key: 'fast', label: '快线', default: 5, min: 2, max: 20 }] }, { name: 'rsi', display_name: 'RSI', description: 'demo', params: [] }];
 const metrics = { '总收益率': 0.12, '年化收益率': 0.2, '最大回撤_pct': -0.08, '夏普比率': 1.4, '索提诺比率': 1.7, 'Calmar比率': 2.1, '交易笔数': 3, '胜率': 0.66, '最终净值': 11200 };
 const backtest = { config: {}, bars, equity_curve: bars.map((bar, index) => ({ timestamp: bar.timestamp, cash: 10_000, position_value: index * 20, equity: 10_000 + index * 20 })), trades: [], signals: [], fills: [], metrics };
-const concepts = [{ id: 'rsi_14', name: 'RSI', category: '动量', input_kind: 'market_bars', inputs: [], notes: 'RSI 衡量最近上涨和下跌的相对强度。' }, { id: 'earnings_per_share', name: '每股收益（EPS）', category: '财务', input_kind: 'independent_inputs', inputs: [{ key: 'net_income', label: '净利润', default: 3000000 }, { key: 'preferred_dividends', label: '优先股股息', default: 0 }, { key: 'shares', label: '普通股股数', default: 1000000 }], notes: '每股收益采用可编辑教学数据。' }];
+const concepts = [{ id: 'rsi_14', name: 'RSI', category: '动量', input_kind: 'market_bars', inputs: [], notes: 'RSI 衡量最近上涨和下跌的相对强度。', plan: { markets: ['crypto', 'cn_equity', 'us_equity'], modules: ['data', 'backtest', 'compare'], required_datasets: ['completed_ohlcv'], source_policy: 'real_required', goal: '用已收盘行情计算。' } }, { id: 'earnings_per_share', name: '每股收益（EPS）', category: '财务', input_kind: 'independent_inputs', inputs: [{ key: 'net_income', label: '净利润', default: 3000000 }, { key: 'preferred_dividends', label: '优先股股息', default: 0 }, { key: 'shares', label: '普通股股数', default: 1000000 }], notes: '每股收益采用可编辑教学数据。', plan: { markets: ['cn_equity', 'us_equity'], modules: ['data'], required_datasets: ['point_in_time_filing', 'market_price'], source_policy: 'evidence_required', goal: '核对真实财报。' } }];
 
 async function mockApi(page: Page) {
   await page.route('**/api/**', async route => {
@@ -75,7 +75,7 @@ test('each rendered knowledge concept expands to an explanatory SVG', async ({ p
   await expect(cards.nth(0).locator('.ax-practice-reading')).toContainText('教学行情');
   await cards.nth(1).locator('.ax-kb-details').click();
   await expect(cards.nth(1).locator('.ax-knowledge-chart svg, .ax-series-illustration svg')).toBeVisible();
-  await expect(cards.nth(1).locator('.ax-practice-reading')).toContainText('单次计算');
+  await expect(cards.nth(1).locator('.ax-practice-note')).toContainText('适用市场的可追溯数据');
 });
 
 test('knowledge detail state is visually distinct in both themes', async ({ page }) => {
@@ -335,25 +335,29 @@ test('knowledge navigation opens one direct practice without a selector', async 
   expect((await request).postDataJSON().concept_id).toBe('rsi_14');
 });
 
-test('performance context is visible and manual edits reach the request', async ({ page }) => {
+test('performance practice uses the real backtest context instead of editable defaults', async ({ page }) => {
   const inputs = [{key:'returns',label:'收益率序列',default:[0.01,0.02]}, {key:'periods_per_year',label:'年化周期数',default:252}, {key:'risk_free_annual',label:'年化无风险利率',default:0.02}];
   await page.route('**/api/practice', async route => {
-    if (route.request().method() === 'GET') return route.fulfill({json:{concepts:[{id:'sharpe',name:'夏普',category:'绩效',input_kind:'independent_inputs',inputs,notes:'绩效教学'}]}});
-    return route.fulfill({json:{status:'computed',provenance:'editable_teaching_inputs',values:{sharpe:1},units:{sharpe:'ratio'},series:[],notes:[]}});
+    if (route.request().method() === 'GET') return route.fulfill({json:{concepts:[{id:'sharpe',name:'夏普',category:'风险-绩效',input_kind:'independent_inputs',inputs,notes:'真实绩效',plan:{markets:['crypto','cn_equity','us_equity'],modules:['backtest','paper','compare'],required_datasets:['real_equity_curve'],source_policy:'result_required',goal:'从净值计算。'}}]}});
+    return route.fulfill({json:{status:'computed',provenance:'provided_result_context',values:{sharpe:1},units:{sharpe:'ratio'},series:[],notes:[]}});
   });
   await page.goto('/backtest?concept=sharpe');
   await expect(page).toHaveURL(/\/backtest\?concept=sharpe/);
+  const panel = page.getByLabel('概念实践');
+  await panel.getByRole('button', {name:'运行实践'}).click();
+  await expect(panel).toContainText('先在当前模块运行真实回测');
   await page.getByRole('button', { name: '运行回测' }).click();
   await expect(page.locator('.ax-metrics')).toBeVisible();
-  const panel = page.getByLabel('概念实践');
-  await panel.getByRole('button', {name:'使用本页上下文',exact:true}).click();
   await expect(panel.getByLabel('年化周期数', {exact:true})).toHaveValue('8760');
   await expect(panel.getByLabel('收益率序列', {exact:true})).toBeDisabled();
-  await panel.getByRole('button', {name:'改用手动输入',exact:true}).click();
-  await panel.getByLabel('收益率序列', {exact:true}).fill('[0.1,-0.1]');
+  await expect(panel.getByRole('button', {name:'改用手动输入'})).toHaveCount(0);
   const request = page.waitForRequest(r => r.url().includes('/api/practice') && r.method() === 'POST');
   await panel.getByRole('button', {name:'运行实践'}).click();
-  expect((await request).postDataJSON().inputs.returns).toEqual([0.1,-0.1]);
+  const body = (await request).postDataJSON();
+  expect(body.module).toBe('backtest');
+  expect(body.inputs.returns.length).toBeGreaterThan(0);
+  expect(body.bars.length).toBe(bars.length);
+  await expect(panel).toContainText('使用当前模块真实结果');
 });
 
 
@@ -400,7 +404,7 @@ test('charts and concept diagrams remain readable across themes and widths', asy
     await page.getByPlaceholder('搜索 概念 / 公式 / 关键词').fill('EPS');
     const card = page.locator('.ax-kb-card');
     await card.locator('.ax-kb-details').click();
-    await expect(card.locator('.ax-practice-reading')).toContainText('单次计算');
+    await expect(card.locator('.ax-practice-note')).toContainText('适用市场的可追溯数据');
     for (const width of [1440, 390]) {
       await page.setViewportSize({width, height:1000});
       await expect(card).toHaveScreenshot(`${theme}-eps-${width}.png`, {maxDiffPixelRatio:0.01});
@@ -659,14 +663,14 @@ test('build view exposes all strategy teaching steps and pitfalls', async ({ pag
 });
 
 test('practice reports invalid JSON and succeeds after the input is corrected', async ({ page }) => {
-  await page.goto('/data?concept=earnings_per_share');
+  await page.goto('/data?concept=earnings_per_share&source=a_share');
   const panel = page.getByLabel('概念实践');
   await expect(panel.getByLabel('净利润', { exact: true })).toBeVisible();
   await panel.getByLabel('净利润', { exact: true }).fill('not-json');
-  await panel.getByRole('button', { name: '运行实践', exact: true }).click();
+  await panel.getByRole('button', { name: '运行教学计算', exact: true }).click();
   await expect(panel.locator('.ax-error')).toContainText('输入必须是有效的 JSON');
   await panel.getByLabel('净利润', { exact: true }).fill('4000000');
-  await panel.getByRole('button', { name: '运行实践', exact: true }).click();
+  await panel.getByRole('button', { name: '运行教学计算', exact: true }).click();
   await expect(panel.locator('.ax-practice-result')).toContainText('已计算');
 });
 
@@ -753,9 +757,9 @@ test('practice surfaces an API failure after valid inputs', async ({ page }) => 
     if (route.request().method() === 'POST') return route.fulfill({ status: 503, contentType: 'text/plain', body: 'practice unavailable' });
     await route.fallback();
   });
-  await page.goto('/data?concept=earnings_per_share');
+  await page.goto('/data?concept=earnings_per_share&source=a_share');
   const panel = page.getByLabel('概念实践');
-  await expect(panel.getByRole('button', { name: '运行实践', exact: true })).toBeVisible();
-  await panel.getByRole('button', { name: '运行实践', exact: true }).click();
+  await expect(panel.getByRole('button', { name: '运行教学计算', exact: true })).toBeVisible();
+  await panel.getByRole('button', { name: '运行教学计算', exact: true }).click();
   await expect(panel.locator('.ax-error')).toContainText('HTTP 503');
 });

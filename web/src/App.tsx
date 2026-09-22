@@ -18,6 +18,8 @@ import type {
   PaperSnapshot, EquityPoint, PracticeConcept, PracticeResult,
 } from './types';
 const MARKET_DEFAULT_SYMBOL: Record<SourceType, string> = { binance: 'BTCUSDT', a_share: '600519', us_stock: 'AAPL' };
+type PracticeModule = 'data' | 'backtest' | 'paper' | 'compare';
+const PRACTICE_MODULE_LABELS: Record<PracticeModule, string> = { data: '数据探索', backtest: '回测', paper: '模拟盘', compare: '策略对比' };
 
 const CHINESE_FIELDS: Record<string, string> = {
   price: '价格', close: '收盘价', open: '开盘价', high: '最高价', low: '最低价', volume: '成交量',
@@ -89,18 +91,21 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'compare', label: '策略对比' },
 ];
 
-function routeFor(tab: TabId, sub: LearnSub = 'knowledge', concept?: string) {
+function routeFor(tab: TabId, sub: LearnSub = 'knowledge', concept?: string, source?: SourceType) {
   const learnPaths: Record<LearnSub, string> = { knowledge: '/learn', book: '/learn/book', concepts: '/learn/concepts', build: '/learn/build', path: '/learn/path' };
   const base = tab === 'learn' ? learnPaths[sub] : `/${tab}`;
   const path = appPath(base);
-  return concept ? `${path}?concept=${encodeURIComponent(concept)}` : path;
+  return concept ? `${path}?concept=${encodeURIComponent(concept)}${source ? `&source=${source}` : ''}` : path;
 }
 function readRoute() {
   const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
   const path = (appBase && pathname.startsWith(appBase) ? pathname.slice(appBase.length) : pathname) || '/';
   const tab = ({ '/data': 'data', '/backtest': 'backtest', '/paper': 'paper', '/compare': 'compare' } as Record<string, TabId>)[path] || 'learn';
   const sub = ({ '/learn/book': 'book', '/learn/concepts': 'concepts', '/learn/build': 'build', '/learn/path': 'path' } as Record<string, LearnSub>)[path] || 'knowledge';
-  return { tab, sub, concept: new URLSearchParams(window.location.search).get('concept') || undefined };
+  const query = new URLSearchParams(window.location.search);
+  const requestedSource = query.get('source');
+  const source: SourceType | undefined = requestedSource === 'binance' || requestedSource === 'a_share' || requestedSource === 'us_stock' ? requestedSource : undefined;
+  return { tab, sub, concept: query.get('concept') || undefined, source };
 }
 
 function TabBar({ active, onChange }: { active: TabId; onChange: (t: TabId) => void }) {
@@ -264,7 +269,7 @@ const LEARN_SUBS: { id: LearnSub; label: string }[] = [
   { id: 'path', label: '学习路径' },
 ];
 
-function LearnCenter({ sub, onSubChange, onPractice }: { sub: LearnSub; onSubChange: (sub: LearnSub) => void; onPractice: (conceptId: string) => void }) {
+function LearnCenter({ sub, onSubChange, onPractice }: { sub: LearnSub; onSubChange: (sub: LearnSub) => void; onPractice: (conceptId: string, module: PracticeModule, source: SourceType) => void }) {
 function BookReader() {
   const toc = [['封面与目录', 1], ['指标基础与均线', 6], ['趋势与动量指标', 18], ['摆动与超买超卖', 31], ['成交量与量价关系', 43], ['K 线形态', 55], ['图表与实战方法', 67], ['附录与索引', 78]] as const;
   const [tocOpen, setTocOpen] = useState(true), [page, setPage] = useState(1);
@@ -298,14 +303,15 @@ function BookReader() {
 }
 
 // 指标大全
-function KnowledgeView({ onPractice }: { onPractice: (conceptId: string) => void }) {
+function KnowledgeView({ onPractice }: { onPractice: (conceptId: string, module: PracticeModule, source: SourceType) => void }) {
   const [data, setData] = useState<KnowledgeResponse | null>(null);
+  const [practiceById, setPracticeById] = useState<Map<string, PracticeConcept>>(new Map());
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [openId, setOpenId] = useState<string>();
   const [activeCat, setActiveCat] = useState('');
 
-  useEffect(() => { api.listKnowledge().then(setData).catch(console.error); }, []);
+  useEffect(() => { api.listKnowledge().then(setData).catch(console.error); void practiceCatalog().then(concepts => setPracticeById(new Map(concepts.map(concept => [concept.id, concept])))).catch(console.error); }, []);
 
   if (!data) return <div className="ax-loading">加载中…</div>;
   const cats = Object.keys(data.categories);
@@ -346,21 +352,23 @@ function KnowledgeView({ onPractice }: { onPractice: (conceptId: string) => void
       <p style={{ color: 'var(--text-dim)', fontSize: '0.82rem', margin: '0.4rem 0 0.8rem' }}>
         {filtered.length} 条结果
       </p>
-      {visible.map(e => <KbCard key={e.id} e={e} onPractice={onPractice} open={openId === e.id} onOpenChange={open => setOpenId(open ? e.id : undefined)} />)}
+      {visible.map(e => <KbCard key={e.id} e={e} plan={practiceById.get(e.id)?.plan} onPractice={onPractice} open={openId === e.id} onOpenChange={open => setOpenId(open ? e.id : undefined)} />)}
       {pageCount > 1 && <nav className="ax-pagination" aria-label="指标大全分页"><button disabled={currentPage === 0} onClick={() => { setPage(currentPage - 1); setOpenId(undefined); }}>上一页</button><span>第 {currentPage + 1} / {pageCount} 页</span><button disabled={currentPage + 1 >= pageCount} onClick={() => { setPage(currentPage + 1); setOpenId(undefined); }}>下一页</button></nav>}
     </div>
   );
 }
 
-function KbCard({ e, onPractice, open, onOpenChange }: { e: KnowledgeEntry; onPractice: (conceptId: string) => void; open: boolean; onOpenChange: (open: boolean) => void }) {
+function KbCard({ e, plan, onPractice, open, onOpenChange }: { e: KnowledgeEntry; plan?: PracticeConcept['plan']; onPractice: (conceptId: string, module: PracticeModule, source: SourceType) => void; open: boolean; onOpenChange: (open: boolean) => void }) {
   // The parent keeps exactly one expensive detail panel mounted.
   const relatedTags = e.related?.map((related, index) => <span key={`${related}-${index}`} className="ax-tag">{related}</span>);
+  const practiceModule = plan?.modules[0];
+  const practiceSource: SourceType = plan?.markets[0] === 'cn_equity' ? 'a_share' : plan?.markets[0] === 'us_equity' ? 'us_stock' : 'binance';
   return (
     <div className="ax-kb-card">
       <div className="ax-kb-header"><h4>{e.name}</h4></div>
       <div className="ax-kb-summary">{e.summary}</div>
       <div className="ax-kb-practice" aria-label={`${e.name} 实践入口`}>
-        <button onClick={() => onPractice(e.id)}>在数据探索中实践</button>
+        <button disabled={!practiceModule} onClick={() => { if (practiceModule) onPractice(e.id, practiceModule, practiceSource); }}>{practiceModule ? `在${PRACTICE_MODULE_LABELS[practiceModule]}中实践` : '正在核对实践入口…'}</button>
       </div>
       <details key={open ? 'open' : 'closed'} open={open}>
         <summary className={`ax-kb-details${open ? ' is-open' : ''}`} aria-label={open ? `收起 ${e.name} 详情` : `展开 ${e.name} 详情`} onClick={event => { event.preventDefault(); onOpenChange(!open); }}>
@@ -454,11 +462,17 @@ function CandlePatternVisual({ concept }: { concept: KnowledgeEntry }) {
   const [error, setError] = useState('');
   useEffect(() => {
     let active = true;
-    Promise.all([practiceCatalog(), api.runPractice({ concept_id: concept.id, module: 'data', symbol: 'BTCUSDT', source: 'binance', limit: 80, inputs: {} })])
-      .then(([catalog, value]) => { if (active) { setPracticeConcept(catalog.find(item => item.id === concept.id) || null); setResult(value); } })
-      .catch(reason => { if (active) setError(String(reason)); });
+    practiceCatalog().then(async catalog => {
+      const item = catalog.find(candidate => candidate.id === concept.id) || null;
+      if (!active) return;
+      setPracticeConcept(item);
+      if (item?.plan && (!item.plan.modules.includes('data') || !item.plan.markets.includes('crypto'))) return;
+      const value = await api.runPractice({ concept_id: concept.id, module: 'data', symbol: 'BTCUSDT', source: 'binance', limit: 80, inputs: {} });
+      if (active) setResult(value);
+    }).catch(reason => { if (active) setError(String(reason)); });
     return () => { active = false; };
   }, [concept.id]);
+  if (practiceConcept?.plan && (!practiceConcept.plan.modules.includes('data') || !practiceConcept.plan.markets.includes('crypto'))) return <Section label="实践入口" highlight><ScalarKnowledgeDiagram concept={concept} inputs={practiceConcept.inputs} /><p className="ax-practice-note">{practiceConcept.plan.source_policy === 'result_required' ? '这个概念需要真实净值和交易结果。' : '这个概念需要适用市场的可追溯数据。'}请在{practiceConcept.plan.modules.map(module => PRACTICE_MODULE_LABELS[module]).join('、')}中实践；这里不拿加密市场或默认教学值冒充结论。</p></Section>;
   if (error) return <Section label="可计算示例" highlight><ScalarKnowledgeDiagram concept={concept} inputs={concept.inputs || []} /><p className="ax-practice-note">示例结果暂不可用：{error}</p></Section>;
   if (!result) return <Section label="可计算示例" highlight><ScalarKnowledgeDiagram concept={concept} inputs={concept.inputs || []} loading /><p className="ax-practice-note">正在生成与 {concept.name} 对应的示例…</p></Section>;
   const series = result.series.find(item => item.values.some(value => value != null));
@@ -491,7 +505,7 @@ function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}
     setConceptId(id);
     setInputs(Object.fromEntries((concept?.inputs ?? []).map(input => [input.key,
       JSON.stringify(contextInputs[input.key] ?? input.default)])));
-    setUsePageContext((concept?.inputs ?? []).some(input => Object.prototype.hasOwnProperty.call(contextInputs, input.key)));
+    setUsePageContext(concept?.plan?.source_policy === 'result_required' || (concept?.inputs ?? []).some(input => Object.prototype.hasOwnProperty.call(contextInputs, input.key)));
     setResult(null);
     setError('');
   };
@@ -515,6 +529,14 @@ function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}
   const concept = concepts.find(item => item.id === conceptId);
   const run = async () => {
     if (!concept) return;
+    if (!concept.plan?.modules.includes(module)) { setError('这个概念不适用于当前模块，请从指标大全的实践入口进入。'); return; }
+    const market = source === 'a_share' ? 'cn_equity' : source === 'us_stock' ? 'us_equity' : 'crypto';
+    if (!concept.plan.markets.includes(market)) { setError('当前数据源不适用此概念，请切换到适用市场。'); return; }
+    if (concept.plan.source_policy === 'result_required') {
+      if (!bars?.length || !Array.isArray(contextInputs.equity) || (contextInputs.equity as unknown[]).length < 2) { setError('先在当前模块运行真实回测、策略对比或模拟盘，得到净值结果后再计算。'); return; }
+      if (concept.plan.required_datasets.some(dataset => dataset.startsWith('same_period_benchmark')) && !Array.isArray(contextInputs.benchmark_returns)) { setError('当前结果缺少与净值同区间的真实标的基准，不能用默认数组代替。'); return; }
+      if (!usePageContext) { setError('绩效实践必须使用本页真实结果；请切回本页上下文。'); return; }
+    }
     if (concept.input_kind === 'market_bars' && !bars?.length) {
       setError('当前模块还没有可用行情上下文。请先加载数据、运行回测或等待模拟盘产生数据。');
       return;
@@ -538,23 +560,23 @@ function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}
 
   return (
     <aside className="ax-practice" aria-label="概念实践">
-      <div><h3>概念实践</h3><p>{targetConcept ? '从指标大全直接进入。行情类概念使用当前数据探索的 K 线；其余概念明确使用可编辑教学输入，不冒充策略、回测或模拟盘结果。' : '从指标大全的“在数据探索中实践”进入一个有明确数据来源的练习。'}</p></div>
+      <div><h3>概念实践</h3><p>{targetConcept ? '从指标大全直接进入。行情类概念使用当前模块的真实 K 线；绩效类概念需要本页真实净值；财务等数据缺失时仅作明确标注的教学计算。' : '从指标大全进入一个有明确数据来源的练习。'}</p></div>
       {error && <div className="ax-error">{error}</div>}
       {concepts.length > 0 && <>
         <h4>{concept?.name} <small>· {concept?.category}</small></h4>
         {concept && <>
           <p className="ax-practice-note">{concept.notes}</p>
           {concept.plan && <div className="ax-practice-plan"><strong>适用范围</strong><span>{concept.plan.markets.map(m => ({crypto:'加密市场',cn_equity:'A 股',us_equity:'美股'}[m])).join('、')} · {concept.plan.modules.map(m => ({data:'数据探索',backtest:'回测',paper:'模拟盘',compare:'策略对比'}[m])).join('、')}</span><p>{concept.plan.goal}</p></div>}
-          {concept.input_kind !== 'market_bars' && <p className="ax-practice-provenance">教学示例：这些可编辑输入不是 {symbol || '当前交易对'} 的实时或历史行情。</p>}
-          {concept.inputs.some(input => Object.prototype.hasOwnProperty.call(contextInputs, input.key)) && <p className="ax-practice-provenance">{usePageContext ? '本页上下文已预填并用于计算。' : '已改用手动输入，运行时将覆盖本页上下文。'} <button type="button" className="ax-inline-action" onClick={() => setUsePageContext(value => !value)}>{usePageContext ? '改用手动输入' : '使用本页上下文'}</button></p>}
+          {concept.plan?.source_policy === 'evidence_required' && <p className="ax-practice-provenance">教学示例：这些可编辑输入不是 {symbol || '当前标的'} 的已核验财报、期权链或市场证据；这里只演示公式，不能据此交易。</p>}
+          {concept.inputs.some(input => Object.prototype.hasOwnProperty.call(contextInputs, input.key)) && <p className="ax-practice-provenance">{usePageContext ? '本页上下文已预填并用于计算。' : '已改用手动教学输入。'} {concept.plan?.source_policy !== 'result_required' && <button type="button" className="ax-inline-action" onClick={() => setUsePageContext(value => !value)}>{usePageContext ? '改用手动输入' : '使用本页上下文'}</button>}</p>}
           {concept.inputs.length > 0 && <div className="ax-practice-inputs">{concept.inputs.map(input => <label key={input.key}>{chineseField(input.key, input.label)}
             <input value={usePageContext && Object.prototype.hasOwnProperty.call(contextInputs, input.key) ? JSON.stringify(contextInputs[input.key]) : inputs[input.key] ?? ''} disabled={usePageContext && Object.prototype.hasOwnProperty.call(contextInputs, input.key)} onChange={event => setInputs(current => ({ ...current, [input.key]: event.target.value }))} aria-label={chineseField(input.key, input.label)} />
           </label>)}</div>}
-          <button className="ax-btn primary" onClick={run} disabled={loading}>{loading ? '计算中…' : '运行实践'}</button>
+          <button className="ax-btn primary" onClick={run} disabled={loading}>{loading ? '计算中…' : concept.plan?.source_policy === 'evidence_required' ? '运行教学计算' : '运行实践'}</button>
         </>}
       </>}
       {result && <div className="ax-practice-result">
-        <p className={result.status === 'computed' ? 'positive' : 'negative'}>{result.status === 'computed' ? '已计算' : '无法计算'} · {result.provenance === 'provided_market_bars' ? '使用当前模块行情上下文' : '使用可编辑教学输入'}</p>
+        <p className={result.status === 'computed' ? 'positive' : 'negative'}>{result.status === 'computed' ? '已计算' : '无法计算'} · {result.provenance === 'provided_market_bars' ? '使用当前模块行情上下文' : result.provenance === 'provided_result_context' ? '使用当前模块真实结果' : '使用可编辑教学输入'}</p>
         {result.reason && <p>{result.reason}</p>}
         {Object.keys(result.values).length > 0 && <dl>{Object.entries(result.values).map(([key, value]) => <div key={key}><dt>{chineseField(key, key === conceptId ? concept?.name : undefined)}{result.units?.[key] ? `（${chineseUnit(result.units[key])}）` : ''}</dt><dd>{value == null ? '—' : fmtNum(value, 6)}</dd></div>)}</dl>}
         <p className="ax-practice-reading">{resultSentence(concept?.name || '该概念', result.values, result.units)}</p>
@@ -692,10 +714,10 @@ function PathView() {
 // ===================================================================
 // 数据探索
 // ===================================================================
-function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 'light' | 'dark' }) {
-  const [symbol, setSymbol] = useState('BTCUSDT');
+function DataExplore({ targetConcept, targetSource, theme }: { targetConcept?: string; targetSource?: SourceType; theme: 'light' | 'dark' }) {
+  const [symbol, setSymbol] = useState(MARKET_DEFAULT_SYMBOL[targetSource || 'binance']);
   const [limit, setLimit] = useState(200);
-  const [source, setSource] = useState<SourceType>('binance');
+  const [source, setSource] = useState<SourceType>(targetSource || 'binance');
   const [chartType, setChartType] = useState<ChartType>('candle');
   const [selectedIndicators, setSelectedIndicators] = useState<string[]>(['sma_20', 'rsi_14', 'bbands_20', 'macd', 'atr_14']);
   const appliedIndicators = useRef<string[]>(['sma_20', 'rsi_14', 'bbands_20', 'macd', 'atr_14']);
@@ -892,12 +914,12 @@ function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 
 // ===================================================================
 // 回测
 // ===================================================================
-function Backtest({ targetConcept, theme }: { targetConcept?: string; theme: 'light' | 'dark' }) {
+function Backtest({ targetConcept, targetSource, theme }: { targetConcept?: string; targetSource?: SourceType; theme: 'light' | 'dark' }) {
   const [strategies, setStrategies] = useState<StrategyMeta[]>([]);
   const [strategy, setStrategy] = useState('');
   const [params, setParams] = useState<Record<string, number>>({});
-  const [symbol, setSymbol] = useState('BTCUSDT');
-  const [source, setSource] = useState<SourceType>('binance');
+  const [symbol, setSymbol] = useState(MARKET_DEFAULT_SYMBOL[targetSource || 'binance']);
+  const [source, setSource] = useState<SourceType>(targetSource || 'binance');
   const [limit, setLimit] = useState(500);
   const [capital, setCapital] = useState(10000);
   const [sl, setSl] = useState(0);
@@ -1067,7 +1089,7 @@ function Backtest({ targetConcept, theme }: { targetConcept?: string; theme: 'li
           )}
         </>
       )}
-      <PracticePanel module="backtest" symbol={symbol} source={source} limit={limit} bars={result?.bars} contextInputs={performanceInputs(result?.equity_curve, capital)} targetConcept={targetConcept} />
+      <PracticePanel module="backtest" symbol={symbol} source={source} limit={limit} bars={result?.bars} contextInputs={performanceInputs(result?.equity_curve, capital, result?.bars)} targetConcept={targetConcept} />
     </section>
   );
 }
@@ -1086,17 +1108,17 @@ const METRIC_FIELDS: { key: string; label: string; sign?: boolean; fmt: (v: any)
 // ===================================================================
 // 模拟盘
 // ===================================================================
-function PaperTrading({ targetConcept, theme }: { targetConcept?: string; theme: 'light' | 'dark' }) {
+function PaperTrading({ targetConcept, targetSource, theme }: { targetConcept?: string; targetSource?: SourceType; theme: 'light' | 'dark' }) {
   const [snapshot, setSnapshot] = useState<PaperSnapshot | null>(null);
   const [strategies, setStrategies] = useState<StrategyMeta[]>([]);
   const [strategy, setStrategy] = useState('');
-  const [source, setSource] = useState<SourceType>('binance');
-  const [symbol, setSymbol] = useState('BTCUSDT');
+  const [source, setSource] = useState<SourceType>(targetSource || 'binance');
+  const [symbol, setSymbol] = useState(MARKET_DEFAULT_SYMBOL[targetSource || 'binance']);
   const [error, setError] = useState('');
   const chartRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const selectedByUser = useRef(false);
-  const selectedMarketByUser = useRef(false);
+  const selectedMarketByUser = useRef(Boolean(targetSource));
 
   useEffect(() => {
     api.listStrategies().then(d => {
@@ -1224,7 +1246,7 @@ function PaperTrading({ targetConcept, theme }: { targetConcept?: string; theme:
           ))}
         </div>
       </details>
-      <PracticePanel module="paper" symbol={snapshot.symbol || 'BTCUSDT'} source={snapshot.source || 'binance'} limit={snapshot.bars?.length || 200} bars={snapshot.bars} contextInputs={performanceInputs(snapshot.equity_curve, snapshot.initial_capital ?? snapshot.equity)} targetConcept={targetConcept} />
+      <PracticePanel module="paper" symbol={snapshot.symbol || 'BTCUSDT'} source={snapshot.source || 'binance'} limit={snapshot.bars?.length || 200} bars={snapshot.bars} contextInputs={performanceInputs(snapshot.equity_curve, snapshot.initial_capital ?? snapshot.equity, snapshot.bars)} targetConcept={targetConcept} />
     </section>
   );
 }
@@ -1232,12 +1254,12 @@ function PaperTrading({ targetConcept, theme }: { targetConcept?: string; theme:
 // ===================================================================
 // 策略对比
 // ===================================================================
-function CompareStrategies({ targetConcept, theme }: { targetConcept?: string; theme: 'light' | 'dark' }) {
+function CompareStrategies({ targetConcept, targetSource, theme }: { targetConcept?: string; targetSource?: SourceType; theme: 'light' | 'dark' }) {
   const [strategies, setStrategies] = useState<StrategyMeta[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [customStrategies, setCustomStrategies] = useState<CustomStrategy[]>([]);
-  const [symbol, setSymbol] = useState('BTCUSDT');
-  const [source, setSource] = useState<SourceType>('binance');
+  const [symbol, setSymbol] = useState(MARKET_DEFAULT_SYMBOL[targetSource || 'binance']);
+  const [source, setSource] = useState<SourceType>(targetSource || 'binance');
   const [capital, setCapital] = useState(10000);
   const [results, setResults] = useState<Array<{ name: string; result: BacktestResult }>>([]);
   const [loading, setLoading] = useState(false);
@@ -1461,7 +1483,7 @@ function CompareStrategies({ targetConcept, theme }: { targetConcept?: string; t
           <div ref={chartRef} className="ax-chart"></div>
         </>
       )}
-      <PracticePanel module="compare" symbol={symbol} source={source} limit={500} bars={results[0]?.result.bars} contextInputs={performanceInputs(results[0]?.result.equity_curve, capital)} targetConcept={targetConcept} />
+      <PracticePanel module="compare" symbol={symbol} source={source} limit={500} bars={results[0]?.result.bars} contextInputs={performanceInputs(results[0]?.result.equity_curve, capital, results[0]?.result.bars)} targetConcept={targetConcept} />
     </section>
   );
 }
@@ -1471,9 +1493,9 @@ function CompareStrategies({ targetConcept, theme }: { targetConcept?: string; t
 // ===================================================================
 export default function App() {
   const [route, setRoute] = useState(readRoute);
-  const { tab, sub: learnSub, concept: practiceTarget } = route;
-  const navigate = (nextTab: TabId, nextSub: LearnSub = 'knowledge', concept?: string) => { window.history.pushState({}, '', routeFor(nextTab, nextSub, concept)); setRoute(readRoute()); };
-  const openPractice = (conceptId: string) => navigate('data', 'knowledge', conceptId);
+  const { tab, sub: learnSub, concept: practiceTarget, source: practiceSource } = route;
+  const navigate = (nextTab: TabId, nextSub: LearnSub = 'knowledge', concept?: string, source?: SourceType) => { window.history.pushState({}, '', routeFor(nextTab, nextSub, concept, source)); setRoute(readRoute()); };
+  const openPractice = (conceptId: string, module: PracticeModule, source: SourceType) => navigate(module, 'knowledge', conceptId, source);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => localStorage.getItem('axiom-theme') === 'light' ? 'light' : 'dark');
   void practiceTarget;
   void navigate;
@@ -1496,10 +1518,10 @@ export default function App() {
       <TabBar active={tab} onChange={nextTab => navigate(nextTab)} />
       <main className="ax-main">
         {tab === 'learn' && <LearnCenter sub={learnSub} onSubChange={nextSub => navigate('learn', nextSub)} onPractice={openPractice} />}
-        {tab === 'data' && <DataExplore targetConcept={practiceTarget} theme={theme} />}
-        {tab === 'backtest' && <Backtest targetConcept={practiceTarget} theme={theme} />}
-        {tab === 'paper' && <PaperTrading targetConcept={practiceTarget} theme={theme} />}
-        {tab === 'compare' && <CompareStrategies targetConcept={practiceTarget} theme={theme} />}
+        {tab === 'data' && <DataExplore targetConcept={practiceTarget} targetSource={practiceSource} theme={theme} />}
+        {tab === 'backtest' && <Backtest targetConcept={practiceTarget} targetSource={practiceSource} theme={theme} />}
+        {tab === 'paper' && <PaperTrading targetConcept={practiceTarget} targetSource={practiceSource} theme={theme} />}
+        {tab === 'compare' && <CompareStrategies targetConcept={practiceTarget} targetSource={practiceSource} theme={theme} />}
       </main>
       <footer className="ax-footer">
         AXIOM · 仅供学习,不构成任何投资建议

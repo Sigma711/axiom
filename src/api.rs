@@ -1418,12 +1418,30 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
             "goal":"用同一段已收盘真实行情观察数值、再检验策略或比较策略；不把指标本身当交易指令。"
         })
     } else if performance {
+        let benchmark_dependent = matches!(
+            concept.id.as_str(),
+            "information_ratio" | "treynor" | "tracking_error" | "capture_ratio" | "beta" | "alpha"
+        );
+        let required_datasets = if benchmark_dependent {
+            json!([
+                "matched_result_bars",
+                "real_strategy_returns",
+                "same_period_benchmark_returns"
+            ])
+        } else if matches!(
+            concept.id.as_str(),
+            "total_return" | "cagr" | "max_drawdown" | "calmar"
+        ) {
+            json!(["matched_result_bars", "real_equity_curve"])
+        } else {
+            json!(["matched_result_bars", "real_return_series"])
+        };
         json!({
             "markets":["crypto","cn_equity","us_equity"],
             "modules":["backtest","paper","compare"],
-            "required_datasets":["real_equity_curve","same_period_benchmark"],
+            "required_datasets":required_datasets,
             "source_policy":"result_required",
-            "goal":"从真实回测或模拟盘的净值、交易和同区间基准计算绩效，不能用任意默认数组替代。"
+            "goal":"从当前回测、模拟盘或策略对比的已提供行情和结果计算绩效；需要基准的指标必须传入同频、同区间的基准收益，不能使用教学默认数组。"
         })
     } else if financial {
         json!({
@@ -1479,48 +1497,194 @@ struct PracticeRequest {
     inputs: Value,
 }
 
+fn source_market(source: &str) -> Option<&'static str> {
+    match source {
+        "real" | "binance" | "synthetic" => Some("crypto"),
+        "a_share" => Some("cn_equity"),
+        "us_stock" => Some("us_equity"),
+        _ => None,
+    }
+}
+
+fn plan_allows(plan: &Value, field: &str, value: &str) -> bool {
+    plan[field]
+        .as_array()
+        .is_some_and(|items| items.iter().any(|item| item.as_str() == Some(value)))
+}
+
+fn finite_input_array(inputs: &Value, key: &str) -> Result<Vec<f64>, ApiError> {
+    let values = inputs[key]
+        .as_array()
+        .ok_or_else(|| validate::bad(format!("result_required practice needs {key}")))?;
+    if values.is_empty() {
+        return Err(validate::bad(format!(
+            "result_required practice needs nonempty {key}"
+        )));
+    }
+    values
+        .iter()
+        .map(|value| {
+            value
+                .as_f64()
+                .filter(|value| value.is_finite())
+                .ok_or_else(|| {
+                    validate::bad(format!("result_required practice needs finite {key}"))
+                })
+        })
+        .collect()
+}
+
+fn validate_result_context(
+    concept: &crate::practice::PracticeConcept,
+    bars: &[Bar],
+    inputs: &Value,
+) -> Result<(), ApiError> {
+    if bars.is_empty() {
+        return Err(validate::bad(
+            "result_required practice needs nonempty provided bars from the selected result",
+        ));
+    }
+    if !inputs.is_object() {
+        return Err(validate::bad("inputs must be an object"));
+    }
+    for input in &concept.inputs {
+        if inputs.get(&input.key).is_none_or(Value::is_null) {
+            return Err(validate::bad(format!(
+                "result_required practice needs explicitly provided {}",
+                input.key
+            )));
+        }
+    }
+    let benchmark_dependent = matches!(
+        concept.id.as_str(),
+        "information_ratio" | "treynor" | "tracking_error" | "capture_ratio" | "beta" | "alpha"
+    );
+    if benchmark_dependent {
+        let strategy = finite_input_array(inputs, "strategy_returns")?;
+        let benchmark = finite_input_array(inputs, "benchmark_returns")?;
+        if strategy.len() != benchmark.len() {
+            return Err(validate::bad(
+                "strategy_returns and benchmark_returns must have matching lengths",
+            ));
+        }
+        if strategy.len() < 2 {
+            return Err(validate::bad(
+                "benchmark performance practice needs at least two aligned returns",
+            ));
+        }
+    } else if matches!(
+        concept.id.as_str(),
+        "total_return" | "cagr" | "max_drawdown" | "calmar"
+    ) {
+        let equity = finite_input_array(inputs, "equity")?;
+        if equity.len() < 2 || equity.iter().any(|value| *value <= 0.0) {
+            return Err(validate::bad(
+                "result_required practice needs at least two positive equity observations",
+            ));
+        }
+        if !matches!(equity.len(), n if n == bars.len() || n == bars.len() + 1) {
+            return Err(validate::bad(
+                "equity length must match provided bars (or include one initial capital observation)",
+            ));
+        }
+    } else {
+        let returns = finite_input_array(inputs, "returns")?;
+        if returns.iter().any(|value| *value < -1.0) {
+            return Err(validate::bad("returns must not be below -1"));
+        }
+    }
+    Ok(())
+}
+
 async fn post_practice(
     State(state): State<Arc<AppState>>,
     Json(req): Json<PracticeRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    if req.module != "data" {
-        return Err(validate::bad("invalid practice module"));
-    }
     let symbol = req
         .symbol
         .unwrap_or_else(|| state.config.trading.symbol.clone());
     let source = req.source.unwrap_or_else(|| "binance".into());
     let limit = req.limit.unwrap_or(200);
-    validate::market(&symbol, &source, limit, 5000)?;
     let registry = crate::practice::catalog();
     let concept = registry
         .iter()
         .find(|c| c.id == req.concept_id)
         .ok_or_else(|| validate::bad("未知概念"))?;
+    let plan = practice_plan(concept);
+    if !plan_allows(&plan, "modules", &req.module) {
+        return Err(validate::bad(
+            "practice module is not applicable to this concept",
+        ));
+    }
+    validate::market(&symbol, &source, limit, 5000)?;
+    let market =
+        source_market(&source).ok_or_else(|| validate::bad("unsupported practice source"))?;
+    if !plan_allows(&plan, "markets", market) {
+        return Err(validate::bad(
+            "practice source is not applicable to this concept",
+        ));
+    }
     let independent = concept.input_kind != "market_bars";
-    let context = if independent {
-        "explicit_teaching_inputs"
-    } else if req.bars.is_some() {
-        "module_snapshot"
-    } else {
-        "selected_dataset"
-    };
+    let provided_bars = req.bars.is_some();
     let bars = if let Some(bars) = req.bars {
-        if !bars.is_empty() {
-            validate::bars(&bars)?;
-        }
+        validate::bars(&bars)?;
         bars
     } else if independent {
         Vec::new()
     } else {
         market_bars(&state, &symbol, &source, limit).await?
     };
-    let mut result =
-        crate::practice::evaluate(&req.concept_id, &bars, &req.inputs).map_err(validate::bad)?;
+    let result_required = plan["source_policy"].as_str() == Some("result_required");
+    if result_required {
+        // The evaluator has teaching defaults. Result modules must never fall back to them.
+        if !provided_bars {
+            return Err(validate::bad(
+                "result_required practice needs provided bars from the selected result",
+            ));
+        }
+        validate_result_context(concept, &bars, &req.inputs)?;
+    }
+    let context = if result_required {
+        "provided_result_context"
+    } else if independent {
+        "editable_teaching_inputs"
+    } else if provided_bars {
+        "module_snapshot"
+    } else {
+        "selected_dataset"
+    };
+    // Result screens share one context payload across all performance concepts.
+    // Keep that provenance data for boundary validation, but do not pass fields a
+    // particular formula does not declare to the strict concept evaluator.
+    let mut evaluator_inputs = req.inputs.clone();
+    if result_required {
+        if let Some(values) = evaluator_inputs.as_object_mut() {
+            for key in [
+                "equity",
+                "returns",
+                "initial_capital",
+                "elapsed_days",
+                "periods_per_year",
+                "risk_free_annual",
+                "strategy_returns",
+                "benchmark_returns",
+                "confidence",
+            ] {
+                if !concept.inputs.iter().any(|input| input.key == key) {
+                    values.remove(key);
+                }
+            }
+        }
+    }
+    let mut result = crate::practice::evaluate(&req.concept_id, &bars, &evaluator_inputs)
+        .map_err(validate::bad)?;
     result["module"] = json!(req.module);
     result["symbol"] = json!(symbol);
     result["source"] = json!(source);
     result["context"] = json!(context);
+    if result_required {
+        result["provenance"] = json!("provided_result_context");
+    }
     result["bars"] = json!(bars);
     Ok(Json(result))
 }

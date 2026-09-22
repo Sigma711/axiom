@@ -40,7 +40,7 @@ async fn request(app: &axum::Router, path: &str, value: Value) -> (StatusCode, V
 }
 
 #[tokio::test]
-async fn every_knowledge_concept_has_one_canonical_data_exploration_practice() {
+async fn data_practice_accepts_only_concepts_with_a_data_plan() {
     let app = app();
     let bars = SyntheticFeed::new(31)
         .fetch_historical(
@@ -49,7 +49,10 @@ async fn every_knowledge_concept_has_one_canonical_data_exploration_practice() {
             300,
         )
         .unwrap();
-    for concept in practice::catalog() {
+    for concept in practice::catalog()
+        .into_iter()
+        .filter(|concept| concept.input_kind == "market_bars")
+    {
         let mut first: Option<Value> = None;
         for module in ["data"] {
             let(status,out)=request(&app,"/api/practice",json!({"concept_id":concept.id,"module":module,"symbol":"BTCUSDT","source":"synthetic","bars":bars,"inputs":{}})).await;
@@ -103,30 +106,57 @@ async fn every_knowledge_concept_has_one_canonical_data_exploration_practice() {
 }
 
 #[tokio::test]
-async fn external_exercises_do_not_fetch_market_bars_and_invalid_requests_are_explicit() {
+async fn teaching_and_result_practice_contexts_are_explicit_and_validated() {
     let app = app();
     let (status,out)=request(&app,"/api/practice",json!({"concept_id":"book_funding","module":"data","source":"real","inputs":{"is_long":false}})).await;
     assert_eq!(status, StatusCode::OK, "{out}");
     assert_eq!(out["values"]["payment"], -1.0);
     assert_eq!(out["bars"], json!([]));
+    assert_eq!(out["context"], "editable_teaching_inputs");
+    let bars = SyntheticFeed::new(31)
+        .fetch_historical(
+            "BTCUSDT",
+            Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+            3,
+        )
+        .unwrap();
+    let result_inputs = json!({
+        "equity":[100.0,101.0,102.0,103.0],
+        "returns":[0.01,0.0099009901,0.0098039216],
+        "elapsed_days":3.0,
+        "periods_per_year":365.0,
+        "risk_free_annual":0.0
+    });
+    let (status, out) = request(
+        &app,
+        "/api/practice",
+        json!({"concept_id":"total_return","module":"backtest","symbol":"BTCUSDT","source":"synthetic","bars":bars,"inputs":result_inputs}),
+    ).await;
+    assert_eq!(status, StatusCode::OK, "{out}");
+    assert_eq!(out["context"], "provided_result_context");
+    assert_eq!(out["provenance"], "provided_result_context");
     for body in [
         json!({"concept_id":"sma","module":"unknown"}),
         json!({"concept_id":"not_registered","module":"data"}),
         json!({"concept_id":"rsi","module":"data","inputs":{"period":0}}),
         json!({"concept_id":"book_funding","module":"paper","inputs":{"rate":0.1}}),
         json!({"concept_id":"eps","module":"compare","inputs":[]}),
+        json!({"concept_id":"total_return","module":"data","source":"synthetic","bars":[{"timestamp":"2024-01-01T00:00:00Z","open":1.0,"high":1.0,"low":1.0,"close":1.0,"volume":0.0}],"inputs":{"equity":[100.0,101.0],"elapsed_days":1.0}}),
+        json!({"concept_id":"total_return","module":"backtest","source":"synthetic","inputs":{"equity":[100.0,101.0],"elapsed_days":1.0}}),
+        json!({"concept_id":"sharpe","module":"backtest","source":"synthetic","bars":[{"timestamp":"2024-01-01T00:00:00Z","open":1.0,"high":1.0,"low":1.0,"close":1.0,"volume":0.0}],"inputs":{}}),
+        json!({"concept_id":"beta","module":"backtest","source":"synthetic","bars":[{"timestamp":"2024-01-01T00:00:00Z","open":1.0,"high":1.0,"low":1.0,"close":1.0,"volume":0.0}],"inputs":{"strategy_returns":[0.01,0.02],"benchmark_returns":[0.01]}}),
+        json!({"concept_id":"eps","module":"data","source":"binance","inputs":{}}),
     ] {
         let (status, _) = request(&app, "/api/practice", body).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
     }
-    let (status, out) = request(
+    let (status, _) = request(
         &app,
         "/api/practice",
         json!({"concept_id":"rsi","module":"data","bars":[]}),
     )
     .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(out["status"], "undefined");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -188,5 +218,102 @@ async fn every_catalog_entry_publishes_a_non_forced_real_practice_plan() {
             Some("real_required" | "result_required" | "evidence_required")
         ));
         assert!(!plan["goal"].as_str().unwrap_or("").is_empty());
+        if concept["category"] == "风险-绩效" {
+            assert_eq!(plan["source_policy"], "result_required");
+            assert_eq!(plan["modules"], json!(["backtest", "paper", "compare"]));
+            let required = plan["required_datasets"].as_array().unwrap();
+            let benchmark_dependent = matches!(
+                concept["id"].as_str(),
+                Some(
+                    "information_ratio"
+                        | "treynor"
+                        | "tracking_error"
+                        | "capture_ratio"
+                        | "beta"
+                        | "alpha"
+                )
+            );
+            assert_eq!(
+                required
+                    .iter()
+                    .any(|item| item == "same_period_benchmark_returns"),
+                benchmark_dependent,
+                "{} benchmark requirement",
+                concept["id"]
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn result_practice_rejects_invalid_evidence_without_falling_back_to_teaching_defaults() {
+    let app = app();
+    let bars = SyntheticFeed::new(31)
+        .fetch_historical(
+            "BTCUSDT",
+            Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+            3,
+        )
+        .unwrap();
+    let with_result = |concept_id: &str, inputs: Value| {
+        json!({
+            "concept_id": concept_id, "module": "backtest", "symbol": "BTCUSDT",
+            "source": "synthetic", "bars": bars, "inputs": inputs
+        })
+    };
+    let benchmark = json!({
+        "strategy_returns": [0.01, 0.03], "benchmark_returns": [0.02, -0.01],
+        "periods_per_year": 365.0, "risk_free_annual": 0.0
+    });
+    let (status, body) = request(
+        &app,
+        "/api/practice",
+        with_result("information_ratio", benchmark.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["provenance"], "provided_result_context");
+    for inputs in [
+        json!({"strategy_returns":[0.01,0.03],"benchmark_returns":[0.02],"periods_per_year":365.0,"risk_free_annual":0.0}),
+        json!({"strategy_returns":[0.01],"benchmark_returns":[0.02],"periods_per_year":365.0,"risk_free_annual":0.0}),
+        json!({"strategy_returns":[],"benchmark_returns":[0.02],"periods_per_year":365.0,"risk_free_annual":0.0}),
+        json!({"strategy_returns":["bad",0.03],"benchmark_returns":[0.02,-0.01],"periods_per_year":365.0,"risk_free_annual":0.0}),
+        json!({"strategy_returns":[0.01,0.03],"periods_per_year":365.0,"risk_free_annual":0.0}),
+    ] {
+        let (status, _) = request(
+            &app,
+            "/api/practice",
+            with_result("information_ratio", inputs),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+    for inputs in [
+        json!({"equity":[100.0,0.0,102.0,103.0],"elapsed_days":3.0}),
+        json!({"equity":[100.0,101.0,102.0,103.0,104.0],"elapsed_days":3.0}),
+    ] {
+        let (status, _) = request(&app, "/api/practice", with_result("total_return", inputs)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+    for inputs in [
+        json!({"confidence":0.95,"periods_per_year":365.0,"returns":[0.01,-1.1],"risk_free_annual":0.0}),
+        json!({"confidence":0.95,"periods_per_year":365.0,"returns":["bad",0.01],"risk_free_annual":0.0}),
+    ] {
+        let (status, _) = request(&app, "/api/practice", with_result("sharpe", inputs)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+    let (status, _) = request(&app, "/api/practice", with_result("sharpe", json!([]))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    for (source, symbol) in [("a_share", "600519"), ("us_stock", "AAPL")] {
+        let (status, body) = request(
+            &app,
+            "/api/practice",
+            json!({
+                "concept_id": "eps", "module": "data", "source": source, "symbol": symbol, "inputs": {}
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["context"], "editable_teaching_inputs");
     }
 }
