@@ -556,3 +556,107 @@ test('long dropdown menus stay above subsequent control groups', async ({ page }
   });
   expect(coveredByMenu).toBe(true);
 });
+
+test('paper trading retries a failed market apply and completes its lifecycle', async ({ page }) => {
+  let configAttempts = 0;
+  let running = false;
+  const snapshot = () => ({ is_running: running, current_bar: bars.at(-1), cash: 10000, position_size: 0, position_value: 0, equity: 10000, last_signal: null, last_fill: null, equity_curve: [], trades_count: 0, log: [], bars, source: 'binance', symbol: 'BTCUSDT', strategy: 'sma_cross' });
+  await page.route('**/api/paper/snapshot', route => route.fulfill({ json: snapshot() }));
+  await page.route('**/api/paper/config', async route => {
+    configAttempts += 1;
+    if (configAttempts === 1) return route.fulfill({ status: 503, contentType: 'text/plain', body: 'temporary paper service failure' });
+    return route.fulfill({ json: { status: 'configured', source: 'binance', symbol: 'BTCUSDT', strategy: 'sma_cross' } });
+  });
+  await page.route('**/api/paper/start', async route => { running = true; await route.fulfill({ json: { status: 'started' } }); });
+  await page.route('**/api/paper/stop', async route => { running = false; await route.fulfill({ json: { status: 'stopped' } }); });
+  await page.goto('/paper');
+  const panel = page.locator('section').filter({ has: page.getByRole('heading', { name: '模拟盘' }) });
+  await expect(panel.getByText('已停止', { exact: true })).toBeVisible();
+  await panel.getByRole('button', { name: '应用市场' }).click();
+  await expect(panel.locator('.ax-error')).toContainText('HTTP 503');
+  await panel.getByRole('button', { name: '应用市场' }).click();
+  await expect(panel.locator('.ax-error')).toHaveCount(0);
+  await panel.getByRole('button', { name: '启动' }).click();
+  await expect(panel.getByText('运行中', { exact: true })).toBeVisible();
+  await panel.getByRole('button', { name: '停止' }).click();
+  await expect(panel.getByText('已停止', { exact: true })).toBeVisible();
+  expect(configAttempts).toBe(3);
+});
+
+test('strategy comparison validates selection and adds a custom strategy', async ({ page }) => {
+  const dialogs: string[] = [];
+  page.on('dialog', async dialog => { dialogs.push(dialog.message()); await dialog.dismiss(); });
+  await page.goto('/compare');
+  await page.getByRole('button', { name: '全不选', exact: true }).click();
+  await page.getByRole('button', { name: '跑对比', exact: true }).click();
+  await expect(page.locator('.ax-error')).toContainText('请至少选 2 个策略');
+  await page.getByRole('button', { name: '+ 自定义策略', exact: true }).click();
+  await page.getByLabel('策略名称', { exact: true }).fill('教学策略');
+  await page.getByLabel('参数 (JSON)', { exact: true }).fill('{bad');
+  await page.getByRole('button', { name: '保存并加入', exact: true }).click();
+  await expect.poll(() => dialogs).toEqual(['参数 JSON 格式错误']);
+  await page.getByLabel('参数 (JSON)', { exact: true }).fill('{"fast": 3, "slow": 10}');
+  await page.getByRole('button', { name: '保存并加入', exact: true }).click();
+  await expect(page.getByText('✦ 教学策略', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '默认', exact: true }).click();
+  await expect(page.locator('.ax-pool-item.checked input:checked')).toHaveCount(2);
+});
+
+test('symbol picker paginates, handles empty search, and accepts a direct code', async ({ page }) => {
+  await page.route('**/api/symbols**', route => {
+    const url = new URL(route.request().url());
+    const query = url.searchParams.get('q') || '';
+    const offset = Number(url.searchParams.get('offset') || 0);
+    if (query === 'MISSING') return route.fulfill({ json: { symbols: [], items: [], count: 0, total: 0, universe_count: 101, offset: 0, has_more: false, status: 'live', complete: true, source: 'fixture' } });
+    const items = offset === 0 ? [{ symbol: 'BTCUSDT', name: 'Bitcoin / Tether', exchange: 'Binance' }] : [{ symbol: 'ETHUSDT', name: 'Ether / Tether', exchange: 'Binance' }];
+    return route.fulfill({ json: { symbols: items.map(item => item.symbol), items, count: 101, total: 101, universe_count: 101, offset, has_more: offset === 0, status: 'live', complete: true, source: 'fixture' } });
+  });
+  await page.goto('/data');
+  const trigger = page.getByRole('button', { name: '交易对', exact: true });
+  await trigger.click();
+  await expect(page.getByRole('button', { name: '下一页', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '下一页', exact: true }).click();
+  await expect(page.getByRole('option', { name: /ETHUSDT/ })).toBeVisible();
+  await page.getByLabel('搜索交易对').fill('MISSING');
+  await expect(page.locator('.ax-symbol-empty')).toBeVisible();
+  await page.getByLabel('搜索交易对').press('Enter');
+  await expect(trigger).toContainText('MISSING');
+});
+
+test('symbol picker surfaces a catalog error and retries after a new query', async ({ page }) => {
+  let calls = 0;
+  await page.route('**/api/symbols**', route => {
+    calls += 1;
+    if (calls === 1) return route.fulfill({ status: 502, contentType: 'text/plain', body: 'catalog unavailable' });
+    return route.fulfill({ json: { symbols: ['BTCUSDT'], items: [{ symbol: 'BTCUSDT', name: 'Bitcoin / Tether', exchange: 'Binance' }], count: 1, total: 1, universe_count: 1, offset: 0, has_more: false, status: 'live', complete: true, source: 'fixture' } });
+  });
+  await page.goto('/data');
+  const trigger = page.getByRole('button', { name: '交易对', exact: true });
+  await trigger.click();
+  await expect(page.locator('.ax-symbol-status')).toContainText('HTTP 502');
+  await page.getByLabel('搜索交易对').fill('BTC');
+  await expect(page.getByRole('option', { name: /BTCUSDT/ })).toBeVisible();
+  await page.getByRole('option', { name: /BTCUSDT/ }).click();
+  await expect(trigger).toContainText('BTCUSDT');
+});
+
+test('build view exposes all strategy teaching steps and pitfalls', async ({ page }) => {
+  await page.goto('/learn/build');
+  await expect(page.getByRole('heading', { name: '创建自己的策略 - 5 步教学' })).toBeVisible();
+  await expect(page.locator('.ax-path > li')).toHaveCount(5);
+  await expect(page.locator('.ax-card.danger')).toHaveCount(6);
+  await expect(page.locator('.ax-path')).toContainText('形成可验证的市场假设');
+  await expect(page.locator('.ax-grid')).toContainText('RSI 超买 ≠ 卖出');
+});
+
+test('practice reports invalid JSON and succeeds after the input is corrected', async ({ page }) => {
+  await page.goto('/data?concept=earnings_per_share');
+  const panel = page.getByLabel('概念实践');
+  await expect(panel.getByLabel('净利润', { exact: true })).toBeVisible();
+  await panel.getByLabel('净利润', { exact: true }).fill('not-json');
+  await panel.getByRole('button', { name: '运行实践', exact: true }).click();
+  await expect(panel.locator('.ax-error')).toContainText('输入必须是有效的 JSON');
+  await panel.getByLabel('净利润', { exact: true }).fill('4000000');
+  await panel.getByRole('button', { name: '运行实践', exact: true }).click();
+  await expect(panel.locator('.ax-practice-result')).toContainText('已计算');
+});

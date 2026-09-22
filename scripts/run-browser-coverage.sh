@@ -50,3 +50,4 @@ curl --fail --silent http://127.0.0.1:18181/ >/dev/null
   PW_V8_COVERAGE=1 npm exec -- playwright test
 )
 node scripts/merge-playwright-v8-coverage.mjs
+node scripts/merge-browser-lcov.mjs coverage/web/lcov.info coverage/web-e2e/lcov.info coverage/web-combined/lcov.info

@@ -114,8 +114,31 @@ function componentLines(component, components, lines) {
   return data;
 }
 
+/**
+ * Rust `lib.rs`/`mod.rs` files are module manifests: they only declare or
+ * re-export code that is measured in its owning source file. Likewise, the
+ * knowledge reference index is generated from the source map. Neither has
+ * executable product behaviour, so neither belongs in a line-coverage
+ * denominator. This deliberately does not exclude ordinary application
+ * modules merely because they have a low result.
+ */
+function isRustExecutableSource(file, source) {
+  if (/^\/\/\s*由 .*自动生成/m.test(source) || /@generated|DO NOT EDIT/i.test(source)) return false;
+  if (!/(?:^|\/)(?:lib|mod)\.rs$/.test(file)) return true;
+  const code = source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*$/gm, '')
+    .replace(/#!?\[[^\]]*\]/g, '')
+    .trim();
+  return /\b(?:fn|struct|enum|trait|impl|const|static|type|macro_rules!)\b/.test(code);
+}
+
 async function enforceRust(records) {
-  const files = await walk(rustRoot, file => file.endsWith('.rs'));
+  const candidates = await walk(rustRoot, file => file.endsWith('.rs'));
+  const files = [];
+  for (const file of candidates) {
+    if (isRustExecutableSource(file, await readFile(file, 'utf8'))) files.push(file);
+  }
   const failures = [];
   let covered = 0, total = 0;
   for (const file of files.sort()) {

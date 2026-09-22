@@ -77,12 +77,12 @@ tools:
 	rustup component add rustfmt clippy llvm-tools-preview
 	cargo install cargo-llvm-cov --locked
 coverage: build-web
-	rm -rf coverage/rust coverage/web-e2e coverage/lcov.info coverage/html
+	rm -rf coverage/rust coverage/web-e2e coverage/web-combined coverage/lcov.info coverage/html
 	mkdir -p coverage/rust
 	cargo llvm-cov --all-targets --locked --lcov --output-path coverage/rust/lcov.info
 	bash scripts/run-browser-coverage.sh
-	cat coverage/rust/lcov.info coverage/web-e2e/lcov.info > coverage/lcov.info
-	node scripts/check-line-coverage.mjs coverage/rust/lcov.info coverage/web-e2e/lcov.info
+	cat coverage/rust/lcov.info coverage/web-combined/lcov.info > coverage/lcov.info
+	node scripts/check-line-coverage.mjs coverage/rust/lcov.info coverage/web-combined/lcov.info
 	cargo llvm-cov report --html --output-dir coverage/html
 
 # Run after committing and pushing; rebuilds the AST map against that revision.
