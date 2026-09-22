@@ -116,6 +116,13 @@ export interface PracticeConcept {
   input_kind: 'market_bars' | 'independent_inputs' | 'manual_annotation';
   inputs: Array<{ key: string; label: string; default: unknown }>;
   notes: string;
+  plan?: {
+    markets: Array<'crypto' | 'cn_equity' | 'us_equity'>;
+    modules: Array<'data' | 'backtest' | 'paper' | 'compare'>;
+    required_datasets: string[];
+    source_policy: 'real_required' | 'result_required' | 'evidence_required';
+    goal: string;
+  };
 }
 
 export interface PracticeResult {

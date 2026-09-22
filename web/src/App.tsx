@@ -470,7 +470,7 @@ function CandlePatternVisual({ concept }: { concept: KnowledgeEntry }) {
   const inputs = practiceConcept?.inputs || concept.inputs || [];
   const isCandlePattern = ['k_pattern_hammer', 'k_pattern_doji', 'k_pattern_engulfing', 'k_pattern_star'].includes(concept.id);
   return <Section label="可计算示例" highlight>
-    <p className="ax-practice-note">{result.provenance === 'provided_market_bars' ? '基于合成教学行情计算，用来观察数值变化，不代表当前币种行情。' : '基于可编辑教学输入计算，不代表当前币种行情。'}</p>
+    <p className="ax-practice-note">{result.provenance === 'provided_market_bars' ? '基于已收盘的真实市场行情计算，用来观察数值变化，不代表交易建议。' : '基于可编辑教学输入计算，不代表当前币种行情。'}</p>
     {isCandlePattern ? <CandlePatternVisual concept={concept} /> : (result.chart ? <BookChartVisual chart={result.chart} name={concept.name} /> : series && values.length > 1 ? <KnowledgeSeriesVisual name={concept.name} result={result} /> : <ScalarKnowledgeDiagram concept={concept} inputs={inputs} scalar={scalar} unit={scalar ? result.units?.[scalar[0]] : undefined} />)}
     <p className="ax-practice-reading">{resultSentence(concept.name, result.values, result.units, Boolean(series && values.length > 1))}</p>
     {result.notes.slice(0, 1).map(note => <p className="ax-practice-note" key={note}>{note}</p>)}
@@ -547,6 +547,7 @@ function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}
         <h4>{concept?.name} <small>· {concept?.category}</small></h4>
         {concept && <>
           <p className="ax-practice-note">{concept.notes}</p>
+          {concept.plan && <div className="ax-practice-plan"><strong>适用范围</strong><span>{concept.plan.markets.map(m => ({crypto:'加密市场',cn_equity:'A 股',us_equity:'美股'}[m])).join('、')} · {concept.plan.modules.map(m => ({data:'数据探索',backtest:'回测',paper:'模拟盘',compare:'策略对比'}[m])).join('、')}</span><p>{concept.plan.goal}</p></div>}
           {concept.input_kind !== 'market_bars' && <p className="ax-practice-provenance">教学示例：这些可编辑输入不是 {symbol || '当前交易对'} 的实时或历史行情。</p>}
           {concept.inputs.some(input => Object.prototype.hasOwnProperty.call(contextInputs, input.key)) && <p className="ax-practice-provenance">{usePageContext ? '本页上下文已预填并用于计算。' : '已改用手动输入，运行时将覆盖本页上下文。'} <button type="button" className="ax-inline-action" onClick={() => setUsePageContext(value => !value)}>{usePageContext ? '改用手动输入' : '使用本页上下文'}</button></p>}
           {concept.inputs.length > 0 && <div className="ax-practice-inputs">{concept.inputs.map(input => <label key={input.key}>{chineseField(input.key, input.label)}

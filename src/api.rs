@@ -1303,9 +1303,69 @@ pub fn locate_symbol_for_test(reference: &str) -> Option<usize> {
     crate::code_links::resolve(reference).map(|location| location.line)
 }
 
+fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
+    let financial = matches!(
+        concept.category.as_str(),
+        "估值" | "现金流" | "盈利" | "财务质量" | "行业" | "股东" | "分析师"
+    );
+    let derivatives = concept.category == "期权";
+    let performance = concept.category == "风险-绩效";
+    if concept.input_kind == "market_bars" {
+        json!({
+            "markets":["crypto","cn_equity","us_equity"],
+            "modules":["data","backtest","compare"],
+            "required_datasets":["completed_ohlcv"],
+            "source_policy":"real_required",
+            "goal":"用同一段已收盘真实行情观察数值、再检验策略或比较策略；不把指标本身当交易指令。"
+        })
+    } else if performance {
+        json!({
+            "markets":["crypto","cn_equity","us_equity"],
+            "modules":["backtest","paper","compare"],
+            "required_datasets":["real_equity_curve","same_period_benchmark"],
+            "source_policy":"result_required",
+            "goal":"从真实回测或模拟盘的净值、交易和同区间基准计算绩效，不能用任意默认数组替代。"
+        })
+    } else if financial {
+        json!({
+            "markets":["cn_equity","us_equity"],
+            "modules":["data"],
+            "required_datasets":["point_in_time_filing","market_price"],
+            "source_policy":"evidence_required",
+            "goal":"将可追溯、已在评估时点公开的财报字段与对应市场价格输入公式；缺少报告时必须明确提示缺什么。"
+        })
+    } else if derivatives {
+        json!({
+            "markets":["us_equity"],
+            "modules":["data","compare"],
+            "required_datasets":["timestamped_option_chain","underlying_price"],
+            "source_policy":"evidence_required",
+            "goal":"以同一报价时点的期权链和标的价格计算；没有期权链时不伪造结论。"
+        })
+    } else {
+        json!({
+            "markets":["crypto","cn_equity","us_equity"],
+            "modules":["data"],
+            "required_datasets":["documented_input_or_market_snapshot"],
+            "source_policy":"evidence_required",
+            "goal":"按概念的数据口径收集证据或行情快照；教学输入只用于理解公式，不能替代真实练习。"
+        })
+    }
+}
+
 async fn get_practice() -> Json<Value> {
     let concepts = crate::practice::catalog();
-    Json(json!({"total":concepts.len(),"concepts":concepts,"modules":["data"]}))
+    let concepts: Vec<Value> = concepts
+        .iter()
+        .map(|concept| {
+            let mut value = serde_json::to_value(concept).expect("practice catalog serializes");
+            value["plan"] = practice_plan(concept);
+            value
+        })
+        .collect();
+    Json(
+        json!({"total":concepts.len(),"concepts":concepts,"modules":["data","backtest","paper","compare"]}),
+    )
 }
 
 #[derive(Deserialize)]
