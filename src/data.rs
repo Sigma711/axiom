@@ -625,9 +625,16 @@ async fn fetch_a_share(symbol: &str, since: DateTime<Utc>, limit: usize) -> Resu
     }
     .await;
     match primary {
-        Ok(bars) if !bars.is_empty() => Ok(bars),
+        Ok(bars) if has_current_daily_bars(&bars, Utc::now()) => Ok(bars),
+        // A non-empty response is not necessarily usable: Eastmoney can serve an
+        // old cache. Tencent is the independent fallback for a stale daily series.
         Ok(_) | Err(_) => fetch_a_share_tencent(symbol, since, limit).await,
     }
+}
+
+fn has_current_daily_bars(bars: &[Bar], now: DateTime<Utc>) -> bool {
+    bars.last()
+        .is_some_and(|bar| bar.timestamp >= now - Duration::days(21))
 }
 
 fn display_number(value: &serde_json::Value) -> Option<f64> {
@@ -795,6 +802,26 @@ mod public_market_source_tests {
             (bar.open, bar.high, bar.low, bar.close, bar.volume),
             (10.0, 12.0, 9.5, 11.0, 12345.0)
         );
+    }
+
+    #[test]
+    fn stale_primary_daily_series_is_not_accepted_as_current_market_data() {
+        let now = Utc.with_ymd_and_hms(2026, 9, 23, 0, 0, 0).unwrap();
+        let stale = vec![Bar {
+            timestamp: Utc.with_ymd_and_hms(2026, 5, 29, 0, 0, 0).unwrap(),
+            open: 10.0,
+            high: 11.0,
+            low: 9.0,
+            close: 10.5,
+            volume: 100.0,
+        }];
+        let current = vec![Bar {
+            timestamp: Utc.with_ymd_and_hms(2026, 9, 22, 0, 0, 0).unwrap(),
+            ..stale[0].clone()
+        }];
+        assert!(!has_current_daily_bars(&[], now));
+        assert!(!has_current_daily_bars(&stale, now));
+        assert!(has_current_daily_bars(&current, now));
     }
 
     #[test]
