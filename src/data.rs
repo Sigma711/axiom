@@ -448,9 +448,22 @@ fn parse_eastmoney_kline(row: &str) -> Option<Bar> {
 }
 
 fn parse_yahoo_bars(raw: &serde_json::Value) -> Result<Vec<Bar>> {
+    parse_yahoo_bars_at(raw, Utc::now())
+}
+
+fn parse_yahoo_bars_at(raw: &serde_json::Value, now: DateTime<Utc>) -> Result<Vec<Bar>> {
     let result = raw
         .pointer("/chart/result/0")
         .context("Yahoo response has no result")?;
+    let regular_session = result
+        .pointer("/meta/currentTradingPeriod/regular")
+        .and_then(|period| {
+            Some((
+                period["start"].as_i64()?,
+                period["end"].as_i64()?,
+                result["meta"]["gmtoffset"].as_i64()?,
+            ))
+        });
     let times = result["timestamp"]
         .as_array()
         .context("Yahoo timestamps missing")?;
@@ -481,7 +494,7 @@ fn parse_yahoo_bars(raw: &serde_json::Value) -> Result<Vec<Bar>> {
         let Some(timestamp) = Utc.timestamp_opt(ts, 0).single() else {
             continue;
         };
-        if timestamp.date_naive() >= Utc::now().date_naive() {
+        if !yahoo_bar_is_complete(timestamp, regular_session, now) {
             continue;
         }
         let bar = Bar {
@@ -500,6 +513,30 @@ fn parse_yahoo_bars(raw: &serde_json::Value) -> Result<Vec<Bar>> {
     bars.dedup_by_key(|bar| bar.timestamp);
     crate::practice::validate_bars(&bars).map_err(anyhow::Error::msg)?;
     Ok(bars)
+}
+
+fn yahoo_bar_is_complete(
+    timestamp: DateTime<Utc>,
+    regular_session: Option<(i64, i64, i64)>,
+    now: DateTime<Utc>,
+) -> bool {
+    let Some((session_start, session_end, gmtoffset)) = regular_session else {
+        return timestamp.date_naive() < now.date_naive();
+    };
+    let Some(session_date) = DateTime::from_timestamp(session_start, 0)
+        .and_then(|value| value.checked_add_signed(Duration::seconds(gmtoffset)))
+        .map(|value| value.date_naive())
+    else {
+        return timestamp.date_naive() < now.date_naive();
+    };
+    let Some(bar_local_date) = timestamp
+        .checked_add_signed(Duration::seconds(gmtoffset))
+        .map(|value| value.date_naive())
+    else {
+        return false;
+    };
+    bar_local_date < session_date
+        || (bar_local_date == session_date && now.timestamp() >= session_end)
 }
 
 fn json_number(value: &serde_json::Value) -> Option<f64> {
@@ -1090,6 +1127,45 @@ mod public_market_source_tests {
         let bars = parse_yahoo_bars(&raw).unwrap();
         assert_eq!(bars.len(), 1);
         assert_eq!(bars[0].close, 11.0);
+    }
+
+    #[test]
+    fn yahoo_parser_uses_market_close_and_dst_offset_for_daily_completion() {
+        let session_start = Utc.with_ymd_and_hms(2026, 9, 22, 13, 30, 0).unwrap();
+        let session_end = Utc.with_ymd_and_hms(2026, 9, 22, 20, 0, 0).unwrap();
+        let raw = serde_json::json!({
+            "chart": {"result": [{
+                "meta": {
+                    "gmtoffset": -14_400,
+                    "currentTradingPeriod": {"regular": {
+                        "start": session_start.timestamp(), "end": session_end.timestamp()
+                    }}
+                },
+                "timestamp": [
+                    Utc.with_ymd_and_hms(2026, 9, 21, 4, 0, 0).unwrap().timestamp(),
+                    Utc.with_ymd_and_hms(2026, 9, 22, 4, 0, 0).unwrap().timestamp()
+                ],
+                "indicators": {"quote": [{
+                    "open": [10.0, 11.0], "high": [11.0, 12.0],
+                    "low": [9.0, 10.0], "close": [10.5, 11.5],
+                    "volume": [100.0, 110.0]
+                }]}
+            }]}
+        });
+        let before_close =
+            parse_yahoo_bars_at(&raw, Utc.with_ymd_and_hms(2026, 9, 22, 19, 59, 59).unwrap())
+                .unwrap();
+        assert_eq!(before_close.len(), 1);
+        assert_eq!(before_close[0].close, 10.5);
+        let after_close =
+            parse_yahoo_bars_at(&raw, Utc.with_ymd_and_hms(2026, 9, 22, 20, 0, 1).unwrap())
+                .unwrap();
+        assert_eq!(after_close.len(), 2);
+
+        let weekend =
+            parse_yahoo_bars_at(&raw, Utc.with_ymd_and_hms(2026, 9, 26, 12, 0, 0).unwrap())
+                .unwrap();
+        assert_eq!(weekend.len(), 2);
     }
 
     #[test]
