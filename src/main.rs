@@ -49,9 +49,25 @@ async fn main() -> anyhow::Result<()> {
         .parse()?;
     let addr = SocketAddr::new(host, port);
     tracing::info!("◆ AXIOM 已启动,监听 {}", addr);
-    tracing::info!("→ 打开浏览器访问 http://localhost:8080");
+    tracing::info!("→ 打开浏览器访问 http://localhost:{port}");
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
     Ok(())
+}
+
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut terminate = signal(SignalKind::terminate()).expect("register SIGTERM");
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {},
+            _ = terminate.recv() => {},
+        }
+    }
+    #[cfg(not(unix))]
+    tokio::signal::ctrl_c().await.expect("register Ctrl-C");
 }

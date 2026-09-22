@@ -13,12 +13,17 @@ fn unused_loopback_port() -> u16 {
 }
 
 fn terminate(child: &mut Child) {
-    let _ = child.kill();
-    let _ = child.wait();
+    let status = Command::new("kill")
+        .arg("-TERM")
+        .arg(child.id().to_string())
+        .status()
+        .expect("signal server shutdown");
+    assert!(status.success(), "SIGTERM delivery failed");
+    let status = child.wait().expect("wait for graceful shutdown");
+    assert!(status.success(), "server exited uncleanly: {status}");
 }
 
-#[test]
-fn released_server_boots_and_serves_the_strategy_api() {
+fn start_and_request_strategy_catalog(offline: bool) {
     let port = unused_loopback_port();
     let data_dir =
         std::env::temp_dir().join(format!("axiom-startup-{}-{port}", std::process::id()));
@@ -32,10 +37,14 @@ fn released_server_boots_and_serves_the_strategy_api() {
     let binary = instrumented
         .filter(|path| path.is_file())
         .unwrap_or_else(|| env!("CARGO_BIN_EXE_axiom").into());
-    let mut child = Command::new(binary)
+    let mut server = Command::new(binary);
+    server.env_remove("AXIOM_OFFLINE");
+    if offline {
+        server.env("AXIOM_OFFLINE", "1");
+    }
+    let mut child = server
         .env("AXIOM_HOST", "127.0.0.1")
         .env("AXIOM_PORT", port.to_string())
-        .env("AXIOM_OFFLINE", "1")
         .env("AXIOM_DATA_DIR", &data_dir)
         .spawn()
         .expect("start AXIOM binary");
@@ -74,4 +83,14 @@ fn released_server_boots_and_serves_the_strategy_api() {
         response.contains("sma_cross"),
         "strategy catalogue missing: {response}"
     );
+}
+
+#[test]
+fn offline_server_boots_and_serves_the_strategy_api() {
+    start_and_request_strategy_catalog(true);
+}
+
+#[test]
+fn market_server_boots_and_serves_the_strategy_api() {
+    start_and_request_strategy_catalog(false);
 }

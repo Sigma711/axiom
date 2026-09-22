@@ -31,12 +31,10 @@ jobs:
         run: make setup
       - name: System browser dependencies
         run: make browser-deps
-      - name: Build and all quality gates
-        run: make ci
       - name: Install coverage tool
         run: make tools
-      - name: Rust and browser coverage (each 95% required)
-        run: make coverage
+      - name: Build, browser tests and 95% coverage gates
+        run: make ci
       - name: Browser evidence and coverage
         if: always()
         uses: actions/upload-artifact@v4

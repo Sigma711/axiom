@@ -146,3 +146,12 @@ fn learning_navigation_references_resolve_to_exact_source_symbols() {
         );
     }
 }
+
+#[test]
+fn legacy_short_names_resolve_only_when_the_method_is_unambiguous() {
+    let location = code_links::resolve("src/risk.rs::allow_order")
+        .expect("one RiskManager allow_order method");
+    assert_eq!(location.symbol, "RiskManager::allow_order");
+    assert_eq!(location.code_ref, "src/risk.rs::RiskManager::allow_order");
+    assert!(code_links::resolve("src/data.rs::new").is_none());
+}

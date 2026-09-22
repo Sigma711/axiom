@@ -1098,43 +1098,61 @@ struct BinanceTicker {
 }
 
 async fn fetch_symbols_from_binance() -> anyhow::Result<Vec<String>> {
+    fetch_symbols_from_binance_at("https://data-api.binance.vision").await
+}
+
+async fn fetch_symbols_from_binance_at(base_url: &str) -> anyhow::Result<Vec<String>> {
+    let base_url = base_url.trim_end_matches('/');
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()?;
     // 获取所有交易对
     let exchange_info: serde_json::Value = client
-        .get("https://data-api.binance.vision/api/v3/exchangeInfo")
+        .get(format!("{base_url}/api/v3/exchangeInfo"))
         .send()
         .await?
+        .error_for_status()?
         .json()
         .await?;
     let raw_symbols: Vec<BinanceSymbol> = serde_json::from_value(exchange_info["symbols"].clone())?;
     // 获取 24h 成交量排序
     let tickers: Vec<BinanceTicker> = client
-        .get("https://data-api.binance.vision/api/v3/ticker/24hr")
+        .get(format!("{base_url}/api/v3/ticker/24hr"))
         .send()
         .await?
+        .error_for_status()?
         .json()
         .await?;
-    // 过滤 USDT 现货可交易对,按成交量排序
-    let mut pairs: Vec<(String, f64)> = raw_symbols
+    Ok(select_binance_symbols(raw_symbols, tickers))
+}
+
+fn select_binance_symbols(symbols: Vec<BinanceSymbol>, tickers: Vec<BinanceTicker>) -> Vec<String> {
+    let volumes: HashMap<String, f64> = tickers
         .into_iter()
-        .filter(|s| {
-            s.status == "TRADING"
-                && s.is_spot_trading_allowed.unwrap_or(false)
-                && s.quote_asset == "USDT"
-        })
-        .map(|s| {
-            let vol = tickers
-                .iter()
-                .find(|t| t.symbol == s.symbol)
-                .and_then(|t| t.quote_volume.parse::<f64>().ok())
+        .map(|ticker| {
+            let volume = ticker
+                .quote_volume
+                .parse::<f64>()
+                .ok()
+                .filter(|volume| volume.is_finite() && *volume >= 0.0)
                 .unwrap_or(0.0);
-            (s.symbol, vol)
+            (ticker.symbol, volume)
         })
         .collect();
-    pairs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-    Ok(pairs.into_iter().map(|(s, _)| s).collect())
+    let mut pairs: Vec<(String, f64)> = symbols
+        .into_iter()
+        .filter(|symbol| {
+            symbol.status == "TRADING"
+                && symbol.is_spot_trading_allowed.unwrap_or(false)
+                && symbol.quote_asset == "USDT"
+        })
+        .map(|symbol| {
+            let volume = volumes.get(&symbol.symbol).copied().unwrap_or(0.0);
+            (symbol.symbol, volume)
+        })
+        .collect();
+    pairs.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    pairs.into_iter().map(|(symbol, _)| symbol).collect()
 }
 
 async fn refresh_binance_symbols_in_background() {
@@ -1509,4 +1527,75 @@ async fn post_practice(
 
 fn empty_inputs() -> Value {
     json!({})
+}
+
+#[cfg(test)]
+mod binance_catalog_tests {
+    use super::{
+        fetch_symbols_from_binance_at, select_binance_symbols, BinanceSymbol, BinanceTicker,
+    };
+    use axum::{routing::get, Json, Router};
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn catalog_fetches_both_public_endpoints_and_rejects_bad_responses() {
+        let app = Router::new()
+            .route("/api/v3/exchangeInfo", get(|| async {
+                Json(json!({"symbols":[
+                    {"symbol":"BTCUSDT","status":"TRADING","quoteAsset":"USDT","isSpotTradingAllowed":true},
+                    {"symbol":"ETHBTC","status":"TRADING","quoteAsset":"BTC","isSpotTradingAllowed":true}
+                ]}))
+            }))
+            .route("/api/v3/ticker/24hr", get(|| async {
+                Json(json!([{"symbol":"BTCUSDT","quoteVolume":"1000"}]))
+            }));
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        assert_eq!(
+            fetch_symbols_from_binance_at(&base).await.unwrap(),
+            vec!["BTCUSDT"]
+        );
+        server.abort();
+
+        let bad = Router::new().route(
+            "/api/v3/exchangeInfo",
+            get(|| async { Json(json!({"symbols": "malformed"})) }),
+        );
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            axum::serve(listener, bad).await.unwrap();
+        });
+        assert!(fetch_symbols_from_binance_at(&base).await.is_err());
+        server.abort();
+    }
+
+    #[test]
+    fn catalog_keeps_only_tradable_spot_usdt_pairs_in_volume_order() {
+        let symbols: Vec<BinanceSymbol> = serde_json::from_value(serde_json::json!([
+            {"symbol":"LOWUSDT","status":"TRADING","quoteAsset":"USDT","isSpotTradingAllowed":true},
+            {"symbol":"HIGHUSDT","status":"TRADING","quoteAsset":"USDT","isSpotTradingAllowed":true},
+            {"symbol":"NOLIQUSDT","status":"TRADING","quoteAsset":"USDT","isSpotTradingAllowed":true},
+            {"symbol":"HALTEDUSDT","status":"BREAK","quoteAsset":"USDT","isSpotTradingAllowed":true},
+            {"symbol":"FUTUREUSDT","status":"TRADING","quoteAsset":"USDT","isSpotTradingAllowed":false},
+            {"symbol":"ETHBTC","status":"TRADING","quoteAsset":"BTC","isSpotTradingAllowed":true}
+        ])).unwrap();
+        let tickers: Vec<BinanceTicker> = serde_json::from_value(serde_json::json!([
+            {"symbol":"LOWUSDT","quoteVolume":"100"},
+            {"symbol":"HIGHUSDT","quoteVolume":"1000"},
+            {"symbol":"NOLIQUSDT","quoteVolume":"NaN"}
+        ]))
+        .unwrap();
+        assert_eq!(
+            select_binance_symbols(symbols, tickers),
+            vec!["HIGHUSDT", "LOWUSDT", "NOLIQUSDT"]
+        );
+    }
 }

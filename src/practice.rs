@@ -54,16 +54,7 @@ fn evaluate_base(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String
             return Err(format!("{id} 不支持输入 {k}"));
         }
         let expected = &merged[k];
-        let valid = if expected.is_number() {
-            v.as_f64().is_some_and(|n| n.is_finite())
-        } else if expected.is_boolean() {
-            v.is_boolean()
-        } else if expected.is_array() {
-            v.as_array()
-                .is_some_and(|a| a.iter().all(|x| x.as_f64().is_some_and(|n| n.is_finite())))
-        } else {
-            false
-        };
+        let valid = base_input_matches(v, expected);
         if !valid {
             return Err(format!("{k} 的输入类型或数值无效"));
         }
@@ -90,6 +81,20 @@ fn evaluate_base(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String
     Ok(
         json!({"concept_id":id,"input_kind":input_kind,"provenance":if input_kind=="market_bars"{"provided_market_bars"}else{"editable_teaching_inputs"},"status":if has_value{"computed"}else{"undefined"},"reason":reason,"values":out.values,"units":out.units,"series":out.series,"notes":out.reasons,"inputs":merged}),
     )
+}
+
+fn base_input_matches(value: &Value, expected: &Value) -> bool {
+    if expected.is_number() {
+        value.as_f64().is_some_and(|n| n.is_finite())
+    } else if expected.is_boolean() {
+        value.is_boolean()
+    } else if expected.is_array() {
+        value
+            .as_array()
+            .is_some_and(|a| a.iter().all(|x| x.as_f64().is_some_and(|n| n.is_finite())))
+    } else {
+        false
+    }
 }
 pub(crate) fn validate_bars(b: &[Bar]) -> Result<(), String> {
     for (i, x) in b.iter().enumerate() {
@@ -304,5 +309,30 @@ fn input_type_matches(value: &Value, example: &Value) -> bool {
                 .all(|(k, x)| fields.get(k).is_some_and(|e| input_type_matches(x, e)))
         }),
         Value::Null => value.is_null(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{base_input_matches, input_type_matches, stddev};
+    use serde_json::{json, Value};
+
+    #[test]
+    fn input_type_guards_cover_supported_and_unsupported_shapes() {
+        assert!(base_input_matches(&json!(1.0), &json!(0.0)));
+        assert!(base_input_matches(&json!(true), &json!(false)));
+        assert!(base_input_matches(&json!([1.0, 2.0]), &json!([0.0])));
+        assert!(!base_input_matches(&json!("x"), &json!(null)));
+
+        assert!(input_type_matches(&json!(1.0), &json!(0.0)));
+        assert!(input_type_matches(&json!(true), &json!(false)));
+        assert!(input_type_matches(&json!("x"), &json!("example")));
+        assert!(input_type_matches(&json!([1.0, 2.0]), &json!([0.0])));
+        assert!(input_type_matches(
+            &json!({"nested": [true]}),
+            &json!({"nested": [false]})
+        ));
+        assert!(input_type_matches(&Value::Null, &Value::Null));
+        assert!(stddev(&[1.0]).is_none());
     }
 }

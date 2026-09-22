@@ -6,7 +6,7 @@ use axiom::risk::RiskConfig;
 use axiom::strategy::{
     BuyAndHoldStrategy, DonchianBreakoutStrategy, ElderRayStrategy, Strategy, VwapReversionStrategy,
 };
-use axiom::types::{BacktestResult, Bar, EquityPoint, OrderType, Side};
+use axiom::types::{BacktestResult, Bar, EquityPoint, OrderType, Side, Signal};
 use chrono::{Duration, TimeZone, Utc};
 
 fn bar(hour: i64, close: f64, high: f64, low: f64, volume: f64) -> Bar {
@@ -224,4 +224,68 @@ fn backtest_executes_close_signal_at_next_bar_open_and_leaves_last_signal_unfill
     );
     assert_eq!(last_only.signals[0].side, Side::Buy);
     assert!(last_only.fills.is_empty());
+}
+
+struct BuyOnce;
+
+impl Strategy for BuyOnce {
+    fn name(&self) -> &str {
+        "buy_once"
+    }
+    fn params(&self) -> std::collections::HashMap<String, f64> {
+        std::collections::HashMap::new()
+    }
+    fn on_bar(&mut self, bar: &Bar) -> Signal {
+        // The engine resets the strategy before the run; use timestamp to make
+        // the test intention explicit and deterministic.
+        if bar.timestamp == Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap() {
+            Signal {
+                timestamp: bar.timestamp,
+                side: Side::Buy,
+                strength: 1.0,
+                reason: "entry".into(),
+                target_size: None,
+            }
+        } else {
+            Signal {
+                timestamp: bar.timestamp,
+                side: Side::Hold,
+                strength: 0.0,
+                reason: "hold".into(),
+                target_size: None,
+            }
+        }
+    }
+    fn reset(&mut self) {}
+}
+
+#[test]
+fn engine_forces_a_stop_loss_at_the_next_bar_open() {
+    let engine = BacktestEngine::new(
+        EngineConfig {
+            symbol: "BTCUSDT".into(),
+            initial_capital: 1_000.0,
+            commission_rate: 0.0,
+            slippage_rate: 0.0,
+        },
+        RiskConfig {
+            stop_loss_pct: 0.05,
+            ..RiskConfig::default()
+        },
+    );
+    let mut strategy = BuyOnce;
+    let result = engine.run(
+        &mut strategy,
+        &[
+            bar(0, 100.0, 101.0, 99.0, 1.0),
+            bar(1, 100.0, 101.0, 99.0, 1.0),
+            Bar {
+                open: 90.0,
+                ..bar(2, 90.0, 91.0, 89.0, 1.0)
+            },
+        ],
+    );
+    assert_eq!(result.fills.len(), 2);
+    assert_eq!(result.fills[1].side, Side::Sell);
+    assert!(result.trades[0].is_closed());
 }

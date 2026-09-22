@@ -11,7 +11,7 @@
 use crate::types::Bar;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, NaiveDate, TimeZone, Timelike, Utc};
+use chrono::{DateTime, Datelike, Duration, NaiveDate, TimeZone, Timelike, Utc, Weekday};
 use rand::{Rng, SeedableRng};
 use rand_distr::{Distribution, Normal};
 use std::fs::File;
@@ -437,14 +437,14 @@ fn complete_daily_bar(
 fn parse_eastmoney_kline(row: &str) -> Option<Bar> {
     let fields: Vec<_> = row.split(',').collect();
     // date, open, close, high, low, volume, turnover...
-    Some(complete_daily_bar(
+    complete_daily_bar(
         fields.first()?.trim(),
         fields.get(1)?.trim().parse().ok()?,
         fields.get(3)?.trim().parse().ok()?,
         fields.get(4)?.trim().parse().ok()?,
         fields.get(2)?.trim().parse().ok()?,
         fields.get(5)?.trim().parse().ok()?,
-    )?)
+    )
 }
 
 fn parse_yahoo_bars(raw: &serde_json::Value) -> Result<Vec<Bar>> {
@@ -465,8 +465,8 @@ fn parse_yahoo_bars(raw: &serde_json::Value) -> Result<Vec<Bar>> {
         .as_array()
         .context("Yahoo volumes missing")?;
     let mut bars = Vec::new();
-    for i in 0..times.len() {
-        let Some(ts) = times[i].as_i64() else {
+    for (i, time) in times.iter().enumerate() {
+        let Some(ts) = time.as_i64() else {
             continue;
         };
         let (Some(open), Some(high), Some(low), Some(close), Some(volume)) = (
@@ -508,8 +508,8 @@ fn json_number(value: &serde_json::Value) -> Option<f64> {
 
 fn parse_tencent_a_share_bars(raw: &serde_json::Value, market_symbol: &str) -> Result<Vec<Bar>> {
     let rows = raw
-        .pointer(&format!("/data/{market_symbol}/qfqday"))
-        .or_else(|| raw.pointer(&format!("/data/{market_symbol}/day")))
+        .pointer(&format!("/data/{market_symbol}/day"))
+        .or_else(|| raw.pointer(&format!("/data/{market_symbol}/qfqday")))
         .and_then(serde_json::Value::as_array)
         .context("Tencent A-share response has no completed daily rows")?;
     let bars: Vec<Bar> = rows
@@ -530,7 +530,9 @@ fn parse_tencent_a_share_bars(raw: &serde_json::Value, market_symbol: &str) -> R
     Ok(bars)
 }
 
-async fn fetch_a_share_tencent(
+async fn fetch_a_share_tencent_at(
+    client: &reqwest::Client,
+    endpoint: &str,
     symbol: &str,
     since: DateTime<Utc>,
     limit: usize,
@@ -541,13 +543,13 @@ async fn fetch_a_share_tencent(
         _ => "sz",
     };
     let market_symbol = format!("{exchange}{symbol}");
-    let raw: serde_json::Value = reqwest::Client::new()
-        .get("https://web.ifzq.gtimg.cn/appstock/app/fqkline/get")
+    let raw: serde_json::Value = client
+        .get(endpoint)
         .header(
             reqwest::header::USER_AGENT,
             "AXIOM educational market reader/1.0",
         )
-        .query(&[("param", format!("{market_symbol},day,,,{limit},qfq"))])
+        .query(&[("param", format!("{market_symbol},day,,,{limit},"))])
         .timeout(std::time::Duration::from_secs(15))
         .send()
         .await
@@ -557,15 +559,42 @@ async fn fetch_a_share_tencent(
         .json()
         .await
         .context("invalid Tencent A-share market JSON")?;
-    let mut bars = parse_tencent_a_share_bars(&raw, &market_symbol)?;
+    Ok(latest_daily_bars(
+        parse_tencent_a_share_bars(&raw, &market_symbol)?,
+        since,
+        limit,
+    ))
+}
+
+fn latest_daily_bars(mut bars: Vec<Bar>, since: DateTime<Utc>, limit: usize) -> Vec<Bar> {
     bars.retain(|bar| bar.timestamp >= since);
     if bars.len() > limit {
         bars = bars.split_off(bars.len() - limit);
     }
-    Ok(bars)
+    bars
 }
 
 async fn fetch_a_share(symbol: &str, since: DateTime<Utc>, limit: usize) -> Result<Vec<Bar>> {
+    let client = reqwest::Client::new();
+    fetch_a_share_at(
+        &client,
+        "https://push2his.eastmoney.com/api/qt/stock/kline/get",
+        "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get",
+        symbol,
+        since,
+        limit,
+    )
+    .await
+}
+
+async fn fetch_a_share_at(
+    client: &reqwest::Client,
+    eastmoney_endpoint: &str,
+    tencent_endpoint: &str,
+    symbol: &str,
+    since: DateTime<Utc>,
+    limit: usize,
+) -> Result<Vec<Bar>> {
     anyhow::ensure!(
         symbol.len() == 6 && symbol.bytes().all(|byte| byte.is_ascii_digit()),
         "A-share symbol must be a six digit code"
@@ -576,8 +605,8 @@ async fn fetch_a_share(symbol: &str, since: DateTime<Utc>, limit: usize) -> Resu
         // Eastmoney uses market 0 for Shenzhen and Beijing listings.
         "0"
     };
-    let request = reqwest::Client::new()
-        .get("https://push2his.eastmoney.com/api/qt/stock/kline/get")
+    let request = client
+        .get(eastmoney_endpoint)
         .header(
             reqwest::header::USER_AGENT,
             "AXIOM educational market reader/1.0",
@@ -595,46 +624,85 @@ async fn fetch_a_share(symbol: &str, since: DateTime<Utc>, limit: usize) -> Resu
                 "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61".to_owned(),
             ),
         ]);
-    let primary = async {
-        let raw: serde_json::Value = request
-            .timeout(std::time::Duration::from_secs(15))
-            .send()
-            .await
-            .context("A-share market request failed")?
-            .error_for_status()
-            .context("A-share market returned HTTP error")?
-            .json()
-            .await
-            .context("invalid A-share market JSON")?;
-        let rows = raw
-            .pointer("/data/klines")
-            .and_then(serde_json::Value::as_array)
-            .context("A-share response has no kline rows")?;
-        let bars: Vec<Bar> = rows
-            .iter()
-            .filter_map(serde_json::Value::as_str)
-            .filter_map(parse_eastmoney_kline)
-            .collect();
-        crate::practice::validate_bars(&bars).map_err(anyhow::Error::msg)?;
-        Ok::<Vec<Bar>, anyhow::Error>(
-            bars.into_iter()
-                .filter(|bar| bar.timestamp >= since)
-                .take(limit)
-                .collect(),
-        )
-    }
-    .await;
-    match primary {
-        Ok(bars) if has_current_daily_bars(&bars, Utc::now()) => Ok(bars),
-        // A non-empty response is not necessarily usable: Eastmoney can serve an
-        // old cache. Tencent is the independent fallback for a stale daily series.
-        Ok(_) | Err(_) => fetch_a_share_tencent(symbol, since, limit).await,
+    let (primary, tencent) = tokio::join!(
+        async {
+            let raw: serde_json::Value = request
+                .timeout(std::time::Duration::from_secs(15))
+                .send()
+                .await
+                .context("A-share market request failed")?
+                .error_for_status()
+                .context("A-share market returned HTTP error")?
+                .json()
+                .await
+                .context("invalid A-share market JSON")?;
+            let rows = raw
+                .pointer("/data/klines")
+                .and_then(serde_json::Value::as_array)
+                .context("A-share response has no kline rows")?;
+            let bars: Vec<Bar> = rows
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .filter_map(parse_eastmoney_kline)
+                .collect();
+            crate::practice::validate_bars(&bars).map_err(anyhow::Error::msg)?;
+            Ok::<Vec<Bar>, anyhow::Error>(latest_daily_bars(bars, since, limit))
+        },
+        fetch_a_share_tencent_at(client, tencent_endpoint, symbol, since, limit)
+    );
+    select_a_share_daily_bars(primary, tencent, Utc::now())
+}
+
+fn select_a_share_daily_bars(
+    primary: Result<Vec<Bar>>,
+    fallback: Result<Vec<Bar>>,
+    now: DateTime<Utc>,
+) -> Result<Vec<Bar>> {
+    let primary_current = primary
+        .as_ref()
+        .is_ok_and(|bars| has_current_daily_bars(bars, now));
+    let fallback_current = fallback
+        .as_ref()
+        .is_ok_and(|bars| has_current_daily_bars(bars, now));
+    match (primary_current, fallback_current) {
+        (true, true) => {
+            let primary = primary.expect("current primary result was checked above");
+            let fallback = fallback.expect("current fallback result was checked above");
+            if fallback.last().map(|bar| bar.timestamp) > primary.last().map(|bar| bar.timestamp) {
+                Ok(fallback)
+            } else {
+                Ok(primary)
+            }
+        }
+        (true, false) => primary,
+        (false, true) => fallback,
+        (false, false) => {
+            let primary_error = primary
+                .err()
+                .map(|error| error.to_string())
+                .unwrap_or_else(|| "primary daily series is stale".into());
+            let fallback_error = fallback
+                .err()
+                .map(|error| error.to_string())
+                .unwrap_or_else(|| "Tencent daily series is stale".into());
+            anyhow::bail!(
+                "no current A-share daily series; primary: {primary_error}; Tencent: {fallback_error}"
+            )
+        }
     }
 }
 
 fn has_current_daily_bars(bars: &[Bar], now: DateTime<Utc>) -> bool {
-    bars.last()
-        .is_some_and(|bar| bar.timestamp >= now - Duration::days(21))
+    let cutoff = match now.weekday() {
+        Weekday::Sat => now.date_naive() - Duration::days(1),
+        Weekday::Sun => now.date_naive() - Duration::days(2),
+        Weekday::Mon => now.date_naive() - Duration::days(3),
+        _ => now.date_naive() - Duration::days(1),
+    };
+    bars.last().is_some_and(|bar| {
+        let date = bar.timestamp.date_naive();
+        date >= cutoff && date <= now.date_naive()
+    })
 }
 
 fn display_number(value: &serde_json::Value) -> Option<f64> {
@@ -668,15 +736,15 @@ fn parse_nasdaq_bars(raw: &serde_json::Value) -> Result<Vec<Bar>> {
     Ok(bars)
 }
 
-async fn fetch_us_stock_nasdaq(
+async fn fetch_us_stock_nasdaq_at(
+    client: &reqwest::Client,
+    endpoint: &str,
     symbol: &str,
     since: DateTime<Utc>,
     limit: usize,
 ) -> Result<Vec<Bar>> {
-    let raw: serde_json::Value = reqwest::Client::new()
-        .get(format!(
-            "https://api.nasdaq.com/api/quote/{symbol}/historical"
-        ))
+    let raw: serde_json::Value = client
+        .get(format!("{endpoint}/{symbol}/historical"))
         .header(
             reqwest::header::USER_AGENT,
             "Mozilla/5.0 (compatible; AXIOM educational market reader/1.0)",
@@ -707,6 +775,26 @@ async fn fetch_us_stock_nasdaq(
 }
 
 async fn fetch_us_stock(symbol: &str, since: DateTime<Utc>, limit: usize) -> Result<Vec<Bar>> {
+    let client = reqwest::Client::new();
+    fetch_us_stock_at(
+        &client,
+        "https://query1.finance.yahoo.com/v8/finance/chart",
+        "https://api.nasdaq.com/api/quote",
+        symbol,
+        since,
+        limit,
+    )
+    .await
+}
+
+async fn fetch_us_stock_at(
+    client: &reqwest::Client,
+    yahoo_endpoint: &str,
+    nasdaq_endpoint: &str,
+    symbol: &str,
+    since: DateTime<Utc>,
+    limit: usize,
+) -> Result<Vec<Bar>> {
     anyhow::ensure!(
         !symbol.is_empty()
             && symbol.len() <= 12
@@ -717,11 +805,8 @@ async fn fetch_us_stock(symbol: &str, since: DateTime<Utc>, limit: usize) -> Res
         "US symbol must contain uppercase letters, digits, dot or dash"
     );
     let primary = async {
-        let raw: serde_json::Value = reqwest::Client::new()
-            .get(format!(
-                "https://query1.finance.yahoo.com/v8/finance/chart/{}",
-                symbol.replace('.', "-")
-            ))
+        let raw: serde_json::Value = client
+            .get(format!("{yahoo_endpoint}/{}", symbol.replace('.', "-")))
             .header(
                 reqwest::header::USER_AGENT,
                 "AXIOM educational market reader/1.0",
@@ -752,7 +837,9 @@ async fn fetch_us_stock(symbol: &str, since: DateTime<Utc>, limit: usize) -> Res
     .await;
     match primary {
         Ok(bars) if !bars.is_empty() => Ok(bars),
-        Ok(_) | Err(_) => fetch_us_stock_nasdaq(symbol, since, limit).await,
+        Ok(_) | Err(_) => {
+            fetch_us_stock_nasdaq_at(client, nasdaq_endpoint, symbol, since, limit).await
+        }
     }
 }
 
@@ -793,6 +880,78 @@ mod deployment_endpoint_tests {
 #[cfg(test)]
 mod public_market_source_tests {
     use super::*;
+    use axum::{routing::get, Json, Router};
+
+    async fn stale_eastmoney_fixture() -> Json<serde_json::Value> {
+        Json(serde_json::json!({
+            "data": {"klines": ["2020-01-02,10,11,12,9,100"]}
+        }))
+    }
+
+    async fn current_eastmoney_fixture() -> Json<serde_json::Value> {
+        Json(serde_json::json!({
+            "data": {"klines": [format!(
+                "{},20,21,22,19,200",
+                Utc::now().date_naive()
+            )]}
+        }))
+    }
+
+    async fn current_tencent_fixture() -> Json<serde_json::Value> {
+        Json(serde_json::json!({
+            "data": {"sz000001": {"day": [[
+                Utc::now().date_naive().to_string(), "10", "11", "12", "9", "100"
+            ]]}}
+        }))
+    }
+
+    async fn unavailable_tencent_fixture() -> axum::http::StatusCode {
+        axum::http::StatusCode::SERVICE_UNAVAILABLE
+    }
+
+    async fn empty_yahoo_fixture() -> Json<serde_json::Value> {
+        Json(serde_json::json!({
+            "chart": {"result": [{
+                "timestamp": [],
+                "indicators": {"quote": [{
+                    "open": [], "high": [], "low": [], "close": [], "volume": []
+                }]}
+            }]}
+        }))
+    }
+
+    async fn nasdaq_fallback_fixture() -> Json<serde_json::Value> {
+        Json(serde_json::json!({
+            "data": {"tradesTable": {"rows": [{
+                "date": "01/02/2024",
+                "open": "$10.00",
+                "high": "$11.00",
+                "low": "$9.00",
+                "close": "$10.50",
+                "volume": "900"
+            }]}}
+        }))
+    }
+
+    async fn provider_fixture_server() -> (String, tokio::task::JoinHandle<()>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new()
+                    .route("/east", get(stale_eastmoney_fixture))
+                    .route("/east-current", get(current_eastmoney_fixture))
+                    .route("/tencent", get(current_tencent_fixture))
+                    .route("/tencent-unavailable", get(unavailable_tencent_fixture))
+                    .route("/yahoo/*symbol", get(empty_yahoo_fixture))
+                    .route("/nasdaq/*symbol", get(nasdaq_fallback_fixture)),
+            )
+            .await
+            .unwrap();
+        });
+        (format!("http://{address}"), server)
+    }
 
     #[test]
     fn eastmoney_daily_row_maps_its_documented_ohlcv_columns() {
@@ -808,7 +967,7 @@ mod public_market_source_tests {
     fn stale_primary_daily_series_is_not_accepted_as_current_market_data() {
         let now = Utc.with_ymd_and_hms(2026, 9, 23, 0, 0, 0).unwrap();
         let stale = vec![Bar {
-            timestamp: Utc.with_ymd_and_hms(2026, 5, 29, 0, 0, 0).unwrap(),
+            timestamp: Utc.with_ymd_and_hms(2026, 9, 14, 0, 0, 0).unwrap(),
             open: 10.0,
             high: 11.0,
             low: 9.0,
@@ -817,16 +976,83 @@ mod public_market_source_tests {
         }];
         let current = vec![Bar {
             timestamp: Utc.with_ymd_and_hms(2026, 9, 22, 0, 0, 0).unwrap(),
-            ..stale[0].clone()
+            ..stale[0]
+        }];
+        let two_sessions_old = vec![Bar {
+            timestamp: Utc.with_ymd_and_hms(2026, 9, 21, 0, 0, 0).unwrap(),
+            ..stale[0]
         }];
         assert!(!has_current_daily_bars(&[], now));
         assert!(!has_current_daily_bars(&stale, now));
         assert!(has_current_daily_bars(&current, now));
+        assert!(!has_current_daily_bars(&two_sessions_old, now));
+
+        let friday = vec![Bar {
+            timestamp: Utc.with_ymd_and_hms(2026, 9, 18, 0, 0, 0).unwrap(),
+            ..stale[0]
+        }];
+        assert!(has_current_daily_bars(
+            &friday,
+            Utc.with_ymd_and_hms(2026, 9, 19, 12, 0, 0).unwrap()
+        ));
+        assert!(has_current_daily_bars(
+            &friday,
+            Utc.with_ymd_and_hms(2026, 9, 20, 12, 0, 0).unwrap()
+        ));
+        assert!(has_current_daily_bars(
+            &friday,
+            Utc.with_ymd_and_hms(2026, 9, 21, 12, 0, 0).unwrap()
+        ));
+        assert!(!has_current_daily_bars(
+            &friday,
+            Utc.with_ymd_and_hms(2026, 9, 22, 12, 0, 0).unwrap()
+        ));
     }
 
     #[test]
-    fn tencent_adjusted_rows_map_ohlcv_columns() {
-        let raw = serde_json::json!({"data":{"sh600519":{"qfqday":[["2024-01-02","10","11","12","9","100"]]}}});
+    fn daily_selection_prefers_freshest_and_preserves_primary_on_fallback_failure() {
+        let now = Utc.with_ymd_and_hms(2026, 9, 23, 12, 0, 0).unwrap();
+        let primary = Bar {
+            timestamp: Utc.with_ymd_and_hms(2026, 9, 22, 0, 0, 0).unwrap(),
+            open: 10.0,
+            high: 11.0,
+            low: 9.0,
+            close: 10.5,
+            volume: 100.0,
+        };
+        let newer = Bar {
+            timestamp: Utc.with_ymd_and_hms(2026, 9, 23, 0, 0, 0).unwrap(),
+            close: 12.0,
+            ..primary
+        };
+        assert_eq!(
+            select_a_share_daily_bars(Ok(vec![primary]), Ok(vec![newer]), now).unwrap()[0].close,
+            12.0
+        );
+        assert_eq!(
+            select_a_share_daily_bars(
+                Ok(vec![primary]),
+                Err(anyhow::anyhow!("fixture unavailable")),
+                now
+            )
+            .unwrap()[0]
+                .close,
+            10.5
+        );
+        assert!(select_a_share_daily_bars(
+            Ok(vec![Bar {
+                timestamp: Utc.with_ymd_and_hms(2026, 9, 14, 0, 0, 0).unwrap(),
+                ..primary
+            }]),
+            Err(anyhow::anyhow!("fixture unavailable")),
+            now
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn tencent_daily_rows_map_ohlcv_columns() {
+        let raw = serde_json::json!({"data":{"sh600519":{"day":[["2024-01-02","10","11","12","9","100"]],"qfqday":[["2024-01-02","1","1","1","1","1"]]}}});
         let bars = parse_tencent_a_share_bars(&raw, "sh600519").unwrap();
         assert_eq!(
             (
@@ -837,6 +1063,24 @@ mod public_market_source_tests {
                 bars[0].volume
             ),
             (10.0, 12.0, 9.0, 11.0, 100.0)
+        );
+    }
+
+    #[test]
+    fn daily_series_keeps_the_most_recent_requested_rows() {
+        let raw = serde_json::json!({"data":{"sh600519":{"day":[
+            ["2024-01-02","10","11","12","9","100"],
+            ["2024-01-03","11","12","13","10","110"],
+            ["2024-01-04","12","13","14","11","120"]
+        ]}}});
+        let bars = parse_tencent_a_share_bars(&raw, "sh600519").unwrap();
+        let since = Utc.with_ymd_and_hms(2024, 1, 3, 0, 0, 0).unwrap();
+        let latest = latest_daily_bars(bars, since, 1);
+        assert_eq!(latest.len(), 1);
+        assert_eq!(latest[0].timestamp.date_naive().to_string(), "2024-01-04");
+        assert_eq!(
+            latest_daily_bars(latest.clone(), since, 5)[0].close,
+            latest[0].close
         );
     }
 
@@ -861,6 +1105,60 @@ mod public_market_source_tests {
     }
 
     #[test]
+    fn provider_parsers_skip_malformed_rows_and_report_missing_shapes() {
+        assert!(parse_binance_kline(&serde_json::json!([0, "1", "2"])).is_none());
+        assert!(parse_binance_kline(&serde_json::json!([0, "bad", "2", "1", "2", "3"])).is_none());
+        assert!(parse_eastmoney_kline("2024-01-02,not-a-number,11,12,9,100").is_none());
+        assert!(parse_eastmoney_kline("not-a-date,10,11,12,9,100").is_none());
+        assert!(parse_tencent_a_share_bars(&serde_json::json!({}), "sh600519").is_err());
+        assert!(parse_nasdaq_bars(&serde_json::json!({})).is_err());
+        assert!(parse_yahoo_bars(&serde_json::json!({})).is_err());
+        let malformed_yahoo = serde_json::json!({
+            "chart": {"result": [{
+                "timestamp": ["not-an-integer", 9223372036854775807i64],
+                "indicators": {"quote": [{
+                    "open": [10.0, 10.0], "high": [11.0, 11.0],
+                    "low": [9.0, 9.0], "close": [10.5, 10.5],
+                    "volume": [100.0, 100.0]
+                }]}
+            }]}
+        });
+        assert!(parse_yahoo_bars(&malformed_yahoo).unwrap().is_empty());
+    }
+
+    #[test]
+    fn csv_feed_filters_since_and_streams_the_recent_completed_bar() {
+        let dir = format!("target/test-csv-live-{}", uuid::Uuid::new_v4());
+        let feed = CsvFeed::new(&dir);
+        let now = Utc::now();
+        let bars = vec![
+            Bar {
+                timestamp: now - Duration::hours(2),
+                open: 10.0,
+                high: 11.0,
+                low: 9.0,
+                close: 10.5,
+                volume: 100.0,
+            },
+            Bar {
+                timestamp: now - Duration::minutes(30),
+                open: 10.5,
+                high: 11.5,
+                low: 10.0,
+                close: 11.0,
+                volume: 110.0,
+            },
+        ];
+        feed.save("BTC/USDT", "1h", &bars).unwrap();
+        let fetched = feed
+            .fetch_historical("BTC/USDT", now - Duration::hours(1), 5)
+            .unwrap();
+        assert_eq!(fetched.len(), 1);
+        assert_eq!(feed.stream_live("BTC/USDT").unwrap().len(), 1);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn public_sources_have_curated_symbols_and_no_synthetic_source() {
         assert_eq!(PUBLIC_MARKET_SOURCES, &["binance", "a_share", "us_stock"]);
         assert_eq!(
@@ -873,5 +1171,76 @@ mod public_market_source_tests {
         );
         assert!(is_public_market_source("binance"));
         assert!(!is_public_market_source("synthetic"));
+    }
+
+    #[tokio::test]
+    async fn local_provider_fixtures_cover_stale_a_share_and_us_fallbacks() {
+        let (base, server) = provider_fixture_server().await;
+        let client = reqwest::Client::new();
+        let since = Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
+        let a_share = fetch_a_share_at(
+            &client,
+            &format!("{base}/east"),
+            &format!("{base}/tencent"),
+            "000001",
+            since,
+            5,
+        )
+        .await
+        .unwrap();
+        assert_eq!(a_share.len(), 1);
+        assert_eq!(a_share[0].close, 11.0);
+        assert_eq!(a_share[0].timestamp.date_naive(), Utc::now().date_naive());
+
+        let us_stock = fetch_us_stock_at(
+            &client,
+            &format!("{base}/yahoo"),
+            &format!("{base}/nasdaq"),
+            "AAPL",
+            since,
+            5,
+        )
+        .await
+        .unwrap();
+        assert_eq!(us_stock.len(), 1);
+        assert_eq!(us_stock[0].close, 10.5);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn current_primary_survives_unavailable_tencent_fallback() {
+        let (base, server) = provider_fixture_server().await;
+        let client = reqwest::Client::new();
+        let since = Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
+        let bars = fetch_a_share_at(
+            &client,
+            &format!("{base}/east-current"),
+            &format!("{base}/tencent-unavailable"),
+            "000001",
+            since,
+            5,
+        )
+        .await
+        .unwrap();
+        assert_eq!(bars[0].close, 21.0);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn tencent_exchange_prefixes_are_selected_before_provider_parsing() {
+        let (base, server) = provider_fixture_server().await;
+        let client = reqwest::Client::new();
+        let since = Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
+        assert!(
+            fetch_a_share_tencent_at(&client, &format!("{base}/tencent"), "600519", since, 1,)
+                .await
+                .is_err()
+        );
+        assert!(
+            fetch_a_share_tencent_at(&client, &format!("{base}/tencent"), "830001", since, 1,)
+                .await
+                .is_err()
+        );
+        server.abort();
     }
 }

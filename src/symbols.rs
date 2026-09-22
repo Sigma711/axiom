@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use futures::{stream, StreamExt};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, RwLock};
@@ -129,9 +130,13 @@ fn parse_eastmoney_page(raw: &serde_json::Value) -> Result<(usize, Vec<SymbolIte
     Ok((total, items))
 }
 
-async fn eastmoney_page(client: &reqwest::Client, page: usize) -> Result<(usize, Vec<SymbolItem>)> {
+async fn eastmoney_page_at(
+    client: &reqwest::Client,
+    endpoint: &str,
+    page: usize,
+) -> Result<(usize, Vec<SymbolItem>)> {
     let raw: serde_json::Value = client
-        .get("https://82.push2.eastmoney.com/api/qt/clist/get")
+        .get(endpoint)
         .query(&[
             ("pn", page.to_string()),
             ("pz", PAGE_SIZE.to_string()),
@@ -163,16 +168,18 @@ async fn eastmoney_page(client: &reqwest::Client, page: usize) -> Result<(usize,
     parse_eastmoney_page(&raw)
 }
 
-async fn fetch_a_share_catalog() -> Result<Vec<SymbolItem>> {
-    let client = reqwest::Client::new();
-    let (total, first) = eastmoney_page(&client, 1).await?;
+async fn fetch_a_share_catalog_at(
+    client: &reqwest::Client,
+    endpoint: &str,
+) -> Result<Vec<SymbolItem>> {
+    let (total, first) = eastmoney_page_at(client, endpoint, 1).await?;
     anyhow::ensure!(
         total >= first.len() && !first.is_empty(),
         "A-share directory is incomplete"
     );
     let pages = total.div_ceil(PAGE_SIZE);
     let rest = stream::iter(2..=pages)
-        .map(|page| eastmoney_page(&client, page))
+        .map(|page| eastmoney_page_at(client, endpoint, page))
         .buffer_unordered(8)
         .collect::<Vec<_>>()
         .await;
@@ -188,14 +195,25 @@ async fn fetch_a_share_catalog() -> Result<Vec<SymbolItem>> {
     dedupe_catalog(items, total)
 }
 
-async fn fetch_a_share_github_catalog() -> Result<Vec<SymbolItem>> {
-    let raw: serde_json::Value = reqwest::Client::new()
-        .get("https://raw.githubusercontent.com/guidebee/china-stock-data/main/data/company/companies.json")
-        .header(reqwest::header::USER_AGENT, "Mozilla/5.0 (compatible; AXIOM/1.0)")
+async fn fetch_a_share_github_catalog_at(
+    client: &reqwest::Client,
+    endpoint: &str,
+) -> Result<Vec<SymbolItem>> {
+    let raw: serde_json::Value = client
+        .get(endpoint)
+        .header(
+            reqwest::header::USER_AGENT,
+            "Mozilla/5.0 (compatible; AXIOM/1.0)",
+        )
         .timeout(Duration::from_secs(30))
-        .send().await.context("A-share mirror directory request failed")?
-        .error_for_status().context("A-share mirror directory returned HTTP error")?
-        .json().await.context("invalid A-share mirror directory JSON")?;
+        .send()
+        .await
+        .context("A-share mirror directory request failed")?
+        .error_for_status()
+        .context("A-share mirror directory returned HTTP error")?
+        .json()
+        .await
+        .context("invalid A-share mirror directory JSON")?;
     let items = raw
         .as_array()
         .context("A-share mirror directory is not an array")?
@@ -219,10 +237,14 @@ async fn fetch_a_share_github_catalog() -> Result<Vec<SymbolItem>> {
     dedupe_catalog(items, 5000)
 }
 
-async fn fetch_resilient_a_share_catalog() -> Result<Vec<SymbolItem>> {
-    match fetch_a_share_catalog().await {
+async fn fetch_resilient_a_share_catalog_at(
+    client: &reqwest::Client,
+    primary_endpoint: &str,
+    fallback_endpoint: &str,
+) -> Result<Vec<SymbolItem>> {
+    match fetch_a_share_catalog_at(client, primary_endpoint).await {
         Ok(items) => Ok(items),
-        Err(primary) => fetch_a_share_github_catalog()
+        Err(primary) => fetch_a_share_github_catalog_at(client, fallback_endpoint)
             .await
             .with_context(|| format!("Eastmoney directory failed: {primary}")),
     }
@@ -273,18 +295,12 @@ fn parse_pipe_directory(raw: &str, source: &str) -> Vec<SymbolItem> {
         .collect()
 }
 
-async fn fetch_us_stock_catalog() -> Result<Vec<SymbolItem>> {
-    let client = reqwest::Client::new();
-    let urls = [
-        (
-            "nasdaq",
-            "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt",
-        ),
-        (
-            "other",
-            "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt",
-        ),
-    ];
+async fn fetch_us_stock_catalog_at(
+    client: &reqwest::Client,
+    nasdaq_endpoint: &str,
+    other_endpoint: &str,
+) -> Result<Vec<SymbolItem>> {
+    let urls = [("nasdaq", nasdaq_endpoint), ("other", other_endpoint)];
     let mut items = Vec::new();
     for (source, url) in urls {
         let text = client
@@ -327,8 +343,24 @@ fn dedupe_catalog(mut items: Vec<SymbolItem>, minimum_expected: usize) -> Result
 
 async fn live_catalog(source: &str) -> Result<Vec<SymbolItem>> {
     match source {
-        "a_share" => fetch_resilient_a_share_catalog().await,
-        "us_stock" => fetch_us_stock_catalog().await,
+        "a_share" => {
+            let client = reqwest::Client::new();
+            fetch_resilient_a_share_catalog_at(
+                &client,
+                "https://82.push2.eastmoney.com/api/qt/clist/get",
+                "https://raw.githubusercontent.com/guidebee/china-stock-data/main/data/company/companies.json",
+            )
+            .await
+        }
+        "us_stock" => {
+            let client = reqwest::Client::new();
+            fetch_us_stock_catalog_at(
+                &client,
+                "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt",
+                "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt",
+            )
+            .await
+        }
         _ => anyhow::bail!("unsupported symbol catalog source"),
     }
 }
@@ -339,8 +371,16 @@ async fn refresh_catalog_in_background(source: &str) {
         return;
     }
     let source = source.to_owned();
+    let load_source = source.clone();
+    spawn_catalog_refresh(source, async move { live_catalog(&load_source).await });
+}
+
+fn spawn_catalog_refresh<F>(source: String, load: F) -> tokio::task::JoinHandle<()>
+where
+    F: Future<Output = Result<Vec<SymbolItem>>> + Send + 'static,
+{
     tokio::spawn(async move {
-        match live_catalog(&source).await {
+        match load.await {
             Ok(items) => {
                 catalogs().write().await.insert(
                     source.clone(),
@@ -353,7 +393,7 @@ async fn refresh_catalog_in_background(source: &str) {
             Err(error) => tracing::warn!(source, %error, "symbol directory refresh failed"),
         }
         refreshing().lock().await.remove(&source);
-    });
+    })
 }
 
 /// Search a complete current market directory. A successful result is cached for
@@ -406,6 +446,83 @@ pub async fn search(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{extract::Query, http::StatusCode, routing::get, Json, Router};
+    use serde_json::Value;
+    use std::collections::HashMap;
+
+    async fn eastmoney_fixture(Query(query): Query<HashMap<String, String>>) -> Json<Value> {
+        let page = query
+            .get("pn")
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(1);
+        let rows: Vec<Value> = if page == 1 {
+            (0..100)
+                .map(|index| {
+                    serde_json::json!({
+                        "f12": format!("600{index:03}"),
+                        "f13": 1,
+                        "f14": format!("沪市 {index}")
+                    })
+                })
+                .collect()
+        } else {
+            vec![serde_json::json!({
+                "f12": "430047",
+                "f13": 0,
+                "f14": "北交所样本"
+            })]
+        };
+        Json(serde_json::json!({"data": {"total": 101, "diff": rows}}))
+    }
+
+    async fn mirror_fixture() -> Json<Value> {
+        Json(Value::Array(
+            (0..5000)
+                .map(|index| {
+                    serde_json::json!({
+                        "code": format!("{index:06}"),
+                        "name": format!("镜像样本 {index}"),
+                        "stock_type": if index == 0 { "hs_bjs" } else { "sh_a" }
+                    })
+                })
+                .collect(),
+        ))
+    }
+
+    async fn unavailable_fixture() -> StatusCode {
+        StatusCode::SERVICE_UNAVAILABLE
+    }
+
+    async fn nasdaq_fixture() -> String {
+        let mut body = String::from("Symbol|Security Name|Market Category|Test Issue\n");
+        for index in 0..4999 {
+            body.push_str(&format!("N{index:04}|Nasdaq {index}|Q|N\n"));
+        }
+        body
+    }
+
+    async fn other_fixture() -> String {
+        "ACT Symbol|Security Name|Exchange|Test Issue\nSPY|SPDR|P|N\n".into()
+    }
+
+    async fn fixture_server() -> (String, tokio::task::JoinHandle<()>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new()
+                    .route("/east", get(eastmoney_fixture))
+                    .route("/mirror", get(mirror_fixture))
+                    .route("/unavailable", get(unavailable_fixture))
+                    .route("/nasdaq", get(nasdaq_fixture))
+                    .route("/other", get(other_fixture)),
+            )
+            .await
+            .unwrap();
+        });
+        (format!("http://{address}"), server)
+    }
 
     #[test]
     fn search_orders_exact_then_prefix_then_name_and_pages() {
@@ -433,6 +550,33 @@ mod tests {
                 .map(|item| item.symbol)
                 .collect::<Vec<_>>(),
             ["600519"]
+        );
+        let ranked = sort_and_filter(
+            vec![
+                SymbolItem {
+                    symbol: "ABC".into(),
+                    name: "exact".into(),
+                    exchange: "X".into(),
+                },
+                SymbolItem {
+                    symbol: "ABCD".into(),
+                    name: "prefix".into(),
+                    exchange: "X".into(),
+                },
+                SymbolItem {
+                    symbol: "Z".into(),
+                    name: "abc name".into(),
+                    exchange: "X".into(),
+                },
+            ],
+            "abc",
+        );
+        assert_eq!(
+            ranked
+                .into_iter()
+                .map(|item| item.symbol)
+                .collect::<Vec<_>>(),
+            ["ABC", "ABCD", "Z"]
         );
         let page = limited_page(
             (0..200)
@@ -465,5 +609,213 @@ mod tests {
         let (_, rows) = parse_eastmoney_page(&raw).unwrap();
         assert_eq!(rows[0].exchange, "SSE");
         assert_eq!(rows[1].exchange, "BSE");
+    }
+
+    #[test]
+    fn directory_parsers_reject_incomplete_provider_payloads() {
+        assert!(parse_eastmoney_page(&serde_json::json!({})).is_err());
+        assert!(parse_eastmoney_page(&serde_json::json!({
+            "data": {"total": 1}
+        }))
+        .is_err());
+        let raw = serde_json::json!({
+            "data": {"total": 3, "diff": [
+                {"f12": "", "f13": 1, "f14": "ignored"},
+                {"f12": "600000", "f13": 1, "f14": "浦发银行"},
+                {"f12": "000001", "f14": "平安银行"}
+            ]}
+        });
+        let (total, rows) = parse_eastmoney_page(&raw).unwrap();
+        assert_eq!(total, 3);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[1].exchange, "SZSE");
+    }
+
+    #[test]
+    fn pipe_directory_maps_all_provider_exchange_codes_and_missing_columns() {
+        let raw = concat!(
+            "ACT Symbol|Security Name|Exchange|Test Issue\n",
+            "AAA|A|A|N\n",
+            "AAP|P|P|N\n",
+            "AAZ|Z|Z|N\n",
+            "AAX|X|X|N\n",
+            "BAD||N|N\n",
+        );
+        let rows = parse_pipe_directory(raw, "other");
+        assert_eq!(
+            rows.iter()
+                .map(|row| row.exchange.as_str())
+                .collect::<Vec<_>>(),
+            ["NYSE American", "NYSE Arca", "BATS", "X"]
+        );
+        assert!(parse_pipe_directory("Symbol|Security Name\nA|A\n", "nasdaq").len() == 1);
+        assert!(parse_pipe_directory("\nA|A\n", "nasdaq").is_empty());
+    }
+
+    #[test]
+    fn dedupe_requires_a_complete_catalog_and_keeps_sorted_first_symbols() {
+        let rows = vec![
+            SymbolItem {
+                symbol: "B".into(),
+                name: "b".into(),
+                exchange: "X".into(),
+            },
+            SymbolItem {
+                symbol: "A".into(),
+                name: "a".into(),
+                exchange: "Y".into(),
+            },
+            SymbolItem {
+                symbol: "A".into(),
+                name: "duplicate".into(),
+                exchange: "Z".into(),
+            },
+        ];
+        assert!(dedupe_catalog(rows.clone(), 3).is_err());
+        let result = dedupe_catalog(rows, 2).unwrap();
+        assert_eq!(
+            result
+                .iter()
+                .map(|row| row.symbol.as_str())
+                .collect::<Vec<_>>(),
+            ["A", "B"]
+        );
+        assert_eq!(result[0].name, "a");
+    }
+
+    #[tokio::test]
+    async fn search_uses_fixed_snapshot_for_trimmed_queries_pages_and_stale_refresh() {
+        catalogs().write().await.clear();
+        catalogs().write().await.insert(
+            "a_share".into(),
+            CatalogSnapshot {
+                items: vec![
+                    SymbolItem {
+                        symbol: "600519".into(),
+                        name: "贵州茅台".into(),
+                        exchange: "SSE".into(),
+                    },
+                    SymbolItem {
+                        symbol: "600001".into(),
+                        name: "浦发银行".into(),
+                        exchange: "SSE".into(),
+                    },
+                    SymbolItem {
+                        symbol: "000519".into(),
+                        name: "贵州测试".into(),
+                        exchange: "SZSE".into(),
+                    },
+                ],
+                fetched_at: Instant::now(),
+            },
+        );
+        let (rows, total, universe, source, cached) =
+            search("a_share", " 600 ", 1, 0).await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].symbol, "600519");
+        assert_eq!((total, universe, source, cached), (2, 3, "cached", true));
+
+        catalogs().write().await.insert(
+            "us_stock".into(),
+            CatalogSnapshot {
+                items: seed("us_stock"),
+                fetched_at: Instant::now() - CACHE_TTL - Duration::from_secs(1),
+            },
+        );
+        // Claim the refresh slot so this contract test never reaches the live
+        // provider; the stale branch itself remains fully exercised.
+        refreshing().lock().await.insert("us_stock".into());
+        let (_, _, _, source, cached) = search("us_stock", "", 0, 1).await.unwrap();
+        assert_eq!((source, cached), ("stale", true));
+        refreshing().lock().await.clear();
+        catalogs().write().await.clear();
+    }
+
+    #[tokio::test]
+    async fn unsupported_live_catalog_and_seed_are_explicit() {
+        assert!(live_catalog("crypto").await.is_err());
+        assert!(seed("crypto").is_empty());
+        assert!(search("crypto", "A", 0, 1).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn local_provider_fixtures_cover_catalog_pagination_fallback_and_us_sources() {
+        let (base, server) = fixture_server().await;
+        let client = reqwest::Client::new();
+        let paged = fetch_a_share_catalog_at(&client, &format!("{base}/east"))
+            .await
+            .unwrap();
+        assert_eq!(paged.len(), 101);
+        assert!(paged
+            .iter()
+            .any(|item| item.symbol == "430047" && item.exchange == "BSE"));
+
+        let fallback = fetch_resilient_a_share_catalog_at(
+            &client,
+            &format!("{base}/unavailable"),
+            &format!("{base}/mirror"),
+        )
+        .await
+        .unwrap();
+        assert_eq!(fallback.len(), 5000);
+        assert_eq!(fallback[0].exchange, "BSE");
+
+        let us =
+            fetch_us_stock_catalog_at(&client, &format!("{base}/nasdaq"), &format!("{base}/other"))
+                .await
+                .unwrap();
+        assert_eq!(us.len(), 5000);
+        assert_eq!(us.last().unwrap().exchange, "NYSE Arca");
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn failed_refresh_keeps_the_last_complete_snapshot() {
+        let original = vec![SymbolItem {
+            symbol: "600519".into(),
+            name: "贵州茅台".into(),
+            exchange: "SSE".into(),
+        }];
+        catalogs().write().await.insert(
+            "refresh_fixture".into(),
+            CatalogSnapshot {
+                items: original.clone(),
+                fetched_at: Instant::now() - CACHE_TTL - Duration::from_secs(1),
+            },
+        );
+        let refresh = spawn_catalog_refresh("refresh_fixture".into(), async {
+            Err(anyhow::anyhow!("fixture provider unavailable"))
+        });
+        refresh.await.unwrap();
+        let snapshot = catalogs()
+            .read()
+            .await
+            .get("refresh_fixture")
+            .cloned()
+            .unwrap();
+        assert_eq!(snapshot.items, original);
+        catalogs().write().await.remove("refresh_fixture");
+        refreshing().lock().await.clear();
+
+        let refreshed = vec![SymbolItem {
+            symbol: "000001".into(),
+            name: "平安银行".into(),
+            exchange: "SZSE".into(),
+        }];
+        let refresh = spawn_catalog_refresh("refresh_success".into(), {
+            let refreshed = refreshed.clone();
+            async move { Ok(refreshed) }
+        });
+        refresh.await.unwrap();
+        assert_eq!(
+            catalogs()
+                .read()
+                .await
+                .get("refresh_success")
+                .unwrap()
+                .items,
+            refreshed
+        );
+        catalogs().write().await.remove("refresh_success");
     }
 }

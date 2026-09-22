@@ -515,3 +515,178 @@ async fn public_learning_and_exploration_reads_return_complete_safe_documents() 
         .unwrap();
     assert_eq!(denied.status(), StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn learning_routes_and_book_pdf_serve_the_expected_content() {
+    let router = app();
+    for route in [
+        "/",
+        "/learn",
+        "/learn/book",
+        "/learn/concepts",
+        "/learn/build",
+        "/learn/path",
+        "/data",
+        "/backtest",
+        "/paper",
+        "/compare",
+    ] {
+        let response = router
+            .clone()
+            .oneshot(Request::get(route).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "{route}");
+        assert_eq!(
+            response.headers()["content-type"],
+            "text/html; charset=utf-8"
+        );
+        let body = to_bytes(response.into_body(), 1_000_000).await.unwrap();
+        assert!(String::from_utf8_lossy(&body).contains("root"), "{route}");
+    }
+
+    let response = router
+        .oneshot(Request::get("/api/book/pdf").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["content-type"], "application/pdf");
+    let body = to_bytes(response.into_body(), 30_000_000).await.unwrap();
+    assert!(
+        body.starts_with(b"%PDF"),
+        "book route must serve a real PDF"
+    );
+}
+
+#[tokio::test]
+async fn static_assets_have_correct_mime_and_missing_assets_fail() {
+    let dirname = format!("coverage-mime-{}", std::process::id());
+    let dir = PathBuf::from("static").join(&dirname);
+    std::fs::create_dir_all(&dir).unwrap();
+    let cases = [
+        ("style.css", "text/css; charset=utf-8"),
+        ("app.js", "application/javascript; charset=utf-8"),
+        ("page.html", "text/html; charset=utf-8"),
+        ("data.json", "application/json"),
+        ("figure.svg", "image/svg+xml"),
+        ("chart.png", "image/png"),
+        ("book.pdf", "application/pdf"),
+        ("binary.dat", "application/octet-stream"),
+    ];
+    for (name, _) in cases {
+        std::fs::write(dir.join(name), b"fixture").unwrap();
+    }
+
+    let router = app();
+    for (name, mime) in cases {
+        let path = format!("/static/{dirname}/{name}");
+        let response = router
+            .clone()
+            .oneshot(Request::get(&path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "{path}");
+        assert_eq!(response.headers()["content-type"], mime);
+        let bytes = to_bytes(response.into_body(), 1024).await.unwrap();
+        assert_eq!(&bytes[..], b"fixture", "{path}");
+    }
+    let missing = router
+        .oneshot(
+            Request::get(format!("/static/{dirname}/missing.svg"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn symbol_directory_rejects_bad_source_and_overlong_query() {
+    for path in [
+        "/api/symbols?source=synthetic",
+        "/api/symbols?source=unknown",
+        "/api/symbols?source=binance&q=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    ] {
+        let (status, body) = request("GET", path, Value::Null).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{path}: {body}");
+    }
+}
+
+#[tokio::test]
+async fn symbol_directory_searches_all_three_real_markets_and_pages_binance() {
+    for (source, query, expected) in [
+        ("binance", "BTCUSDT", "BTCUSDT"),
+        ("a_share", "600519", "600519"),
+        ("us_stock", "AAPL", "AAPL"),
+    ] {
+        let path = format!("/api/symbols?source={source}&q={query}&limit=10");
+        let (status, body) = request("GET", &path, Value::Null).await;
+        assert_eq!(status, StatusCode::OK, "{path}: {body}");
+        assert_eq!(body["source"], source);
+        assert!(body["total"].as_u64().unwrap() >= 1, "{path}: {body}");
+        assert_eq!(body["items"][0]["symbol"], expected);
+        assert_eq!(body["symbols"][0], expected);
+        assert_eq!(body["count"], body["items"].as_array().unwrap().len());
+    }
+
+    let (status, first) = request(
+        "GET",
+        "/api/symbols?source=binance&q=USDT&offset=0&limit=2",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{first}");
+    assert_eq!(first["items"].as_array().unwrap().len(), 2);
+    assert_eq!(first["has_more"], true);
+    let (status, second) = request(
+        "GET",
+        "/api/symbols?source=binance&q=USDT&offset=2&limit=2",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{second}");
+    assert_ne!(first["symbols"], second["symbols"]);
+}
+
+#[tokio::test]
+async fn paper_websocket_streams_snapshots_and_replies_to_ping() {
+    use futures::{SinkExt, StreamExt};
+    use tokio::time::{timeout, Duration};
+    use tokio_tungstenite::{connect_async, tungstenite::Message};
+
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app()).await.unwrap();
+    });
+    let (mut socket, _) = connect_async(format!("ws://{address}/api/paper/ws"))
+        .await
+        .expect("connect to live paper websocket");
+
+    let first = timeout(Duration::from_secs(3), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let body: Value = serde_json::from_str(first.to_text().unwrap()).unwrap();
+    assert!(body["cash"].is_number());
+    assert_eq!(body["is_running"], false);
+
+    socket.send(Message::Ping(vec![1, 2, 3])).await.unwrap();
+    let reply = timeout(Duration::from_secs(3), async {
+        loop {
+            if let Some(Ok(Message::Pong(data))) = socket.next().await {
+                break data;
+            }
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(&reply[..], &[1, 2, 3]);
+    socket.send(Message::Close(None)).await.unwrap();
+    server.abort();
+}

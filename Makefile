@@ -15,9 +15,9 @@ NPM ?= npm
 PLAYWRIGHT_ARGS ?=
 AXIOM_PORT ?= 8080
 
-.PHONY: help setup browser-deps build build-web build-rust build-debug run-debug dev serve serve-test test test-rust test-one test-web test-e2e test-e2e-real test-visual lint lint-rust lint-web check-format fmt check ci coverage tools verify-published
+.PHONY: deploy help setup browser-deps build build-web build-rust build-debug run-debug dev serve serve-test test test-rust test-one test-web test-e2e test-e2e-real test-visual lint lint-rust lint-web check-format fmt check ci coverage tools verify-published
 help:
-	@printf '%s\n' 'make setup      Install locked frontend dependencies and browser' 'make build      Build frontend and Rust release' 'make serve      Run the production app (AXIOM_PORT=8080)' 'make dev        Run the frontend dev server' 'make test       Rust, frontend unit tests, real-browser E2E and visual checks' 'make check      Formatting, lint, typecheck, build and every test' 'make coverage   Rust and Chromium executable-source coverage, each enforced at 95%' 'make fmt        Format Rust source'
+	@printf '%s\n' 'make setup      Install locked frontend dependencies and browser' 'make build      Build frontend and Rust release' 'make serve      Run the production app (AXIOM_PORT=8080)' 'make dev        Run the frontend dev server' 'make test       Rust, frontend unit tests, real-browser E2E and visual checks' 'make check      Formatting, lint, typecheck, build and every test' 'make coverage   Rust and Chromium executable-source coverage, each enforced at 95%' 'make fmt        Format Rust source' 'make deploy     Publish the tested main revision to sigma711.top/axiom'
 
 setup:
 	cd web && $(NPM) ci
@@ -42,7 +42,7 @@ run-debug: build-debug build-web
 serve: build
 	AXIOM_PORT=$(AXIOM_PORT) cargo run --release --locked
 serve-test:
-	AXIOM_PORT=18080 AXIOM_OFFLINE=1 AXIOM_DATA_DIR=target/e2e-data cargo run --locked
+	AXIOM_PORT=18080 AXIOM_OFFLINE=0 AXIOM_DATA_DIR=target/e2e-data cargo run --locked
 dev:
 	cd web && $(NPM) run dev -- --host 127.0.0.1
 
@@ -72,6 +72,7 @@ fmt:
 	cargo fmt --all
 check: lint build test
 ci: check
+	$(MAKE) coverage
 
 tools:
 	rustup component add rustfmt clippy llvm-tools-preview
@@ -91,3 +92,6 @@ verify-published:
 	git fetch --quiet origin main
 	git merge-base --is-ancestor HEAD FETCH_HEAD || (printf '%s\n' 'Current commit is not published on origin/main; push before verification'; exit 2)
 	AXIOM_REQUIRE_GITHUB_LINKS=1 cargo test --locked --test code_links_test
+
+deploy:
+	bash scripts/deploy-production.sh

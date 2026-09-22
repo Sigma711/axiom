@@ -8,7 +8,7 @@ export default defineConfig({
   root: '.',
   base: process.env.VITE_BASE ?? '/static/',
   build: {
-    outDir: path.resolve(__dirname, '../static'),
+    outDir: path.resolve(__dirname, process.env.VITE_OUT_DIR ?? '../static'),
     emptyOutDir: true,
     target: 'es2020',
   },

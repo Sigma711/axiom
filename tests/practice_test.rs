@@ -161,6 +161,48 @@ fn malformed_inputs_are_rejected_and_degenerate_math_is_undefined() {
         "undefined"
     );
 }
+
+#[test]
+fn practice_validation_rejects_bad_inputs_bars_and_unordered_history() {
+    let mut bars = candles(3);
+    assert!(practice::evaluate("sma", &bars, &json!([])).is_err());
+    assert!(practice::evaluate("sma", &bars, &json!({"unknown": 3})).is_err());
+    assert!(practice::evaluate("sma", &bars, &json!({"period": "3"})).is_err());
+
+    bars[1].high = f64::NAN;
+    assert!(practice::evaluate("sma", &bars, &json!({})).is_err());
+    let mut duplicate = candles(3);
+    duplicate[2].timestamp = duplicate[1].timestamp;
+    assert!(practice::evaluate("sma", &duplicate, &json!({})).is_err());
+
+    assert!(practice::evaluate("book_funding", &[], &json!([])).is_err());
+    assert!(practice::evaluate("book_funding", &[], &json!({"unknown": 1})).is_err());
+    assert!(practice::evaluate("book_funding", &[], &json!({"is_long": 1})).is_err());
+    assert!(practice::evaluate(
+        "book_advances_declines",
+        &[],
+        &json!({"current_prices": [101.0, 99.0], "previous_prices": [100.0]})
+    )
+    .is_err());
+}
+
+#[test]
+fn consensus_with_empty_forecasts_reports_undefined_statistics() {
+    let result = practice::evaluate(
+        "consensus",
+        &[],
+        &json!({
+            "eps_estimates": [],
+            "revenue_estimates": [],
+            "target_prices": [],
+            "ratings": []
+        }),
+    )
+    .unwrap();
+    assert_eq!(result["status"], "computed");
+    assert!(result["values"]["mean_eps"].is_null());
+    assert!(result["values"]["eps_dispersion"].is_null());
+}
 #[test]
 fn three_candle_star_requires_a_confirming_third_candle() {
     let mut b = candles(3);

@@ -169,6 +169,17 @@ impl Broker for SimulatedBroker {
                 commission: 0.0,
             };
         }
+        if order.side == Side::Hold {
+            return Fill {
+                order_id: order.id,
+                timestamp: order.timestamp,
+                symbol: order.symbol,
+                side: order.side,
+                size: 0.0,
+                price: 0.0,
+                commission: 0.0,
+            };
+        }
         let fill_price = match self.resolve_fill_price(&order) {
             Some(p) => p,
             None => {
@@ -222,17 +233,7 @@ impl Broker for SimulatedBroker {
                     };
                 }
             }
-            Side::Hold => {
-                return Fill {
-                    order_id: order.id,
-                    timestamp: order.timestamp,
-                    symbol: order.symbol.clone(),
-                    side: order.side,
-                    size: 0.0,
-                    price: 0.0,
-                    commission: 0.0,
-                };
-            }
+            Side::Hold => unreachable!("hold orders are rejected before price resolution"),
         }
 
         let commission = fill_price * order.size * self.config.commission_rate;

@@ -1,5 +1,5 @@
 use axiom::{
-    metrics::{compute_metrics, metrics_summary, sortino_ratio, var_cvar},
+    metrics::{calmar_ratio, compute_metrics, metrics_summary, sortino_ratio, var_cvar},
     types::{BacktestResult, EquityPoint},
 };
 use chrono::{Duration, TimeZone, Utc};
@@ -78,4 +78,28 @@ fn undefined_ratios_are_not_reported_as_zero_and_initial_loss_counts_as_drawdown
         assert!(m["指标说明"][key].is_string());
     }
     assert_eq!(metrics_summary(&m)["夏普比率"], "—");
+}
+
+#[test]
+fn metrics_and_ratios_explain_empty_or_undefined_inputs() {
+    assert_eq!(
+        compute_metrics(&BacktestResult {
+            config: json!({}),
+            equity_curve: vec![],
+            trades: vec![],
+            signals: vec![],
+            fills: vec![],
+            metrics: json!({}),
+        }),
+        json!({"error": "没有数据"})
+    );
+
+    assert!(sortino_ratio(&[], 1.0).is_nan());
+    assert!(sortino_ratio(&[0.1, 0.2], 0.0).is_nan());
+    assert!(sortino_ratio(&[0.1, 0.2], 1.0).is_infinite());
+    assert!(calmar_ratio(0.2, 0.0).is_nan());
+    let (empty_var, empty_cvar) = var_cvar(&[], 0.95);
+    assert!(empty_var.is_nan() && empty_cvar.is_nan());
+    assert!(var_cvar(&[0.1], 0.0).0.is_nan());
+    assert!(var_cvar(&[f64::NAN], 0.95).0.is_nan());
 }

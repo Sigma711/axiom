@@ -35,3 +35,25 @@ fn every_source_row_and_alias_maps_to_real_executable_concepts() {
         }
     }
 }
+
+#[test]
+fn coverage_report_counts_and_preserves_the_auditable_source_manifest() {
+    let report = book_sources::coverage();
+    assert_eq!(
+        report["source_title"],
+        "股票交易软件专业指标全解_完整版.pdf"
+    );
+    assert_eq!(report["pdf_pages"], 83);
+    assert_eq!(
+        report["source_records"].as_u64(),
+        Some(273 + 99 + 209 + 4 + 34)
+    );
+    assert_eq!(
+        report["mapped_records"].as_u64(),
+        report["records"].as_array().map(|rows| rows
+            .iter()
+            .filter(|row| !row["concept_ids"].as_array().unwrap().is_empty())
+            .count() as u64)
+    );
+    assert!(report["sha256"].as_str().unwrap().len() >= 32);
+}

@@ -7,8 +7,8 @@ import { SymbolPicker } from './SymbolPicker';
 import { indicatorPanel, validSeries, type IndicatorPanel } from './chart';
 const MARKET_SOURCE_OPTIONS = [
   { v: 'binance', l: '加密货币 · Binance' },
-  { v: 'a_share', l: 'A 股 · 东方财富' },
-  { v: 'us_stock', l: '美股 · Yahoo Finance' },
+  { v: 'a_share', l: 'A 股 · 公开行情' },
+  { v: 'us_stock', l: '美股 · 公开行情' },
 ] as const;
 const MARKET_SOURCE_LABEL: Record<string, string> = Object.fromEntries(MARKET_SOURCE_OPTIONS.map(item => [item.v, item.l]));
 
@@ -17,6 +17,7 @@ import type {
   KnowledgeResponse, KnowledgeEntry, CustomStrategy, ChartType,
   PaperSnapshot, EquityPoint, PracticeConcept, PracticeResult,
 } from './types';
+const MARKET_DEFAULT_SYMBOL: Record<SourceType, string> = { binance: 'BTCUSDT', a_share: '600519', us_stock: 'AAPL' };
 
 const CHINESE_FIELDS: Record<string, string> = {
   price: '价格', close: '收盘价', open: '开盘价', high: '最高价', low: '最低价', volume: '成交量',
@@ -353,6 +354,7 @@ function KnowledgeView({ onPractice }: { onPractice: (conceptId: string) => void
 
 function KbCard({ e, onPractice, open, onOpenChange }: { e: KnowledgeEntry; onPractice: (conceptId: string) => void; open: boolean; onOpenChange: (open: boolean) => void }) {
   // The parent keeps exactly one expensive detail panel mounted.
+  const relatedTags = e.related?.map((related, index) => <span key={`${related}-${index}`} className="ax-tag">{related}</span>);
   return (
     <div className="ax-kb-card">
       <div className="ax-kb-header"><h4>{e.name}</h4></div>
@@ -370,13 +372,7 @@ function KbCard({ e, onPractice, open, onOpenChange }: { e: KnowledgeEntry; onPr
         {e.example && <Section label="例子" highlight>{e.example}</Section>}
         <Section label="信号解读">{e.signals}</Section>
         <Section label="常见误区" danger>{e.pitfalls}</Section>
-        {e.related && e.related.length > 0 && (
-          <Section label="关联概念">
-            {e.related.map((r, i) => (
-              <span key={i} className="ax-tag">{r}</span>
-            ))}
-          </Section>
-        )}
+        {relatedTags?.length ? <Section label="关联概念">{relatedTags}</Section> : null}
         {e.source_refs && e.source_refs.length > 0 && <Section label="书中出处">{e.source_refs.map(ref => <span key={`${ref.source_id}-${ref.pdf_page}`} className="ax-tag">{ref.title} · 第 {ref.pdf_page} 页</span>)}</Section>}
         <Section label="代码实现"><CodeLink entry={e} detailed /></Section>
         {open && <KnowledgeVisual concept={e} />}
@@ -697,8 +693,7 @@ function PathView() {
 // 数据探索
 // ===================================================================
 function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 'light' | 'dark' }) {
-  const [symbol, setSymbol] = useState('');
-  const [customSymbol, setCustomSymbol] = useState('');
+  const [symbol, setSymbol] = useState('BTCUSDT');
   const [limit, setLimit] = useState(200);
   const [source, setSource] = useState<SourceType>('binance');
   const [chartType, setChartType] = useState<ChartType>('candle');
@@ -712,13 +707,9 @@ function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 
   const chartRef = useRef<HTMLDivElement>(null);
   const requestId = useRef(0);
 
-  useEffect(() => {
-    setSymbol(previous => previous || (source === 'binance' ? 'BTCUSDT' : source === 'a_share' ? '600519' : 'AAPL'));
-  }, [source]);
-
   const loadData = useCallback(async (requestedIndicators = appliedIndicators.current) => {
     const id = ++requestId.current;
-    const sym = (customSymbol || symbol || 'BTCUSDT').toUpperCase();
+    const sym = symbol.toUpperCase();
     setLoading(true);
     setError('');
     try {
@@ -761,7 +752,7 @@ function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 
     } finally {
       if (id === requestId.current) setLoading(false);
     }
-  }, [symbol, customSymbol, limit, source, chartType]);
+  }, [symbol, limit, source, chartType]);
 
   useEffect(() => { if (symbol) loadData(); }, [loadData, symbol]);
 
@@ -853,7 +844,7 @@ function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 
         </label>
         <label>数据源
           <Dropdown label="数据源" options={MARKET_SOURCE_OPTIONS}
-            value={source} onChange={(v: SourceType) => setSource(v)} minWidth={140} />
+            value={source} onChange={(v: SourceType) => { if (v === source) return; setSource(v); setSymbol(MARKET_DEFAULT_SYMBOL[v]); setChartData(null); setSummary(null); setPatterns([]); }} minWidth={140} />
         </label>
         <label>图表类型
           <Dropdown label="图表类型" options={[{v:'candle',l:'标准 K 线'},{v:'heikin_ashi',l:'Heikin Ashi'}]}
@@ -905,7 +896,7 @@ function Backtest({ targetConcept, theme }: { targetConcept?: string; theme: 'li
   const [strategies, setStrategies] = useState<StrategyMeta[]>([]);
   const [strategy, setStrategy] = useState('');
   const [params, setParams] = useState<Record<string, number>>({});
-  const [symbol, setSymbol] = useState('');
+  const [symbol, setSymbol] = useState('BTCUSDT');
   const [source, setSource] = useState<SourceType>('binance');
   const [limit, setLimit] = useState(500);
   const [capital, setCapital] = useState(10000);
@@ -927,8 +918,7 @@ function Backtest({ targetConcept, theme }: { targetConcept?: string; theme: 'li
         setParams(p);
       }
     });
-    setSymbol(previous => previous || (source === 'binance' ? 'BTCUSDT' : source === 'a_share' ? '600519' : 'AAPL'));
-  }, [source]);
+  }, []);
 
   // 切策略时加载默认参数
   useEffect(() => {
@@ -996,7 +986,7 @@ function Backtest({ targetConcept, theme }: { targetConcept?: string; theme: 'li
         </label>
         <label>数据源
           <Dropdown label="数据源" options={MARKET_SOURCE_OPTIONS}
-            value={source} onChange={(v: SourceType) => setSource(v)} minWidth={140} />
+            value={source} onChange={(v: SourceType) => { if (v === source) return; setSource(v); setSymbol(MARKET_DEFAULT_SYMBOL[v]); setResult(null); }} minWidth={140} />
         </label>
         <label>K 线数
           <input type="number" value={limit} onChange={e => setLimit(parseInt(e.target.value) || 500)} min={50} max={2000} step={50} />
@@ -1246,7 +1236,7 @@ function CompareStrategies({ targetConcept, theme }: { targetConcept?: string; t
   const [strategies, setStrategies] = useState<StrategyMeta[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [customStrategies, setCustomStrategies] = useState<CustomStrategy[]>([]);
-  const [symbol, setSymbol] = useState('');
+  const [symbol, setSymbol] = useState('BTCUSDT');
   const [source, setSource] = useState<SourceType>('binance');
   const [capital, setCapital] = useState(10000);
   const [results, setResults] = useState<Array<{ name: string; result: BacktestResult }>>([]);
@@ -1267,8 +1257,7 @@ function CompareStrategies({ targetConcept, theme }: { targetConcept?: string; t
       d.strategies.forEach(s => { if (s.name !== 'random') sel.add(s.name); });
       setSelected(sel);
     });
-    setSymbol(previous => previous || (source === 'binance' ? 'BTCUSDT' : source === 'a_share' ? '600519' : 'AAPL'));
-  }, [source]);
+  }, []);
 
   const toggle = (name: string) => {
     setSelected(s => {
@@ -1372,7 +1361,7 @@ function CompareStrategies({ targetConcept, theme }: { targetConcept?: string; t
         </label>
         <label>数据源
           <Dropdown label="数据源" options={MARKET_SOURCE_OPTIONS}
-            value={source} onChange={(v: SourceType) => setSource(v)} minWidth={140} />
+            value={source} onChange={(v: SourceType) => { if (v === source) return; setSource(v); setSymbol(MARKET_DEFAULT_SYMBOL[v]); setResults([]); }} minWidth={140} />
         </label>
         <label>资金
           <input type="number" value={capital} onChange={e => setCapital(parseFloat(e.target.value) || 10000)} step={1000} />

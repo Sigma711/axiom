@@ -549,6 +549,8 @@ test('long dropdown menus stay above subsequent control groups', async ({ page }
   await trigger.click();
   const menu = page.locator('.ax-dd-menu');
   await expect(menu).toBeVisible();
+  await menu.locator('.ax-dd-search').fill('Ichimoku');
+  await expect(menu.getByRole('option')).toHaveCount(1);
   const coveredByMenu = await menu.evaluate(node => {
     const rect = node.getBoundingClientRect();
     const point = document.elementFromPoint(rect.left + 20, rect.top + Math.min(155, rect.height - 12));
@@ -587,6 +589,9 @@ test('strategy comparison validates selection and adds a custom strategy', async
   const dialogs: string[] = [];
   page.on('dialog', async dialog => { dialogs.push(dialog.message()); await dialog.dismiss(); });
   await page.goto('/compare');
+  const firstPoolItem = page.locator('.ax-pool-item').first();
+  await firstPoolItem.click();
+  await firstPoolItem.click();
   await page.getByRole('button', { name: '全不选', exact: true }).click();
   await page.getByRole('button', { name: '跑对比', exact: true }).click();
   await expect(page.locator('.ax-error')).toContainText('请至少选 2 个策略');
@@ -598,6 +603,10 @@ test('strategy comparison validates selection and adds a custom strategy', async
   await page.getByLabel('参数 (JSON)', { exact: true }).fill('{"fast": 3, "slow": 10}');
   await page.getByRole('button', { name: '保存并加入', exact: true }).click();
   await expect(page.getByText('✦ 教学策略', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '全选', exact: true }).click();
+  await expect(page.locator('.ax-pool-item.checked input:checked')).toHaveCount(3);
+  await page.getByRole('button', { name: '跑对比', exact: true }).click();
+  await expect(page.locator('.ax-cmp-table')).toContainText('教学策略');
   await page.getByRole('button', { name: '默认', exact: true }).click();
   await expect(page.locator('.ax-pool-item.checked input:checked')).toHaveCount(2);
 });
@@ -659,4 +668,94 @@ test('practice reports invalid JSON and succeeds after the input is corrected', 
   await panel.getByLabel('净利润', { exact: true }).fill('4000000');
   await panel.getByRole('button', { name: '运行实践', exact: true }).click();
   await expect(panel.locator('.ax-practice-result')).toContainText('已计算');
+});
+
+test('knowledge details and backtest explain returned evidence', async ({ page }) => {
+  await page.route('**/api/knowledge', route => route.fulfill({ json: {
+    total: 1,
+    categories: {
+      动量: [{
+        id: 'rsi_14', name: 'RSI', category: '动量', input_kind: 'market_bars', inputs: [],
+        summary: '衡量相对强弱', formula: 'RSI = 100 - 100 / (1 + RS)', meaning: '比较上涨和下跌力度',
+        example: '70 偏高', signals: '结合趋势观察', pitfalls: '不是单独买卖信号',
+        related: ['移动平均线', '动量'], source_refs: [{ source_id: 'book', title: '指标全解', pdf_page: 42 }],
+        code_url: 'https://example.test/rsi', implementation: 'rsi()',
+      }],
+    },
+  } }));
+  await page.goto('/learn');
+  const card = page.locator('.ax-kb-card').first();
+  await expect(card).toContainText('RSI');
+  await card.locator('.ax-kb-details').click();
+  await expect(card.locator('.ax-section-label', { hasText: '关联概念' })).toBeVisible();
+  await expect(card).toContainText('移动平均线');
+  await expect(card.locator('.ax-section-label', { hasText: '书中出处' })).toBeVisible();
+  await expect(card).toContainText('指标全解 · 第 42 页');
+
+  const tradeResponse = {
+    ...backtest,
+    trades: [
+      { symbol: 'BTCUSDT', side: 'BUY', entry_time: bars[0].timestamp, exit_time: bars[1].timestamp, entry_price: 101, exit_price: 103, size: 2, entry_commission: 0.1, exit_commission: 0.1, pnl: 3.8, pnl_pct: 0.019 },
+      { symbol: 'BTCUSDT', side: 'SELL', entry_time: bars[2].timestamp, exit_time: null, entry_price: 103, exit_price: null, size: 1, entry_commission: 0.1, exit_commission: 0, pnl: -1.2, pnl_pct: -0.006 },
+    ],
+    metrics: { ...metrics, '指标说明': { 夏普比率: '样本不足时可能无定义' } },
+  };
+  await page.route('**/api/backtest', route => route.fulfill({ json: tradeResponse }));
+  await page.goto('/backtest');
+  await page.getByRole('button', { name: '运行回测' }).click();
+  await expect(page.locator('.ax-metric-notes')).toContainText('样本不足时可能无定义');
+  const tradeDetails = page.locator('details.ax-trades:not(.ax-metric-notes)');
+  await expect(tradeDetails).toContainText('交易记录 (2 笔)');
+  await expect(tradeDetails).toContainText('BUY');
+  await expect(tradeDetails).toContainText('SELL');
+  await expect(tradeDetails).toContainText('—');
+});
+
+test('paper trading renders live equity and log evidence', async ({ page }) => {
+  const liveSnapshot = { is_running: false, current_bar: bars.at(-1), cash: 10010, position_size: 2, position_value: 200, equity: 10210, last_signal: null, last_fill: null, equity_curve: [{ timestamp: bars[0].timestamp, cash: 10000, position_value: 0, equity: 10000 }, { timestamp: bars[1].timestamp, cash: 10010, position_value: 200, equity: 10210 }], trades_count: 1, log: [{ timestamp: bars[0].timestamp, level: 'INFO', message: 'live tick' }, { timestamp: bars[1].timestamp, level: 'WARN', message: 'risk check' }], bars, source: 'binance', symbol: 'BTCUSDT', strategy: 'sma_cross', initial_capital: 10000 };
+  await page.route('**/api/paper/snapshot', route => route.fulfill({ json: liveSnapshot }));
+  await page.goto('/paper');
+  const panel = page.locator('section').filter({ has: page.getByRole('heading', { name: '模拟盘' }) });
+  await expect(panel.locator('.ax-paper-stats')).toContainText('10,210');
+  await expect(panel.locator('.ax-log-entry')).toHaveCount(2);
+  await expect(panel.locator('.ax-log-msg').filter({ hasText: 'live tick' })).toBeVisible();
+  await expect(panel.locator('.ax-log-lvl.warn')).toContainText('WARN');
+});
+
+test('data exploration loads Heikin Ashi bars and renders detected patterns', async ({ page }) => {
+  await page.route('**/api/indicators**', route => route.fulfill({ json: { symbol: 'BTCUSDT', source: 'synthetic', bars, indicators: {} } }));
+  await page.route('**/api/heikin_ashi**', route => route.fulfill({ json: { symbol: 'BTCUSDT', bars, chart: 'heikin_ashi' } }));
+  await page.route('**/api/patterns**', route => route.fulfill({ json: { symbol: 'BTCUSDT', patterns: [{ pattern: '锤头', timestamp: bars[0].timestamp }] } }));
+  await page.goto('/data');
+  const chartType = page.getByRole('button', { name: '图表类型', exact: true });
+  await chartType.click();
+  await page.getByRole('option', { name: 'Heikin Ashi', exact: true }).click();
+  await expect(chartType).toContainText('Heikin Ashi');
+  const loadButton = page.getByRole('button', { name: '加载数据' });
+  await expect(loadButton).toBeEnabled();
+  await loadButton.click();
+  await expect(page.locator('.ax-patterns')).toContainText('锤头');
+  await expect(page.locator('.ax-summary')).toContainText('BTCUSDT');
+});
+
+test('practice explains when market concepts have no loaded bars', async ({ page }) => {
+  await page.route('**/api/indicators**', route => route.fulfill({ json: { symbol: 'BTCUSDT', source: 'fixture', bars: [], indicators: {} } }));
+  await page.route('**/api/patterns**', route => route.fulfill({ json: { symbol: 'BTCUSDT', patterns: [] } }));
+  await page.goto('/data?concept=rsi_14');
+  const panel = page.getByLabel('概念实践');
+  await expect(panel.getByRole('button', { name: '运行实践', exact: true })).toBeVisible();
+  await panel.getByRole('button', { name: '运行实践', exact: true }).click();
+  await expect(panel.locator('.ax-error')).toContainText('当前模块还没有可用行情上下文');
+});
+
+test('practice surfaces an API failure after valid inputs', async ({ page }) => {
+  await page.route('**/api/practice', async route => {
+    if (route.request().method() === 'POST') return route.fulfill({ status: 503, contentType: 'text/plain', body: 'practice unavailable' });
+    await route.fallback();
+  });
+  await page.goto('/data?concept=earnings_per_share');
+  const panel = page.getByLabel('概念实践');
+  await expect(panel.getByRole('button', { name: '运行实践', exact: true })).toBeVisible();
+  await panel.getByRole('button', { name: '运行实践', exact: true }).click();
+  await expect(panel.locator('.ax-error')).toContainText('HTTP 503');
 });

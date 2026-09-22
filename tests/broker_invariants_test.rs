@@ -1,5 +1,5 @@
 use axiom::broker::{new_order, Broker, BrokerConfig, SimulatedBroker};
-use axiom::types::{OrderType, Side};
+use axiom::types::{Fill, OrderType, Side};
 use axiom::{Portfolio, PortfolioConfig};
 use chrono::Utc;
 
@@ -95,4 +95,140 @@ fn marketable_limit_receives_available_price_improvement() {
     ));
     assert_eq!(fill.price, 95.0);
     assert_eq!(b.get_cash(), 905.0);
+}
+
+#[test]
+fn portfolio_signals_and_fills_cover_flat_small_and_unmatched_paths() {
+    let mut portfolio = Portfolio::new(
+        Box::new(SimulatedBroker::new(BrokerConfig::default(), 1000.0)),
+        PortfolioConfig {
+            min_trade_size: 1.0,
+            symbol: "X".into(),
+            ..Default::default()
+        },
+    );
+    let ts = Utc::now();
+    assert!(portfolio.on_signal(Side::Hold, 100.0, ts, 1.0).is_none());
+    assert!(portfolio.on_signal(Side::Sell, 100.0, ts, 1.0).is_none());
+    portfolio.broker.set_market_price("X", 100.0);
+    assert!(portfolio.on_signal(Side::Buy, 100.0, ts, 0.0001).is_none());
+
+    portfolio.on_fill(&Fill {
+        order_id: "zero".into(),
+        timestamp: ts,
+        symbol: "X".into(),
+        side: Side::Buy,
+        size: 0.0,
+        price: 100.0,
+        commission: 0.0,
+    });
+    assert!(portfolio.open_trade().is_none());
+    portfolio.on_fill(&Fill {
+        order_id: "sell-first".into(),
+        timestamp: ts,
+        symbol: "X".into(),
+        side: Side::Sell,
+        size: 1.0,
+        price: 100.0,
+        commission: 0.0,
+    });
+    assert!(portfolio.closed_trades().is_empty());
+}
+
+#[test]
+fn broker_rejects_unpriced_hold_and_non_marketable_orders_with_audit_log() {
+    let ts = Utc::now();
+    let mut broker = SimulatedBroker::new(BrokerConfig::default(), 1_000.0);
+    let no_price = order(&mut broker, Side::Buy, 1.0);
+    assert_eq!(no_price.size, 0.0);
+
+    broker.set_market_price("X", 100.0);
+    assert_eq!(
+        broker
+            .place_order(new_order("X", Side::Hold, 1.0, ts, OrderType::Market, None))
+            .size,
+        0.0
+    );
+    assert_eq!(
+        broker
+            .place_order(new_order("X", Side::Buy, 1.0, ts, OrderType::Limit, None))
+            .size,
+        0.0
+    );
+    assert_eq!(
+        broker
+            .place_order(new_order(
+                "X",
+                Side::Buy,
+                1.0,
+                ts,
+                OrderType::Limit,
+                Some(f64::NAN),
+            ))
+            .size,
+        0.0
+    );
+    assert_eq!(
+        broker
+            .place_order(new_order(
+                "X",
+                Side::Buy,
+                1.0,
+                ts,
+                OrderType::Limit,
+                Some(99.0)
+            ))
+            .size,
+        0.0
+    );
+    assert_eq!(
+        broker
+            .place_order(new_order(
+                "X",
+                Side::Sell,
+                1.0,
+                ts,
+                OrderType::Limit,
+                Some(101.0)
+            ))
+            .size,
+        0.0
+    );
+    assert_eq!(
+        broker
+            .place_order(new_order(
+                "X",
+                Side::Buy,
+                100.0,
+                ts,
+                OrderType::Market,
+                None
+            ))
+            .size,
+        0.0
+    );
+    assert_eq!(
+        broker
+            .place_order(new_order("X", Side::Sell, 1.0, ts, OrderType::Market, None))
+            .size,
+        0.0
+    );
+    assert!(broker
+        .trade_log()
+        .iter()
+        .any(|(_, message, _)| message.contains("资金不足")));
+    assert!(broker
+        .trade_log()
+        .iter()
+        .any(|(_, message, _)| message.contains("持仓不足")));
+
+    broker.set_market_price("X", f64::NAN);
+    assert_eq!(
+        broker
+            .place_order(new_order("X", Side::Buy, 1.0, ts, OrderType::Market, None))
+            .size,
+        0.0
+    );
+    assert_eq!(broker.trade_log().len(), 2);
+    assert_eq!(axiom::broker::err("expected").to_string(), "expected");
 }

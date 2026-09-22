@@ -1,5 +1,11 @@
 use axiom::{
-    indicators::momentum::{ar, br, psy},
+    indicators::{
+        momentum::{ar, br, psy},
+        statistics::{
+            alpha, beta, hurst, kurtosis, linear_regression, percentile_rank, rolling_correlation,
+            skewness, zscore,
+        },
+    },
     types::Bar,
 };
 use chrono::{TimeZone, Utc};
@@ -36,4 +42,27 @@ fn br_includes_the_current_bar_in_its_n_comparisons() {
     ];
     let values = br(&bars, 2);
     assert!((values[2].unwrap() - 10.0 / 21.0 * 100.0).abs() < 1e-12);
+}
+
+#[test]
+fn statistical_indicators_define_warmups_degenerate_inputs_and_ratios() {
+    assert!(linear_regression(&[1.0]).is_none());
+    assert!(beta(&[0.1], &[0.2]).is_none());
+    assert!(beta(&[0.1, 0.2], &[1.0, 1.0]).is_none());
+    assert!(alpha(&[0.1], &[0.2], 0.01).is_none());
+    assert!(alpha(&[0.1, 0.2], &[1.0, 1.0], 0.01).is_none());
+
+    let rolling = rolling_correlation(&[1.0, 2.0, 3.0], &[3.0, 2.0, 1.0], 2);
+    assert_eq!(rolling[..2], [None, None]);
+    assert_eq!(rolling[2], Some(-1.0));
+    assert_eq!(
+        percentile_rank(&[1.0, 2.0, 3.0], 2),
+        vec![None, Some(100.0), Some(100.0)]
+    );
+    assert_eq!(zscore(&[1.0, 2.0, 3.0], 2)[0], None);
+
+    assert!(skewness(&[1.0, 1.0, 1.0]).is_none());
+    assert!(kurtosis(&[1.0, 1.0, 1.0, 1.0]).is_none());
+    assert!(hurst(&[1.0; 15]).is_none());
+    assert!(hurst(&[1.0; 16]).is_none());
 }

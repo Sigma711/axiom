@@ -263,7 +263,7 @@ pub fn var_cvar(rets: &[f64], confidence: f64) -> (f64, f64) {
     if rets.is_empty() {
         return (f64::NAN, f64::NAN);
     }
-    if !(0.0..1.0).contains(&confidence) || rets.iter().any(|r| !r.is_finite()) {
+    if !(0.0 < confidence && confidence < 1.0) || rets.iter().any(|r| !r.is_finite()) {
         return (f64::NAN, f64::NAN);
     }
     let mut sorted: Vec<f64> = rets.to_vec();
