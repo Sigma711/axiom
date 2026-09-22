@@ -166,10 +166,27 @@ async fn every_catalog_entry_publishes_a_non_forced_real_practice_plan() {
     assert_eq!(concepts.len(), practice::catalog().len());
     for concept in concepts {
         let plan = &concept["plan"];
-        assert!(plan["markets"].as_array().is_some_and(|v| !v.is_empty()), "{} has no applicable market", concept["id"]);
-        assert!(plan["modules"].as_array().is_some_and(|v| !v.is_empty()), "{} has no meaningful destination", concept["id"]);
-        assert!(plan["required_datasets"].as_array().is_some_and(|v| !v.is_empty()), "{} has no evidence requirement", concept["id"]);
-        assert!(matches!(plan["source_policy"].as_str(), Some("real_required" | "result_required" | "evidence_required")));
+        assert!(
+            plan["markets"].as_array().is_some_and(|v| !v.is_empty()),
+            "{} has no applicable market",
+            concept["id"]
+        );
+        assert!(
+            plan["modules"].as_array().is_some_and(|v| !v.is_empty()),
+            "{} has no meaningful destination",
+            concept["id"]
+        );
+        assert!(
+            plan["required_datasets"]
+                .as_array()
+                .is_some_and(|v| !v.is_empty()),
+            "{} has no evidence requirement",
+            concept["id"]
+        );
+        assert!(matches!(
+            plan["source_policy"].as_str(),
+            Some("real_required" | "result_required" | "evidence_required")
+        ));
         assert!(!plan["goal"].as_str().unwrap_or("").is_empty());
     }
 }

@@ -12,7 +12,7 @@ async function mockApi(page: Page) {
     const path = url.pathname;
     const json = (body: unknown) => route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
     if (path === '/api/knowledge') return json({ total: 2, categories: { 动量: [{ ...concepts[0], summary: '衡量动量', formula: 'RS = avg(gain) / avg(loss)', meaning: '强弱', example: '70 偏高', signals: '观察趋势', pitfalls: '不是单独买卖信号', related: [], code_url: 'https://example.test/repo/src/indicator.rs#L42', implementation: 'rsi()' }, { id: 'earnings_per_share', name: '每股收益（EPS）', category: '财务', input_kind: 'independent_inputs', inputs: [{ key: 'net_income', label: '净利润', default: 3000000 }, { key: 'preferred_dividends', label: '优先股股息', default: 0 }, { key: 'shares', label: '普通股股数', default: 1000000 }], notes: '每股收益采用可编辑教学数据。', summary: '把归属于普通股股东的利润平摊到每一股。', formula: '(净利润 − 优先股股息) ÷ 普通股股数', meaning: '每股盈利能力', example: '3 元/股', signals: '用于比较盈利能力', pitfalls: '需结合股本变化', related: [], code_url: 'https://example.test/repo/src/indicator.rs#L42', implementation: 'earnings_per_share()' }] } });
-    if (path === '/api/symbols') return json({ symbols: ['BTCUSDT'], count: 1, source: 'fixture' });
+    if (path === '/api/symbols') return json({ symbols: ['BTCUSDT'], items: [{ symbol: 'BTCUSDT', name: 'Bitcoin / Tether', exchange: 'Binance' }], count: 1, total: 1, universe_count: 1, offset: 0, has_more: false, status: 'live', complete: true, source: 'fixture' });
     if (path === '/api/strategies') return json({ strategies });
     if (path === '/api/indicators') return json({ symbol: 'BTCUSDT', source: 'synthetic', bars, indicators: { sma_20: bars.map((bar, index) => index < 19 ? null : { x: bar.timestamp, y: bar.close - 3 }), rsi_14: bars.map((bar, index) => index < 14 ? null : { x: bar.timestamp, y: 40 + index % 30 }), macd: bars.map((bar, index) => ({ x: bar.timestamp, y: index - 30 })), atr_14: bars.map((bar, index) => ({ x: bar.timestamp, y: 2 + index / 50 })) } });
     if (path === '/api/patterns') return json({ symbol: 'BTCUSDT', patterns: [] });
@@ -203,10 +203,12 @@ test('empty data and stale requests do not replace the latest chart', async ({ p
   });
   await page.goto('/');
   await page.getByRole('button', { name: '数据探索', exact: true }).click();
-  await page.getByLabel('自定义').fill('EMPTY');
+  await page.getByLabel('搜索交易对').fill('EMPTY');
+  await page.getByLabel('搜索交易对').press('Enter');
   await page.getByRole('button', { name: '加载数据' }).click();
   await expect(page.locator('.ax-chart-empty')).toBeVisible();
-  await page.getByLabel('自定义').fill('BTCUSDT');
+  await page.getByLabel('搜索交易对').fill('BTCUSDT');
+  await page.getByLabel('搜索交易对').press('Enter');
   await page.getByRole('button', { name: '加载数据' }).click();
   await expect(page.locator('.ax-summary')).toContainText('BTCUSDT');
   await expect(page.locator('.ax-chart-empty')).toHaveCount(0);
@@ -217,7 +219,7 @@ test('mobile controls remain reachable without viewport overflow', async ({ page
   await page.goto('/');
   await page.getByRole('button', { name: '数据探索', exact: true }).click();
   await page.getByRole('button', { name: '数据源' }).click();
-  await expect(page.getByText('合成 (随机)', { exact: true })).toBeVisible();
+  await expect(page.getByRole('option', { name: '加密货币 · Binance', exact: true })).toBeVisible();
   expect(await page.locator('.ax-dd-arrow').count()).toBe(0);
   expect(await page.getByRole('button', { name: '数据源' }).evaluate(button => getComputedStyle(button, '::after').content)).not.toBe('none');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -228,9 +230,9 @@ test('selecting a dropdown option closes it and Escape dismisses it', async ({ p
   await page.getByRole('button', { name: '数据探索', exact: true }).click();
   const trigger = page.getByRole('button', { name: '数据源', exact: true });
   await trigger.click();
-  await page.getByText('合成 (随机)', { exact: true }).click();
+  await page.getByRole('option', { name: '加密货币 · Binance', exact: true }).click();
   await expect(page.locator('.ax-dd-menu')).toHaveCount(0);
-  await expect(trigger).toContainText('合成 (随机)');
+  await expect(trigger).toContainText('加密货币 · Binance');
   await trigger.click();
   await trigger.press('Escape');
   await expect(page.locator('.ax-dd-menu')).toHaveCount(0);

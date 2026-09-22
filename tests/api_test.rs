@@ -134,6 +134,38 @@ async fn every_published_strategy_runs_through_the_public_backtest_api() {
 }
 
 #[tokio::test]
+async fn fixed_bars_produce_distinct_strategy_and_parameter_equity_curves() {
+    let (_, data) = request("GET", "/api/data?source=synthetic&limit=240", Value::Null).await;
+    let cases = [
+        ("buy_and_hold", json!({})),
+        ("sma_cross", json!({"fast":5,"slow":20})),
+        ("sma_cross", json!({"fast":15,"slow":60})),
+        ("rsi", json!({"period":14,"overbought":70,"oversold":30})),
+    ];
+    let mut curves = std::collections::BTreeSet::new();
+    for (strategy, params) in cases {
+        let (status, result) = request(
+            "POST",
+            "/api/backtest",
+            json!({
+                "strategy": strategy, "source": "synthetic", "bars": data["bars"],
+                "initial_capital": 10000, "params": params
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{strategy}: {result}");
+        let curve = result["equity_curve"].as_array().unwrap();
+        assert_eq!(curve.len(), 240);
+        curves.insert(serde_json::to_string(curve).unwrap());
+    }
+    assert_eq!(
+        curves.len(),
+        4,
+        "strategy choice and its parameters must alter the rendered equity curve"
+    );
+}
+
+#[tokio::test]
 async fn backtest_rejects_invalid_configuration_instead_of_panicking_or_clamping() {
     let cases = [
         json!({"initial_capital":0}),

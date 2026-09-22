@@ -509,8 +509,9 @@ fn json_number(value: &serde_json::Value) -> Option<f64> {
 fn parse_tencent_a_share_bars(raw: &serde_json::Value, market_symbol: &str) -> Result<Vec<Bar>> {
     let rows = raw
         .pointer(&format!("/data/{market_symbol}/qfqday"))
+        .or_else(|| raw.pointer(&format!("/data/{market_symbol}/day")))
         .and_then(serde_json::Value::as_array)
-        .context("Tencent A-share response has no adjusted daily rows")?;
+        .context("Tencent A-share response has no completed daily rows")?;
     let bars: Vec<Bar> = rows
         .iter()
         .filter_map(|row| {
@@ -534,10 +535,10 @@ async fn fetch_a_share_tencent(
     since: DateTime<Utc>,
     limit: usize,
 ) -> Result<Vec<Bar>> {
-    let exchange = if symbol.starts_with(['6', '9']) {
-        "sh"
-    } else {
-        "sz"
+    let exchange = match symbol.as_bytes().first() {
+        Some(b'6') | Some(b'9') if !symbol.starts_with("92") => "sh",
+        Some(b'4') | Some(b'8') | Some(b'9') => "bj",
+        _ => "sz",
     };
     let market_symbol = format!("{exchange}{symbol}");
     let raw: serde_json::Value = reqwest::Client::new()
@@ -569,9 +570,10 @@ async fn fetch_a_share(symbol: &str, since: DateTime<Utc>, limit: usize) -> Resu
         symbol.len() == 6 && symbol.bytes().all(|byte| byte.is_ascii_digit()),
         "A-share symbol must be a six digit code"
     );
-    let exchange = if symbol.starts_with(['6', '9']) {
+    let exchange = if symbol.starts_with('6') || symbol.starts_with("900") {
         "1"
     } else {
+        // Eastmoney uses market 0 for Shenzhen and Beijing listings.
         "0"
     };
     let request = reqwest::Client::new()
@@ -708,7 +710,8 @@ async fn fetch_us_stock(symbol: &str, since: DateTime<Utc>, limit: usize) -> Res
     let primary = async {
         let raw: serde_json::Value = reqwest::Client::new()
             .get(format!(
-                "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+                "https://query1.finance.yahoo.com/v8/finance/chart/{}",
+                symbol.replace('.', "-")
             ))
             .header(
                 reqwest::header::USER_AGENT,

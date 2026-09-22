@@ -6,7 +6,7 @@ test('real Rust service supports the four-module learning journey', async ({ pag
   page.on('pageerror', error => errors.push(error.message));
   const selectSynthetic = async () => {
     await page.getByRole('button', { name: '数据源', exact: true }).click();
-    await page.getByText('合成 (随机)', { exact: true }).click();
+    await page.getByText('加密货币 · Binance', { exact: true }).click();
   };
   await page.goto('/');
   await expect(page.getByRole('heading', { name: '学习中心' })).toBeVisible();
@@ -14,7 +14,7 @@ test('real Rust service supports the four-module learning journey', async ({ pag
   await expect(page.getByRole('heading', { name: '数据探索' })).toBeVisible();
   await expect(page.getByLabel('概念实践')).toBeVisible();
   await page.getByRole('button', { name: '数据源', exact: true }).click();
-  await page.getByText('合成 (随机)', { exact: true }).click();
+  await page.getByText('加密货币 · Binance', { exact: true }).click();
   await page.getByRole('button', { name: '加载数据' }).click();
   await expect(page.locator('.ax-chart svg.main-svg').first()).toBeVisible({ timeout: 20_000 });
   await page.getByRole('button', {name:'运行实践'}).click();
@@ -22,7 +22,7 @@ test('real Rust service supports the four-module learning journey', async ({ pag
   await page.getByRole('button', { name: '回测', exact: true }).click();
   await expect(page.getByRole('button', { name: '运行回测' })).toBeEnabled();
   await page.getByRole('button', { name: '数据源' }).click();
-  await page.getByText('合成 (随机)', { exact: true }).click();
+  await page.getByText('加密货币 · Binance', { exact: true }).click();
   const [backtestResponse] = await Promise.all([
     page.waitForResponse(response => response.url().includes('/api/backtest')),
     page.getByRole('button', { name: '运行回测' }).click(),

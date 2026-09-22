@@ -3,6 +3,7 @@ import Plotly from 'plotly.js-dist-min';
 import { api, appBase, appPath, fmtPct, fmtNum, fmtMoney, preferredCodeLocationUrl } from './api';
 import { performanceInputs } from './performance';
 import { KnowledgeSeriesVisual } from './KnowledgeSeriesVisual';
+import { SymbolPicker } from './SymbolPicker';
 import { indicatorPanel, validSeries, type IndicatorPanel } from './chart';
 const MARKET_SOURCE_OPTIONS = [
   { v: 'binance', l: '加密货币 · Binance' },
@@ -696,7 +697,6 @@ function PathView() {
 // 数据探索
 // ===================================================================
 function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 'light' | 'dark' }) {
-  const [symbols, setSymbols] = useState<string[]>([]);
   const [symbol, setSymbol] = useState('');
   const [customSymbol, setCustomSymbol] = useState('');
   const [limit, setLimit] = useState(200);
@@ -713,10 +713,7 @@ function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 
   const requestId = useRef(0);
 
   useEffect(() => {
-    api.listSymbols(source).then(d => {
-      setSymbols(d.symbols);
-      setSymbol(d.symbols[0] || '');
-    }).catch(e => setError(String(e)));
+    setSymbol(previous => previous || (source === 'binance' ? 'BTCUSDT' : source === 'a_share' ? '600519' : 'AAPL'));
   }, [source]);
 
   const loadData = useCallback(async (requestedIndicators = appliedIndicators.current) => {
@@ -848,11 +845,7 @@ function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 
       <p className="ax-lead">真实行情：加密货币、A 股与美股；支持指标叠加和形态识别。</p>
       <div className="ax-controls">
         <label>交易对
-          <Dropdown label="交易对" options={symbols.map(s => ({ v: s, l: s }))} value={symbol} onChange={setSymbol} minWidth={120} />
-        </label>
-        <label>自定义
-          <input type="text" value={customSymbol} onChange={e => setCustomSymbol(e.target.value)}
-            placeholder="下拉里没有?手动输入" />
+          <SymbolPicker source={source} value={symbol} onChange={setSymbol} />
         </label>
         <label>K 线数
           <input type="number" value={limit} onChange={e => setLimit(parseInt(e.target.value) || 200)}
@@ -913,7 +906,6 @@ function Backtest({ targetConcept, theme }: { targetConcept?: string; theme: 'li
   const [strategy, setStrategy] = useState('');
   const [params, setParams] = useState<Record<string, number>>({});
   const [symbol, setSymbol] = useState('');
-  const [symbols, setSymbols] = useState<string[]>([]);
   const [source, setSource] = useState<SourceType>('binance');
   const [limit, setLimit] = useState(500);
   const [capital, setCapital] = useState(10000);
@@ -935,10 +927,7 @@ function Backtest({ targetConcept, theme }: { targetConcept?: string; theme: 'li
         setParams(p);
       }
     });
-    api.listSymbols(source).then(d => {
-      setSymbols(d.symbols);
-      setSymbol(d.symbols[0] || '');
-    });
+    setSymbol(previous => previous || (source === 'binance' ? 'BTCUSDT' : source === 'a_share' ? '600519' : 'AAPL'));
   }, [source]);
 
   // 切策略时加载默认参数
@@ -1003,8 +992,7 @@ function Backtest({ targetConcept, theme }: { targetConcept?: string; theme: 'li
             value={strategy} onChange={setStrategy} minWidth={200} />
         </label>
         <label>交易对
-          <Dropdown label="交易对" options={symbols.map(s => ({ v: s, l: s }))}
-            value={symbol} onChange={setSymbol} minWidth={120} />
+          <SymbolPicker source={source} value={symbol} onChange={setSymbol} />
         </label>
         <label>数据源
           <Dropdown label="数据源" options={MARKET_SOURCE_OPTIONS}
@@ -1234,7 +1222,6 @@ function CompareStrategies({ targetConcept, theme }: { targetConcept?: string; t
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [customStrategies, setCustomStrategies] = useState<CustomStrategy[]>([]);
   const [symbol, setSymbol] = useState('');
-  const [symbols, setSymbols] = useState<string[]>([]);
   const [source, setSource] = useState<SourceType>('binance');
   const [capital, setCapital] = useState(10000);
   const [results, setResults] = useState<Array<{ name: string; result: BacktestResult }>>([]);
@@ -1255,10 +1242,7 @@ function CompareStrategies({ targetConcept, theme }: { targetConcept?: string; t
       d.strategies.forEach(s => { if (s.name !== 'random') sel.add(s.name); });
       setSelected(sel);
     });
-    api.listSymbols(source).then(d => {
-      setSymbols(d.symbols);
-      setSymbol(d.symbols[0] || '');
-    });
+    setSymbol(previous => previous || (source === 'binance' ? 'BTCUSDT' : source === 'a_share' ? '600519' : 'AAPL'));
   }, [source]);
 
   const toggle = (name: string) => {
@@ -1359,8 +1343,7 @@ function CompareStrategies({ targetConcept, theme }: { targetConcept?: string; t
       <p className="ax-lead">勾选策略,PK 同一段历史数据上谁最强。可自定义。</p>
       <div className="ax-controls">
         <label>交易对
-          <Dropdown label="交易对" options={symbols.map(s => ({ v: s, l: s }))}
-            value={symbol} onChange={setSymbol} minWidth={120} />
+          <SymbolPicker source={source} value={symbol} onChange={setSymbol} />
         </label>
         <label>数据源
           <Dropdown label="数据源" options={MARKET_SOURCE_OPTIONS}

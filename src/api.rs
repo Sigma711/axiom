@@ -14,7 +14,7 @@
 
 use crate::api_validation::{self as validate, ApiError};
 use crate::app_state::AppState;
-use crate::data::{fetch_public_market_bars, source_symbols, DataFeed, SyntheticFeed};
+use crate::data::{fetch_public_market_bars, DataFeed, SyntheticFeed};
 use crate::engine::{BacktestEngine, EngineConfig};
 use crate::metrics::compute_metrics;
 use crate::paper::PaperSnapshot;
@@ -1169,6 +1169,9 @@ fn default_symbols() -> Vec<String> {
 #[derive(Deserialize)]
 struct SymbolsQuery {
     source: Option<String>,
+    q: Option<String>,
+    offset: Option<usize>,
+    limit: Option<usize>,
 }
 
 async fn get_symbols(
@@ -1178,14 +1181,45 @@ async fn get_symbols(
     if !crate::data::is_public_market_source(&source) {
         return Err(validate::bad("source must be binance, a_share or us_stock"));
     }
-    let symbols = if source == "binance" {
-        get_cached_symbols().await
-    } else {
-        source_symbols(&source)
-    };
-    Ok(Json(
-        json!({ "symbols": symbols, "count": symbols.len(), "source": source }),
-    ))
+    let query = q.q.unwrap_or_default();
+    let offset = q.offset.unwrap_or(0);
+    let limit = q.limit.unwrap_or(50).clamp(1, 100);
+    if query.chars().count() > 64 {
+        return Err(validate::bad("symbol query must be at most 64 characters"));
+    }
+    if source == "binance" {
+        let mut items: Vec<_> = get_cached_symbols()
+            .await
+            .into_iter()
+            .filter(|symbol| {
+                query.is_empty() || symbol.to_uppercase().contains(&query.to_uppercase())
+            })
+            .map(|symbol| json!({"symbol": symbol, "name": "Binance spot", "exchange": "Binance"}))
+            .collect();
+        items.sort_by_key(|item| item["symbol"].as_str().unwrap_or_default().to_owned());
+        let total = items.len();
+        let page: Vec<_> = items.into_iter().skip(offset).take(limit).collect();
+        let symbols: Vec<_> = page
+            .iter()
+            .filter_map(|item| item["symbol"].as_str())
+            .collect();
+        return Ok(Json(json!({
+            "symbols": symbols, "items": page, "count": symbols.len(), "total": total,
+            "universe_count": total, "offset": offset, "has_more": offset + symbols.len() < total,
+            "status": "live", "complete": true, "source": source
+        })));
+    }
+    let (items, total, universe_count, status, complete) =
+        crate::symbols::search(&source, &query, offset, limit)
+            .await
+            .map_err(|error| validate::bad(error.to_string()))?;
+    let symbols: Vec<_> = items.iter().map(|item| item.symbol.as_str()).collect();
+    let count = symbols.len();
+    Ok(Json(json!({
+        "symbols": symbols, "items": items, "count": count, "total": total,
+        "universe_count": universe_count, "offset": offset, "has_more": offset + count < total,
+        "status": status, "complete": complete, "source": source
+    })))
 }
 
 // -----------------------------------------------------------------------------

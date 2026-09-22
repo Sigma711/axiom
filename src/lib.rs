@@ -39,6 +39,7 @@ pub mod practice;
 pub mod risk;
 pub mod strategy;
 pub mod supplement;
+pub mod symbols;
 pub mod types;
 
 pub mod api;
