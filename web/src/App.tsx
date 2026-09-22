@@ -21,7 +21,7 @@ type PracticeModule = 'data' | 'backtest' | 'paper' | 'compare';
 const PRACTICE_MODULE_LABELS: Record<PracticeModule, string> = { data: '数据探索', backtest: '回测', paper: '模拟盘', compare: '策略对比' };
 
 const CHINESE_FIELDS: Record<string, string> = {
-  price: '价格', close: '收盘价', open: '开盘价', high: '最高价', low: '最低价', volume: '成交量',
+  price: '价格', close: '收盘价', open: '开盘价', high: '最高价', low: '最低价', volume: '成交量', hourly_volume: '每小时成交量', rolling_24h_volume: '滚动 24 小时成交量', book_log_return: '最近一根 K 线对数收益率',
   period: '周期', fast: '快线周期', slow: '慢线周期', signal: '信号周期', multiplier: '倍数',
   returns: '收益率序列', equity: '净值序列', elapsed_days: '经过天数', periods_per_year: '年化周期数',
   rsi: '相对强弱指标', value: '计算值', mean: '均值', stddev: '标准差', correlation: '相关系数',
@@ -448,23 +448,34 @@ function ScalarKnowledgeDiagram({ concept, inputs, scalar, unit, loading }: { co
 }
 function BookChartVisual({ chart, name }: { chart: NonNullable<PracticeResult['chart']>; name: string }) {
   const allBars = chart.bars.filter(bar => [bar.open, bar.high, bar.low, bar.close].every(Number.isFinite));
-  const bars = allBars.slice(-80);
-  if (!bars.length) return <ScalarKnowledgeDiagram concept={{ id: name, name, formula: '', category: '', summary: '', meaning: '', example: '', signals: '', pitfalls: '', related: [], code_url: '', implementation: '' }} inputs={[]} />;
-  const lo = Math.min(...bars.map(bar => bar.low)), hi = Math.max(...bars.map(bar => bar.high));
-  const scale = (value: number) => 90 - ((value - lo) / (hi - lo || 1)) * 74;
-  const width = 396 / Math.max(bars.length, 1);
+  if (!allBars.length) return <ScalarKnowledgeDiagram concept={{ id: name, name, formula: '', category: '', summary: '', meaning: '', example: '', signals: '', pitfalls: '', related: [], code_url: '', implementation: '' }} inputs={[]} />;
   const candleKinds = ['heikin_ashi', 'range_bars', 'tick_bars'];
   const isCandle = candleKinds.includes(chart.kind);
   const isKagi = chart.kind === 'kagi';
   const isPnf = chart.kind === 'point_figure' || chart.kind === 'point_and_figure';
-  const label = ({ heikin_ashi: '平均K线', range_bars: '范围K线', tick_bars: 'Tick K线', renko: '砖形图', point_figure: '点数图', kagi: '卡吉线', three_line_break: '三线突破' } as Record<string, string>)[chart.kind] || name;
-  const columns = bars.reduce<number[]>((all, bar, index) => {
-    if (index === 0) return [bar.column ?? 0];
-    const previous = bars[index - 1];
-    return [...all, bar.column ?? (bar.direction === previous.direction ? all[index - 1] : all[index - 1] + 1)];
-  }, []), minColumn = Math.min(...columns), maxColumn = Math.max(...columns);
+  const allColumns: number[] = [];
+  for (let index = 0; index < allBars.length; index += 1) {
+    const bar = allBars[index];
+    if (index === 0) allColumns.push(bar.column ?? 0);
+    else {
+      const previous = allBars[index - 1];
+      allColumns.push(bar.column ?? (bar.direction === previous.direction ? allColumns[index - 1] : allColumns[index - 1] + 1));
+    }
+  }
+  const start = Math.max(0, allBars.length - 80);
+  const bars = allBars.slice(start);
+  const columns = allColumns.slice(start);
+  const predecessor = start > 0 ? { bar: allBars[start - 1], column: allColumns[start - 1] } : undefined;
+  const columnDomain = [...columns, ...(isKagi && predecessor ? [predecessor.column] : [])];
+  const minColumn = Math.min(...columnDomain), maxColumn = Math.max(...columnDomain);
+  const lo = Math.min(...bars.map(bar => bar.low), ...(predecessor ? [predecessor.bar.low] : []));
+  const hi = Math.max(...bars.map(bar => bar.high), ...(predecessor ? [predecessor.bar.high] : []));
+  const scale = (value: number) => 90 - ((value - lo) / (hi - lo || 1)) * 74;
+  const width = 396 / Math.max(bars.length, 1);
   const columnX = (column: number) => 12 + ((column - minColumn) / (maxColumn - minColumn || 1)) * 396;
-  return <figure className="ax-knowledge-chart ax-book-chart"><svg data-chart-kind={chart.kind} viewBox="0 0 420 116" role="img" aria-label={`${label}图解`}><line x1="12" y1="92" x2="408" y2="92" />{isCandle ? bars.map((bar, index) => { const x = 12 + index * width + width / 2, rise = bar.close >= bar.open; return <g key={index} className={rise ? 'up' : 'down'}><line x1={x} y1={scale(bar.high)} x2={x} y2={scale(bar.low)} /><rect x={x - Math.max(1, width * .28)} y={Math.min(scale(bar.open), scale(bar.close))} width={Math.max(2, width * .56)} height={Math.max(1, Math.abs(scale(bar.open) - scale(bar.close)))} /></g>; }) : isPnf ? bars.map((bar, index) => <text key={index} data-pnf-column={columns[index]} className={bar.direction && bar.direction < 0 ? 'down' : 'up'} x={columnX(columns[index])} y={scale(bar.close)} textAnchor="middle">{bar.direction && bar.direction < 0 ? 'O' : 'X'}</text>) : chart.kind === 'renko' || chart.kind === 'three_line_break' ? bars.map((bar, index) => { const rise = (bar.direction ?? (bar.close >= bar.open ? 1 : -1)) > 0, x = 12 + index * width; return <rect key={index} className={rise ? 'up' : 'down'} x={x} y={Math.min(scale(bar.open), scale(bar.close))} width={Math.max(2, width - 1)} height={Math.max(3, Math.abs(scale(bar.open) - scale(bar.close)))} />; }) : isKagi ? bars.map((bar, index) => { const x = columnX(columns[index]), previous = bars[index - 1], beforeStyle = previous?.line_style || 'neutral', style = bar.line_style || 'neutral', switched = bar.switch_price != null && Math.min(bar.open, bar.close) <= bar.switch_price && bar.switch_price <= Math.max(bar.open, bar.close); return <g key={index}>{index > 0 && columns[index] !== columns[index - 1] && <line data-kagi-horizontal="true" className={beforeStyle} x1={columnX(columns[index - 1])} y1={scale(previous.close)} x2={x} y2={scale(previous.close)} />}{switched ? <><line data-kagi-vertical="true" className={beforeStyle} x1={x} y1={scale(bar.open)} x2={x} y2={scale(bar.switch_price!)} /><line data-kagi-switch="true" className={style} x1={x} y1={scale(bar.switch_price!)} x2={x} y2={scale(bar.close)} /></> : <line data-kagi-vertical="true" className={style} x1={x} y1={scale(bar.open)} x2={x} y2={scale(bar.close)} />}</g>; }) : null}</svg><figcaption>{label} · {isCandle ? '每根显示开高低收' : isPnf ? 'X 为上涨列，O 为下跌列' : isKagi ? '同向段共列；横线连接转向，阴阳切换点分段显示' : chart.kind === 'renko' ? '每砖代表固定价格移动' : '按突破方向形成的实体'}{chart.input === 'provided_ohlcv_bars' ? ` · 从当前已收盘 K 线${chart.source_price === 'close' ? '的收盘价' : '的开高低收'}重建；图形价不是成交价` : ''}{allBars.length > bars.length ? ` · 展示最近 ${bars.length}/${allBars.length} 条` : ''}</figcaption></figure>;
+  const hasTruncatedPrefix = start > 0 && (isPnf || isKagi);
+  const label = ({ heikin_ashi: '平均K线', range_bars: '范围K线', tick_bars: 'Tick K线', renko: '砖形图', point_figure: '点数图', kagi: '卡吉线', three_line_break: '三线突破' } as Record<string, string>)[chart.kind] || name;
+  return <figure className="ax-knowledge-chart ax-book-chart"><svg data-chart-kind={chart.kind} viewBox="0 0 420 116" role="img" aria-label={`${label}图解`}><line x1="12" y1="92" x2="408" y2="92" />{hasTruncatedPrefix && <text data-chart-truncated-prefix="true" className="chart-prefix" x={columnX(columns[0])} y={scale(bars[0].open)} textAnchor="middle">⋮</text>}{isCandle ? bars.map((bar, index) => { const x = 12 + index * width + width / 2, rise = bar.close >= bar.open; return <g key={index} className={rise ? 'up' : 'down'}><line x1={x} y1={scale(bar.high)} x2={x} y2={scale(bar.low)} /><rect x={x - Math.max(1, width * .28)} y={Math.min(scale(bar.open), scale(bar.close))} width={Math.max(2, width * .56)} height={Math.max(1, Math.abs(scale(bar.open) - scale(bar.close)))} /></g>; }) : isPnf ? bars.map((bar, index) => <text key={index} data-pnf-column={columns[index]} className={bar.direction && bar.direction < 0 ? 'down' : 'up'} x={columnX(columns[index])} y={scale(bar.close)} textAnchor="middle">{bar.direction && bar.direction < 0 ? 'O' : 'X'}</text>) : chart.kind === 'renko' || chart.kind === 'three_line_break' ? bars.map((bar, index) => { const rise = (bar.direction ?? (bar.close >= bar.open ? 1 : -1)) > 0, x = 12 + index * width; return <g key={index} className={rise ? 'direction-up' : 'direction-down'} data-direction={rise ? 'up' : 'down'} aria-label={rise ? '上涨' : '下跌'}><title>{rise ? '上涨' : '下跌'}</title><rect x={x} y={Math.min(scale(bar.open), scale(bar.close))} width={Math.max(2, width - 1)} height={Math.max(3, Math.abs(scale(bar.open) - scale(bar.close)))} /></g>; }) : isKagi ? bars.map((bar, index) => { const x = columnX(columns[index]), previous = bars[index - 1], beforeStyle = previous?.line_style || 'neutral', style = bar.line_style || 'neutral', switched = bar.switch_price != null && Math.min(bar.open, bar.close) <= bar.switch_price && bar.switch_price <= Math.max(bar.open, bar.close), clippedTurn = index === 0 && predecessor && columns[0] !== predecessor.column; return <g key={index}>{clippedTurn && <line data-kagi-clipped-prefix="true" className={predecessor.bar.line_style || 'neutral'} x1={columnX(predecessor.column)} y1={scale(predecessor.bar.close)} x2={x} y2={scale(predecessor.bar.close)} />}{index > 0 && columns[index] !== columns[index - 1] && <line data-kagi-horizontal="true" className={beforeStyle} x1={columnX(columns[index - 1])} y1={scale(previous.close)} x2={x} y2={scale(previous.close)} />}{switched ? <><line data-kagi-vertical="true" data-kagi-column={columns[index]} className={beforeStyle} x1={x} y1={scale(bar.open)} x2={x} y2={scale(bar.switch_price!)} /><line data-kagi-switch="true" className={style} x1={x} y1={scale(bar.switch_price!)} x2={x} y2={scale(bar.close)} /></> : <line data-kagi-vertical="true" data-kagi-column={columns[index]} className={style} x1={x} y1={scale(bar.open)} x2={x} y2={scale(bar.close)} />}</g>; }) : null}</svg><figcaption>{label} · {isCandle ? '每根显示开高低收' : isPnf ? 'X 为上涨列，O 为下跌列' : isKagi ? '同向段共列；横线连接转向，阴阳切换点分段显示' : chart.kind === 'renko' ? '每砖代表固定价格移动；实心为上涨、虚线空心为下跌' : '按突破方向形成的实体；实心为上涨、虚线空心为下跌'}{chart.input === 'provided_ohlcv_bars' ? ` · 从当前已收盘 K线${chart.source_price === 'close' ? '的收盘价' : '的开高低收'}重建；图形价不是成交价` : ''}{allBars.length > bars.length ? ` · 展示最近 ${bars.length}/${allBars.length} 条，起点以⋮表示前驱状态` : ''}</figcaption></figure>;
 }
 
 function KnowledgeVisual({ concept }: { concept: KnowledgeEntry }) {

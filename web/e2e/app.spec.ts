@@ -98,8 +98,25 @@ test('knowledge detail state is visually distinct in both themes', async ({ page
   expect(lightClosed).not.toBe(lightOpen);
 });
 
-test('book chart visuals keep P&F boxes in columns and Kagi as orthogonal segments', async ({ page }) => {
-  const bookConcepts = [{ id: 'book_chart_pnf', name: '点数图', category: '非标准图', input_kind: 'independent_inputs', inputs: [], notes: '' }, { id: 'book_chart_kagi', name: '卡吉线', category: '非标准图', input_kind: 'independent_inputs', inputs: [], notes: '' }];
+test('book chart visuals preserve state across the 80-bar display boundary and encode direction without color', async ({ page }) => {
+  const stepBars = (directions: number[]) => directions.reduce<Array<{ open: number; high: number; low: number; close: number; direction: number }>>((output, direction) => {
+    const open = output.at(-1)?.close ?? 100;
+    const close = open + direction;
+    output.push({ open, high: Math.max(open, close), low: Math.min(open, close), close, direction });
+    return output;
+  }, []);
+  // This is the exact chart_bar shape emitted by Rust P&F/Kagi evaluators: 4 X, 40 O, 40 X.
+  const statefulBars = stepBars([...Array(4).fill(1), ...Array(40).fill(-1), ...Array(40).fill(1)]);
+  const pnfChart = { kind: 'point_figure', bars: statefulBars, input: 'provided_ohlcv_bars', source_price: 'close', source_bar_count: 84, box_size: 1, reversal_boxes: 3 };
+  const kagiChart = { kind: 'kagi', bars: statefulBars.map((bar, index) => ({ ...bar, line_style: index < 4 ? 'neutral' : index < 44 ? 'yin' : 'yang', switch_price: null })), input: 'provided_ohlcv_bars', source_price: 'close', source_bar_count: 84, reversal_size: 1 };
+  const renkoChart = { kind: 'renko', bars: stepBars([1, -1]), input: 'provided_ohlcv_bars', source_price: 'close', source_bar_count: 3, brick_size: 1 };
+  const lineBreakChart = { kind: 'three_line_break', bars: stepBars([1, -1]), input: 'provided_ohlcv_bars', source_price: 'close', source_bar_count: 3, line_count: 3 };
+  const bookConcepts = [
+    { id: 'book_chart_point_figure', name: '点数图', category: '非标准图', input_kind: 'market_bars', inputs: [], notes: '' },
+    { id: 'book_chart_kagi', name: '卡吉线', category: '非标准图', input_kind: 'market_bars', inputs: [], notes: '' },
+    { id: 'book_chart_renko', name: '砖形图', category: '非标准图', input_kind: 'market_bars', inputs: [], notes: '' },
+    { id: 'book_chart_three_line_break', name: '三线突破', category: '非标准图', input_kind: 'market_bars', inputs: [], notes: '' },
+  ];
   await page.route('**/api/knowledge', async route => {
     const body = { total: bookConcepts.length, categories: { 非标准图: bookConcepts.map(entry => ({ ...entry, summary: '', formula: '', meaning: '', example: '', signals: '', pitfalls: '', related: [], code_url: '', implementation: '' })) } };
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
@@ -107,23 +124,33 @@ test('book chart visuals keep P&F boxes in columns and Kagi as orthogonal segmen
   await page.route('**/api/practice', route => {
     if (route.request().method() === 'GET') return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ concepts: bookConcepts, modules: ['data'], total: bookConcepts.length }) });
     const id = JSON.parse(route.request().postData() || '{}').concept_id;
-    const chart = id === 'book_chart_pnf' ? { kind: 'point_figure', bars: [{ open: 10, high: 12, low: 10, close: 10, direction: 1 }, { open: 10, high: 12, low: 10, close: 12, direction: 1 }, { open: 12, high: 12, low: 9, close: 9, direction: -1 }] } : { kind: 'kagi', bars: [{ open: 10, high: 12, low: 10, close: 12, direction: 1, line_style: 'yin' }, { open: 12, high: 14, low: 12, close: 14, direction: 1, line_style: 'yang', switch_price: 13 }, { open: 14, high: 14, low: 9, close: 9, direction: -1, line_style: 'yin' }] };
-    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ concept_id: id, status: 'computed', reason: null, input_kind: 'independent_inputs', provenance: 'editable_teaching_inputs', values: {}, series: [], notes: [], module: 'data', source: 'synthetic', symbol: 'BTCUSDT', bars: [], chart }) });
+    const chart = ({ book_chart_point_figure: pnfChart, book_chart_kagi: kagiChart, book_chart_renko: renkoChart, book_chart_three_line_break: lineBreakChart } as Record<string, unknown>)[id];
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ concept_id: id, status: 'computed', reason: null, input_kind: 'market_bars', provenance: 'provided_market_bars', values: {}, series: [], notes: [], module: 'data', source: 'binance', symbol: 'BTCUSDT', bars: [], chart }) });
   });
   await page.goto('/');
   const cards = page.locator('.ax-kb-card');
   await cards.nth(0).locator('.ax-kb-details').click();
   const pnf = cards.nth(0).locator('[data-chart-kind="point_figure"]');
   await expect(pnf).toBeVisible();
-  const pnfXs = await pnf.locator('[data-pnf-column="0"]').evaluateAll(nodes => nodes.map(node => node.getAttribute('x')));
-  expect(new Set(pnfXs).size).toBe(1);
+  await expect(pnf.locator('[data-chart-truncated-prefix="true"]')).toHaveCount(1);
+  await expect(pnf.locator('[data-pnf-column="1"]')).toHaveCount(40);
+  await expect(pnf.locator('[data-pnf-column="2"]')).toHaveCount(40);
   await cards.nth(1).locator('.ax-kb-details').click();
   const kagi = cards.nth(1).locator('[data-chart-kind="kagi"]');
-  await expect(kagi.locator('[data-kagi-horizontal="true"]')).toHaveCount(1);
-  await expect(kagi.locator('[data-kagi-vertical="true"]')).toHaveCount(3);
-  await expect(kagi.locator('[data-kagi-switch="true"]')).toHaveCount(1);
-  const sameColumnXs = await kagi.locator('[data-kagi-vertical="true"]').evaluateAll(nodes => nodes.slice(0, 2).map(node => node.getAttribute('x1')));
-  expect(new Set(sameColumnXs).size).toBe(1);
+  await expect(kagi.locator('[data-chart-truncated-prefix="true"]')).toHaveCount(1);
+  await expect(kagi.locator('[data-kagi-clipped-prefix="true"]')).toHaveCount(1);
+  await expect(kagi.locator('[data-kagi-column="1"]')).toHaveCount(40);
+  await expect(kagi.locator('[data-kagi-column="2"]')).toHaveCount(40);
+  await cards.nth(2).locator('.ax-kb-details').click();
+  const renko = cards.nth(2).locator('[data-chart-kind="renko"]');
+  await expect(renko.locator('[data-direction="up"] rect')).toHaveCount(1);
+  await expect(renko.locator('[data-direction="down"] rect')).toHaveCount(1);
+  await expect(renko.locator('[data-direction="down"]')).toHaveAttribute('aria-label', '下跌');
+  await cards.nth(3).locator('.ax-kb-details').click();
+  const lineBreak = cards.nth(3).locator('[data-chart-kind="three_line_break"]');
+  await expect(lineBreak.locator('[data-direction="up"] rect')).toHaveCount(1);
+  await expect(lineBreak.locator('[data-direction="down"] rect')).toHaveCount(1);
+  await expect(lineBreak.locator('[data-direction="down"]')).toHaveAttribute('aria-label', '下跌');
 });
 
 test('paper trading applies the selected real market and symbol before it starts', async ({ page }) => {

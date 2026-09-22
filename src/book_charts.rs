@@ -227,6 +227,11 @@ fn closed_market_bars(bars: &[Bar]) -> Result<&[Bar], String> {
     crate::practice::validate_bars(bars)?;
     if bars.is_empty() {
         Err("需要至少一根有序、完整且已收盘的 OHLCV K 线".into())
+    } else if bars
+        .last()
+        .is_some_and(|bar| bar.timestamp > chrono::Utc::now())
+    {
+        Err("K 线时间在未来；已收盘状态须由带市场周期的 API 再验证".into())
     } else {
         Ok(bars)
     }

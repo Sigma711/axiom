@@ -9,7 +9,7 @@ use axum::{
     body::{to_bytes, Body},
     http::{Request, StatusCode},
 };
-use chrono::{TimeZone, Utc};
+use chrono::{TimeZone, Timelike, Utc};
 use serde_json::{json, Value};
 use std::{path::PathBuf, sync::Arc};
 use tower::ServiceExt;
@@ -372,6 +372,50 @@ async fn book_financial_practices_require_equity_evidence_and_reject_crypto() {
             option["plan"]["required_datasets"],
             json!(["timestamped_option_chain", "underlying_price"]),
             "{id}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn market_practice_rejects_the_current_unfinished_binance_hour() {
+    let app = app();
+    let hour_start = Utc::now()
+        .with_minute(0)
+        .unwrap()
+        .with_second(0)
+        .unwrap()
+        .with_nanosecond(0)
+        .unwrap();
+    let bars = SyntheticFeed::new(8)
+        .fetch_historical("BTCUSDT", hour_start - chrono::Duration::hours(1), 2)
+        .unwrap();
+    let (status, _) = request(
+        &app,
+        "/api/practice",
+        json!({"concept_id":"book_chart_renko","module":"data","symbol":"BTCUSDT","source":"binance","bars":bars,"inputs":{}}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    for (source, symbol, hours_before_now) in [("a_share", "600519", 7), ("us_stock", "AAPL", 21)] {
+        let mut daily_bars = SyntheticFeed::new(8)
+            .fetch_historical(
+                "BTCUSDT",
+                Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+                2,
+            )
+            .unwrap();
+        daily_bars[0].timestamp = Utc::now() - chrono::Duration::hours(hours_before_now + 24);
+        daily_bars[1].timestamp = Utc::now() - chrono::Duration::hours(hours_before_now);
+        let (status, _) = request(
+            &app,
+            "/api/practice",
+            json!({"concept_id":"book_chart_renko","module":"data","symbol":symbol,"source":source,"bars":daily_bars,"inputs":{}}),
+        )
+        .await;
+        assert_eq!(
+            status,
+            StatusCode::BAD_REQUEST,
+            "{source} unfinished session"
         );
     }
 }

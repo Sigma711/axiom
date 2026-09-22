@@ -237,9 +237,12 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
 .ax-scalar-chart text:first-of-type { fill: var(--accent-2); font-weight: 700; }
 .ax-book-chart .up { fill: var(--green); stroke: var(--green); }
 .ax-book-chart .down { fill: var(--red); stroke: var(--red); }
+.ax-book-chart .direction-up rect { fill: var(--green); stroke: var(--green); }
+.ax-book-chart .direction-down rect { fill: transparent; stroke: var(--red); stroke-width: 1.5; stroke-dasharray: 2 1; }
 .ax-book-chart .yin { fill: none; stroke: var(--red); stroke-width: 1.5; }
 .ax-book-chart .yang { fill: none; stroke: var(--green); stroke-width: 3; }
 .ax-book-chart .neutral { fill: none; stroke: var(--accent-2); stroke-width: 2; }
+.ax-book-chart .chart-prefix { fill: var(--text-dim); font-size: 18px; }
 .ax-book-chart line { stroke: var(--border); }
 .ax-book-chart g line { stroke-width: 1; }
 .ax-book-chart polyline { fill: none; stroke: var(--accent-2); stroke-width: 2; stroke-linejoin: round; }
@@ -393,7 +396,7 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
   .ax-cmp-table th, .ax-cmp-table td { white-space: nowrap; padding: 0.45rem; }
 }
 
-.ax-series-illustration svg text { fill: var(--text-dim); font: 12px system-ui, sans-serif; }
+.ax-series-illustration svg text { fill: var(--text-dim); font: 14px system-ui, sans-serif; }
 .ax-series-legend { display: flex; flex-wrap: wrap; gap: 0.4rem 0.8rem; margin: 0.4rem 0; }
 .ax-series-legend span { display: inline-flex; align-items: center; gap: 0.3rem; overflow-wrap: anywhere; }
 .ax-series-legend i { display: inline-block; width: 1rem; height: 3px; }

@@ -155,6 +155,9 @@ fn market_charts_reject_price_fixtures_and_invalid_or_missing_ohlcv() {
     invalid[1].timestamp = DateTime::from_timestamp(60, 0).unwrap();
     invalid[1].high = invalid[1].open - 0.1;
     assert!(charts::evaluate("book_chart_renko", &invalid, &json!({})).is_err());
+    let mut future = valid;
+    future[1].timestamp = chrono::Utc::now() + chrono::Duration::hours(1);
+    assert!(charts::evaluate("book_chart_renko", &future, &json!({})).is_err());
 }
 
 #[test]

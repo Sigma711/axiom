@@ -1596,6 +1596,24 @@ fn source_market(source: &str) -> Option<&'static str> {
     }
 }
 
+fn practice_bars_are_closed(bars: &[Bar], source: &str) -> Result<(), ApiError> {
+    let close_after = match source {
+        "real" | "binance" | "synthetic" => Duration::hours(1),
+        "a_share" => Duration::hours(8),
+        "us_stock" => Duration::hours(22),
+        _ => return Err(validate::bad("unsupported practice source")),
+    };
+    if bars
+        .last()
+        .is_some_and(|bar| bar.timestamp + close_after > Utc::now())
+    {
+        return Err(validate::bad(
+            "practice bars include an unfinished or future market candle",
+        ));
+    }
+    Ok(())
+}
+
 fn plan_allows(plan: &Value, field: &str, value: &str) -> bool {
     plan[field]
         .as_array()
@@ -1724,6 +1742,9 @@ async fn post_practice(
     } else {
         market_bars(&state, &symbol, &source, limit).await?
     };
+    if !bars.is_empty() {
+        practice_bars_are_closed(&bars, &source)?;
+    }
     let result_required = plan["source_policy"].as_str() == Some("result_required");
     if result_required {
         // The evaluator has teaching defaults. Result modules must never fall back to them.

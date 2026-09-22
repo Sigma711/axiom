@@ -2,7 +2,7 @@
   "concepts": [
     {
       "id": "book_volume_24h",
-      "name": "24-hour Volume",
+      "name": "24 小时成交量（24-hour Volume）",
       "category": "衍生品与链上",
       "summary": "滚动 24 小时成交量，常见于加密货币等全天交易市场。",
       "meaning": "滚动 24 小时成交量，常见于加密货币等全天交易市场。例：当前数值统计此刻向前 24 小时，而不是自然日。",

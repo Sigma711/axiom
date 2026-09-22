@@ -332,7 +332,7 @@ test('rolling 24-hour volume sums the latest completed Binance hours without edi
   expect(payload.provenance).toBe('provided_market_bars');
   expect(payload.values.rolling_24h_volume).toBeCloseTo(expected, 8);
   await expect(panel).toContainText('基于当前标的已收盘行情');
-  await expect(panel.getByRole('img', { name: /24-hour Volume 全部序列/ })).toBeVisible();
+  await expect(panel.getByRole('img', { name: /24 小时成交量.*全部序列/ })).toBeVisible();
   await expect(panel).toContainText('每小时成交量');
 });
 
