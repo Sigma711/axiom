@@ -268,7 +268,7 @@ pub struct HttpFeed {
 impl HttpFeed {
     pub fn new(cache_dir: impl Into<PathBuf>) -> Self {
         Self {
-            base_url: "https://api.binance.com".to_string(),
+            base_url: "https://data-api.binance.vision".to_string(),
             csv: CsvFeed::new(cache_dir),
             client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(15))
@@ -387,5 +387,18 @@ impl AsyncDataFeed for HttpFeed {
         bars.sort_by_key(|bar| bar.timestamp);
         bars.dedup_by_key(|bar| bar.timestamp);
         Ok(bars)
+    }
+}
+
+#[cfg(test)]
+mod deployment_endpoint_tests {
+    use super::HttpFeed;
+
+    #[test]
+    fn default_http_feed_uses_the_public_binance_data_endpoint() {
+        assert_eq!(
+            HttpFeed::new("target/test-market-cache").base_url,
+            "https://data-api.binance.vision"
+        );
     }
 }

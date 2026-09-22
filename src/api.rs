@@ -1060,7 +1060,7 @@ async fn fetch_symbols_from_binance() -> anyhow::Result<Vec<String>> {
         .build()?;
     // 获取所有交易对
     let exchange_info: serde_json::Value = client
-        .get("https://api.binance.com/api/v3/exchangeInfo")
+        .get("https://data-api.binance.vision/api/v3/exchangeInfo")
         .send()
         .await?
         .json()
@@ -1068,7 +1068,7 @@ async fn fetch_symbols_from_binance() -> anyhow::Result<Vec<String>> {
     let raw_symbols: Vec<BinanceSymbol> = serde_json::from_value(exchange_info["symbols"].clone())?;
     // 获取 24h 成交量排序
     let tickers: Vec<BinanceTicker> = client
-        .get("https://api.binance.com/api/v3/ticker/24hr")
+        .get("https://data-api.binance.vision/api/v3/ticker/24hr")
         .send()
         .await?
         .json()
