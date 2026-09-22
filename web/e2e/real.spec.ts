@@ -136,3 +136,99 @@ test('browser switches among three live markets with matching symbols and valid 
     await expect(page.locator('.ax-summary')).toContainText(market.symbol);
   }
 });
+
+
+test('real market selections stay aligned across backtest comparison and paper', async ({ page }) => {
+  test.setTimeout(180_000);
+  const markets = [
+    { source: 'a_share', symbol: '600519', label: '\u0041 \u80a1 \u00b7 \u516c\u5f00\u884c\u60c5' },
+    { source: 'us_stock', symbol: 'AAPL', label: '\u7f8e\u80a1 \u00b7 \u516c\u5f00\u884c\u60c5' },
+  ] as const;
+  const selectMarket = async (market: (typeof markets)[number]) => {
+    await page.getByRole('button', { name: /\u6570\u636e\u6e90/ }).click();
+    await page.getByRole('option', { name: market.label, exact: true }).click();
+    await expect(page.getByRole('button', { name: /\u4ea4\u6613\u5bf9/ })).toContainText(market.symbol);
+  };
+  const assertBars = (payload: any) => {
+    expect(payload.bars.length).toBeGreaterThan(40);
+    expect(payload.bars.every((bar: any) =>
+      [bar.open, bar.high, bar.low, bar.close, bar.volume].every((value: number) => Number.isFinite(value)) &&
+      bar.low <= Math.min(bar.open, bar.close) &&
+      bar.high >= Math.max(bar.open, bar.close),
+    )).toBe(true);
+  };
+
+  await page.goto('/backtest');
+  await expect(page.getByRole('button', { name: /\u8fd0\u884c\u56de\u6d4b/ })).toBeEnabled();
+  for (const market of markets) {
+    await selectMarket(market);
+    const requestPromise = page.waitForRequest(request => {
+      const url = new URL(request.url());
+      return request.method() === 'POST' && url.pathname.endsWith('/api/backtest');
+    });
+    const responsePromise = page.waitForResponse(response => response.url().includes('/api/backtest') && response.request().method() === 'POST');
+    await page.getByRole('button', { name: /\u8fd0\u884c\u56de\u6d4b/ }).click();
+    const [request, response] = await Promise.all([requestPromise, responsePromise]);
+    const body = request.postDataJSON() as { source: string; symbol: string };
+    expect(body.source).toBe(market.source);
+    expect(body.symbol).toBe(market.symbol);
+    expect(response.ok()).toBe(true);
+    const payload = await response.json();
+    assertBars(payload);
+    expect(payload.equity_curve.length).toBeGreaterThan(40);
+    await expect(page.locator('.ax-metrics')).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator('.ax-chart svg.main-svg').first()).toBeVisible({ timeout: 20_000 });
+  }
+
+  await page.goto('/compare');
+  await expect.poll(() => page.locator('.ax-pool-item').count(), { timeout: 20_000 }).toBeGreaterThanOrEqual(2);
+  await page.getByRole('button', { name: /\u5168\u4e0d\u9009/ }).click();
+  const pool = page.locator('.ax-pool-item');
+  await expect(page.locator('.ax-pool-item.checked')).toHaveCount(0);
+  await pool.nth(0).locator('input').click();
+  await pool.nth(1).locator('input').click();
+  await expect(page.locator('.ax-pool-item.checked')).toHaveCount(2);
+  const comparisonRequests: any[] = [];
+  const onRequest = (request: import('@playwright/test').Request) => {
+    const url = new URL(request.url());
+    if (request.method() === 'POST' && url.pathname.endsWith('/api/backtest')) comparisonRequests.push(request.postDataJSON());
+  };
+  page.on('request', onRequest);
+  for (const market of markets) {
+    comparisonRequests.length = 0;
+    await selectMarket(market);
+    await page.getByRole('button', { name: /\u8dd1\u5bf9\u6bd4/ }).click();
+    await expect.poll(() => comparisonRequests.length, { timeout: 45_000 }).toBe(2);
+    for (const body of comparisonRequests) {
+      expect(body.source).toBe(market.source);
+      expect(body.symbol).toBe(market.symbol);
+    }
+    await expect.poll(() => page.locator('.ax-cmp-table tbody tr').count(), { timeout: 30_000 }).toBe(2);
+    await expect(page.locator('.ax-chart svg.main-svg').first()).toBeVisible({ timeout: 20_000 });
+  }
+  page.off('request', onRequest);
+
+  await page.goto('/paper');
+  await expect(page.getByRole('heading', { name: /\u6a21\u62df\u76d8/ })).toBeVisible();
+  await expect(page.locator('.ax-paper-stats')).toBeVisible({ timeout: 20_000 });
+  for (const market of markets) {
+    await selectMarket(market);
+    const requestPromise = page.waitForRequest(request => {
+      const url = new URL(request.url());
+      return request.method() === 'POST' && url.pathname.endsWith('/api/paper/config');
+    });
+    const responsePromise = page.waitForResponse(response => response.url().includes('/api/paper/config') && response.request().method() === 'POST');
+    await page.getByRole('button', { name: /\u5e94\u7528\u5e02\u573a/ }).click();
+    const [request, response] = await Promise.all([requestPromise, responsePromise]);
+    const body = request.postDataJSON() as { source: string; symbol: string };
+    expect(body.source).toBe(market.source);
+    expect(body.symbol).toBe(market.symbol);
+    expect(response.ok()).toBe(true);
+    const payload = await response.json();
+    expect(payload.source).toBe(market.source);
+    expect(payload.symbol).toBe(market.symbol);
+    await expect(page.locator('.ax-paper-stats')).toContainText(market.symbol);
+    await expect(page.locator('.ax-paper-stats')).not.toContainText(/\u4ea4\u6613\u5bf9\s+—/);
+    await expect(page.locator('.ax-paper-stats')).not.toContainText(/\u6570\u636e\u6e90\s+—/);
+  }
+});
