@@ -628,45 +628,120 @@ async fn fetch_a_share(symbol: &str, since: DateTime<Utc>, limit: usize) -> Resu
     }
 }
 
-async fn fetch_us_stock(symbol: &str, since: DateTime<Utc>, limit: usize) -> Result<Vec<Bar>> {
-    anyhow::ensure!(
-        !symbol.is_empty()
-            && symbol.len() <= 12
-            && symbol
-                .bytes()
-                .all(|byte| byte.is_ascii_uppercase() || byte == b'.' || byte == b'-'),
-        "US symbol must contain uppercase letters, digits, dot or dash"
-    );
+fn display_number(value: &serde_json::Value) -> Option<f64> {
+    value.as_str()?.replace(['$', ','], "").parse().ok()
+}
+
+fn parse_nasdaq_bars(raw: &serde_json::Value) -> Result<Vec<Bar>> {
+    let rows = raw
+        .pointer("/data/tradesTable/rows")
+        .and_then(serde_json::Value::as_array)
+        .context("Nasdaq response has no daily rows")?;
+    let mut bars: Vec<Bar> = rows
+        .iter()
+        .filter_map(|row| {
+            let date = row.get("date")?.as_str()?;
+            let day = NaiveDate::parse_from_str(date, "%m/%d/%Y").ok()?;
+            let timestamp = Utc.from_utc_datetime(&day.and_hms_opt(0, 0, 0)?);
+            let bar = Bar {
+                timestamp,
+                open: display_number(row.get("open")?)?,
+                high: display_number(row.get("high")?)?,
+                low: display_number(row.get("low")?)?,
+                close: display_number(row.get("close")?)?,
+                volume: display_number(row.get("volume")?)?,
+            };
+            (crate::practice::validate_bars(&[bar]).is_ok()).then_some(bar)
+        })
+        .collect();
+    bars.sort_by_key(|bar| bar.timestamp);
+    crate::practice::validate_bars(&bars).map_err(anyhow::Error::msg)?;
+    Ok(bars)
+}
+
+async fn fetch_us_stock_nasdaq(
+    symbol: &str,
+    since: DateTime<Utc>,
+    limit: usize,
+) -> Result<Vec<Bar>> {
     let raw: serde_json::Value = reqwest::Client::new()
         .get(format!(
-            "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+            "https://api.nasdaq.com/api/quote/{symbol}/historical"
         ))
         .header(
             reqwest::header::USER_AGENT,
-            "AXIOM educational market reader/1.0",
+            "Mozilla/5.0 (compatible; AXIOM educational market reader/1.0)",
         )
+        .header(reqwest::header::ACCEPT, "application/json")
         .query(&[
-            ("period1", since.timestamp().to_string()),
-            ("period2", Utc::now().timestamp().to_string()),
-            ("interval", "1d".to_owned()),
-            ("includePrePost", "false".to_owned()),
-            ("events", "div,splits".to_owned()),
+            ("assetclass", "stocks".to_owned()),
+            ("fromdate", since.format("%Y-%m-%d").to_string()),
+            ("todate", Utc::now().format("%Y-%m-%d").to_string()),
         ])
         .timeout(std::time::Duration::from_secs(15))
         .send()
         .await
-        .context("US market request failed")?
+        .context("Nasdaq market request failed")?
         .error_for_status()
-        .context("US market returned HTTP error")?
+        .context("Nasdaq market returned HTTP error")?
         .json()
         .await
-        .context("invalid US market JSON")?;
-    let mut bars = parse_yahoo_bars(&raw)?;
+        .context("invalid Nasdaq market JSON")?;
+    let mut bars = parse_nasdaq_bars(&raw)?;
     bars.retain(|bar| bar.timestamp >= since);
     if bars.len() > limit {
         bars = bars.split_off(bars.len() - limit);
     }
     Ok(bars)
+}
+
+async fn fetch_us_stock(symbol: &str, since: DateTime<Utc>, limit: usize) -> Result<Vec<Bar>> {
+    anyhow::ensure!(
+        !symbol.is_empty()
+            && symbol.len() <= 12
+            && symbol.bytes().all(|byte| byte.is_ascii_uppercase()
+                || byte.is_ascii_digit()
+                || byte == b'.'
+                || byte == b'-'),
+        "US symbol must contain uppercase letters, digits, dot or dash"
+    );
+    let primary = async {
+        let raw: serde_json::Value = reqwest::Client::new()
+            .get(format!(
+                "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+            ))
+            .header(
+                reqwest::header::USER_AGENT,
+                "AXIOM educational market reader/1.0",
+            )
+            .query(&[
+                ("period1", since.timestamp().to_string()),
+                ("period2", Utc::now().timestamp().to_string()),
+                ("interval", "1d".to_owned()),
+                ("includePrePost", "false".to_owned()),
+                ("events", "div,splits".to_owned()),
+            ])
+            .timeout(std::time::Duration::from_secs(15))
+            .send()
+            .await
+            .context("US market request failed")?
+            .error_for_status()
+            .context("US market returned HTTP error")?
+            .json()
+            .await
+            .context("invalid US market JSON")?;
+        let mut bars = parse_yahoo_bars(&raw)?;
+        bars.retain(|bar| bar.timestamp >= since);
+        if bars.len() > limit {
+            bars = bars.split_off(bars.len() - limit);
+        }
+        Ok::<Vec<Bar>, anyhow::Error>(bars)
+    }
+    .await;
+    match primary {
+        Ok(bars) if !bars.is_empty() => Ok(bars),
+        Ok(_) | Err(_) => fetch_us_stock_nasdaq(symbol, since, limit).await,
+    }
 }
 
 /// Fetch completed candles from a named free public source. Source-specific
@@ -739,6 +814,18 @@ mod public_market_source_tests {
         let bars = parse_yahoo_bars(&raw).unwrap();
         assert_eq!(bars.len(), 1);
         assert_eq!(bars[0].close, 11.0);
+    }
+
+    #[test]
+    fn nasdaq_rows_parse_display_numbers_and_reverse_chronology() {
+        let raw = serde_json::json!({"data":{"tradesTable":{"rows":[
+            {"date":"01/03/2024","open":"$11.00","high":"$12.00","low":"$10.00","close":"$11.50","volume":"1,000"},
+            {"date":"01/02/2024","open":"$10.00","high":"$11.00","low":"$9.00","close":"$10.50","volume":"900"}
+        ]}}});
+        let bars = parse_nasdaq_bars(&raw).unwrap();
+        assert_eq!(bars.len(), 2);
+        assert_eq!(bars[0].timestamp.to_rfc3339(), "2024-01-02T00:00:00+00:00");
+        assert_eq!((bars[1].close, bars[1].volume), (11.5, 1000.0));
     }
 
     #[test]
