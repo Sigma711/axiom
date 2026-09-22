@@ -46,3 +46,6 @@ htmlcov/
 /static/index.html
 /coverage/
 /work/
+
+# Persisted live symbol directories
+/data/symbols/

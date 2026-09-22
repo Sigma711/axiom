@@ -17,6 +17,16 @@ make build-rust
 mkdir -p target/deploy-release/static
 rsync -a --delete static/ target/deploy-release/static/
 rsync -a "$bundle/" target/deploy-release/static/
+# Existing live directories survive release switches. On a first install,
+# seed them from the locally verified runtime cache before starting the service.
+ssh root@sigma711.top "install -d -o axiom -g axiom -m 755 /srv/axiom/data/symbols"
+for source in a_share us_stock; do
+    if ! ssh root@sigma711.top "test -s /srv/axiom/data/symbols/$source.json"; then
+        test -s "data/symbols/$source.json"
+        rsync -az "data/symbols/$source.json" "root@sigma711.top:/srv/axiom/data/symbols/.$source.deploy.tmp"
+        ssh root@sigma711.top "chown axiom:axiom /srv/axiom/data/symbols/.$source.deploy.tmp && mv -f /srv/axiom/data/symbols/.$source.deploy.tmp /srv/axiom/data/symbols/$source.json"
+    fi
+done
 ssh root@sigma711.top "mkdir -p '$release/static'"
 rsync -az target/release/axiom "root@sigma711.top:$release/axiom"
 rsync -az --delete target/deploy-release/static/ "root@sigma711.top:$release/static/"
@@ -64,13 +74,13 @@ for source, symbol, minimum in markets:
     deadline = time.monotonic() + 120
     while True:
         catalog = read_json("/api/symbols", {"source": source, "limit": 5})
-        if catalog["complete"] and catalog["status"] == "cached" and catalog["universe_count"] >= minimum:
+        if catalog["complete"] and catalog["status"] in ("cached", "stale") and catalog["universe_count"] >= minimum:
             break
         if time.monotonic() >= deadline:
             raise AssertionError(f"{source} catalog incomplete: {catalog}")
         time.sleep(3)
     match = read_json("/api/symbols", {"source": source, "q": symbol, "limit": 5})
     assert any(item["symbol"] == symbol for item in match["items"]), (source, symbol, match)
-    print(source, "catalog", catalog["universe_count"], flush=True)
+    print(source, "catalog", catalog["universe_count"], catalog["status"], flush=True)
 PYVERIFY
 trap - ERR

@@ -5,18 +5,20 @@
 
 use anyhow::{Context, Result};
 use futures::{stream, StreamExt};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::{Mutex, RwLock};
 
 const PAGE_SIZE: usize = 100;
 const MAX_SEARCH_LIMIT: usize = 100;
 const CACHE_TTL: Duration = Duration::from_secs(60 * 60 * 24);
+const SNAPSHOT_VERSION: u8 = 1;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct SymbolItem {
     pub symbol: String,
     pub name: String,
@@ -29,6 +31,15 @@ struct CatalogSnapshot {
     fetched_at: Instant,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct PersistedCatalog {
+    version: u8,
+    fetched_at_unix: i64,
+    items: Vec<SymbolItem>,
+    #[serde(default)]
+    complete: Option<bool>,
+}
+
 static CATALOGS: OnceLock<RwLock<HashMap<String, CatalogSnapshot>>> = OnceLock::new();
 static REFRESHING: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
@@ -38,6 +49,99 @@ fn catalogs() -> &'static RwLock<HashMap<String, CatalogSnapshot>> {
 
 fn refreshing() -> &'static Mutex<HashSet<String>> {
     REFRESHING.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn symbol_data_dir() -> PathBuf {
+    std::env::var_os("AXIOM_DATA_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("data"))
+        .join("symbols")
+}
+
+fn snapshot_path(data_dir: &Path, source: &str) -> PathBuf {
+    data_dir.join(format!("{source}.json"))
+}
+
+fn minimum_snapshot_items(source: &str) -> usize {
+    match source {
+        // A complete Eastmoney catalog currently contains several thousand
+        // rows; this floor prevents a seed or partial response being persisted.
+        "a_share" => 1_000,
+        "us_stock" => 5_000,
+        _ => usize::MAX,
+    }
+}
+
+fn complete_snapshot(source: &str, items: &[SymbolItem], complete: Option<bool>) -> bool {
+    complete != Some(false) && items.len() >= minimum_snapshot_items(source)
+}
+
+fn load_persisted_catalog_from(data_dir: &Path, source: &str) -> Option<CatalogSnapshot> {
+    let raw = std::fs::read(snapshot_path(data_dir, source)).ok()?;
+    let persisted: PersistedCatalog = serde_json::from_slice(&raw).ok()?;
+    if persisted.version != SNAPSHOT_VERSION
+        || !complete_snapshot(source, &persisted.items, persisted.complete)
+        || persisted.fetched_at_unix < 0
+    {
+        return None;
+    }
+    let fetched_at = UNIX_EPOCH + Duration::from_secs(persisted.fetched_at_unix as u64);
+    let age = SystemTime::now()
+        .duration_since(fetched_at)
+        .unwrap_or_default();
+    Some(CatalogSnapshot {
+        items: persisted.items,
+        fetched_at: Instant::now().checked_sub(age).unwrap_or_else(Instant::now),
+    })
+}
+
+fn load_persisted_catalog(source: &str) -> Option<CatalogSnapshot> {
+    load_persisted_catalog_from(&symbol_data_dir(), source)
+}
+
+fn persist_catalog_snapshot_at(
+    data_dir: &Path,
+    source: &str,
+    items: &[SymbolItem],
+    fetched_at: SystemTime,
+) -> Result<()> {
+    anyhow::ensure!(
+        complete_snapshot(source, items, Some(true)),
+        "refusing to persist incomplete symbol directory"
+    );
+    let fetched_at_unix = fetched_at
+        .duration_since(UNIX_EPOCH)
+        .context("symbol snapshot timestamp is before Unix epoch")?
+        .as_secs() as i64;
+    let persisted = PersistedCatalog {
+        version: SNAPSHOT_VERSION,
+        fetched_at_unix,
+        items: items.to_vec(),
+        complete: Some(true),
+    };
+    std::fs::create_dir_all(data_dir)
+        .with_context(|| format!("creating symbol snapshot directory {data_dir:?}"))?;
+    let path = snapshot_path(data_dir, source);
+    let temp = data_dir.join(format!(".{source}.{}.tmp", uuid::Uuid::new_v4()));
+    let result = (|| -> Result<()> {
+        let mut file = std::fs::File::create(&temp)
+            .with_context(|| format!("creating symbol snapshot temp file {temp:?}"))?;
+        let bytes = serde_json::to_vec_pretty(&persisted)?;
+        std::io::Write::write_all(&mut file, &bytes)?;
+        file.sync_all()?;
+        drop(file);
+        std::fs::rename(&temp, &path)
+            .with_context(|| format!("installing symbol snapshot {path:?}"))?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temp);
+    }
+    result
+}
+
+fn persist_catalog_snapshot(source: &str, items: &[SymbolItem]) -> Result<()> {
+    persist_catalog_snapshot_at(&symbol_data_dir(), source, items, SystemTime::now())
 }
 
 fn seed(source: &str) -> Vec<SymbolItem> {
@@ -382,6 +486,9 @@ where
     tokio::spawn(async move {
         match load.await {
             Ok(items) => {
+                if let Err(error) = persist_catalog_snapshot(&source, &items) {
+                    tracing::warn!(source, %error, "symbol directory snapshot write failed");
+                }
                 catalogs().write().await.insert(
                     source.clone(),
                     CatalogSnapshot {
@@ -410,6 +517,12 @@ pub async fn search(
     );
     anyhow::ensure!(query.chars().count() <= 64, "symbol query is too long");
     let limit = limit.clamp(1, MAX_SEARCH_LIMIT);
+
+    if catalogs().read().await.get(source).is_none() {
+        if let Some(snapshot) = load_persisted_catalog(source) {
+            catalogs().write().await.insert(source.to_owned(), snapshot);
+        }
+    }
 
     if let Some(snapshot) = catalogs().read().await.get(source).cloned() {
         let universe_count = snapshot.items.len();
@@ -817,5 +930,67 @@ mod tests {
             refreshed
         );
         catalogs().write().await.remove("refresh_success");
+    }
+
+    fn complete_fixture_items(count: usize) -> Vec<SymbolItem> {
+        (0..count)
+            .map(|index| SymbolItem {
+                symbol: format!("{index:06}"),
+                name: format!("fixture {index}"),
+                exchange: "SZSE".into(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn durable_catalog_snapshots_round_trip_atomically_and_reject_incomplete_files() {
+        let dir = PathBuf::from(format!(
+            "target/test-symbol-snapshot-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let items = complete_fixture_items(1_000);
+        persist_catalog_snapshot_at(&dir, "a_share", &items, SystemTime::now()).unwrap();
+        let loaded = load_persisted_catalog_from(&dir, "a_share").unwrap();
+        assert_eq!(loaded.items, items);
+        assert!(loaded.fetched_at.elapsed() < Duration::from_secs(5));
+        let raw: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(snapshot_path(&dir, "a_share")).unwrap())
+                .unwrap();
+        assert_eq!(raw["version"], SNAPSHOT_VERSION);
+        assert_eq!(raw["complete"], true);
+        assert!(!std::fs::read_dir(&dir).unwrap().any(|entry| entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .contains(".tmp")));
+
+        assert!(
+            persist_catalog_snapshot_at(&dir, "a_share", &seed("a_share"), SystemTime::now())
+                .is_err()
+        );
+        std::fs::write(
+            snapshot_path(&dir, "us_stock"),
+            serde_json::json!({
+                "version": SNAPSHOT_VERSION,
+                "fetched_at_unix": 0,
+                "complete": false,
+                "items": complete_fixture_items(5_000)
+            })
+            .to_string(),
+        )
+        .unwrap();
+        assert!(load_persisted_catalog_from(&dir, "us_stock").is_none());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn durable_stale_snapshot_remains_complete_and_reports_age() {
+        let dir = PathBuf::from(format!("target/test-symbol-stale-{}", uuid::Uuid::new_v4()));
+        let items = complete_fixture_items(1_000);
+        persist_catalog_snapshot_at(&dir, "a_share", &items, UNIX_EPOCH).unwrap();
+        let loaded = load_persisted_catalog_from(&dir, "a_share").unwrap();
+        assert!(loaded.fetched_at.elapsed() > CACHE_TTL);
+        assert!(complete_snapshot("a_share", &loaded.items, Some(true)));
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }
