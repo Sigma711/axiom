@@ -22,7 +22,16 @@ fn released_server_boots_and_serves_the_strategy_api() {
     let port = unused_loopback_port();
     let data_dir =
         std::env::temp_dir().join(format!("axiom-startup-{}-{port}", std::process::id()));
-    let binary = env!("CARGO_BIN_EXE_axiom");
+    // The coverage runner puts an instrumented executable beside this harness.
+    // Ordinary cargo test still falls back to Cargo's binary path.
+    let instrumented = std::env::current_exe()
+        .expect("locate test executable")
+        .parent()
+        .and_then(|deps| deps.parent())
+        .map(|target| target.join("axiom"));
+    let binary = instrumented
+        .filter(|path| path.is_file())
+        .unwrap_or_else(|| env!("CARGO_BIN_EXE_axiom").into());
     let mut child = Command::new(binary)
         .env("AXIOM_HOST", "127.0.0.1")
         .env("AXIOM_PORT", port.to_string())
