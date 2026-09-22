@@ -275,6 +275,81 @@ async fn paper_controls_persist_and_reject_unknown_strategy() {
 }
 
 #[tokio::test]
+async fn paper_market_configuration_requires_a_supported_stopped_market_and_resets_the_account() {
+    let router = app();
+    let response = router
+        .clone()
+        .oneshot(
+            Request::post("/api/paper/config")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"source":"a_share","symbol":"600519","strategy":"rsi"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), 1_000_000).await.unwrap()).unwrap();
+    assert_eq!(body["source"], "a_share");
+    assert_eq!(body["symbol"], "600519");
+    assert_eq!(body["strategy"], "rsi");
+
+    let snapshot = router
+        .clone()
+        .oneshot(
+            Request::get("/api/paper/snapshot")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let snapshot: Value =
+        serde_json::from_slice(&to_bytes(snapshot.into_body(), 1_000_000).await.unwrap()).unwrap();
+    assert_eq!(snapshot["source"], "a_share");
+    assert_eq!(snapshot["symbol"], "600519");
+    assert_eq!(snapshot["equity"], snapshot["initial_capital"]);
+
+    let bad = router
+        .clone()
+        .oneshot(
+            Request::post("/api/paper/config")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"source":"unknown","symbol":"NOPE","strategy":"rsi"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
+
+    let started = router
+        .clone()
+        .oneshot(
+            Request::post("/api/paper/start")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(started.status(), StatusCode::OK);
+    let conflict = router
+        .oneshot(
+            Request::post("/api/paper/config")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"source":"us_stock","symbol":"AAPL","strategy":"rsi"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(conflict.status(), StatusCode::CONFLICT);
+}
+
+#[tokio::test]
 async fn all_supported_indicator_overlays_have_full_length_public_series() {
     let ids = [
         "sma_20",

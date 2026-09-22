@@ -6,7 +6,7 @@
 //!   - 模拟盘的"实时" = 每 N 秒拉一次最新 K 线收盘价
 
 use crate::broker::{Broker, BrokerConfig, SimulatedBroker};
-use crate::data::AsyncDataFeed;
+use crate::data::{fetch_public_market_bars, AsyncDataFeed, HttpFeed};
 use crate::portfolio::{Portfolio, PortfolioConfig};
 use crate::risk::{RiskConfig, RiskManager};
 use crate::strategy::Strategy;
@@ -85,7 +85,7 @@ pub struct PaperState {
     fills_count: usize,
     pending_signal: Option<Signal>,
     generation: u64,
-    source: &'static str,
+    source: String,
     pub equity_curve: Vec<EquityPoint>,
     bars: Vec<Bar>,
     pub log: Vec<PaperLogEntry>,
@@ -132,9 +132,9 @@ impl PaperState {
             pending_signal: None,
             generation: 0,
             source: if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
-                "synthetic"
+                "synthetic".into()
             } else {
-                "binance"
+                "binance".into()
             },
             equity_curve: Vec::new(),
             bars: Vec::new(),
@@ -153,6 +153,21 @@ impl PaperState {
         self.strategy = strategy;
         self.pending_signal = None;
         self.generation = self.generation.wrapping_add(1);
+    }
+
+    /// Stop-only market changes start a fresh simulated account. Reusing a
+    /// position priced in a different currency or exchange would be false P&L.
+    pub fn reconfigure_market(
+        &mut self,
+        source: String,
+        symbol: String,
+        strategy: Box<dyn Strategy>,
+    ) {
+        let mut config = self.config.clone();
+        config.symbol = symbol;
+        let mut replacement = Self::new(config, strategy);
+        replacement.source = source;
+        *self = replacement;
     }
 
     /// 处理一根新的 K 线:更新价格 → 策略判断 → 风控 → 下单 → 快照
@@ -258,7 +273,7 @@ impl PaperState {
             .unwrap_or(0.0);
         PaperSnapshot {
             symbol: self.config.symbol.clone(),
-            source: self.source.into(),
+            source: self.source.clone(),
             initial_capital: self.config.initial_capital,
             strategy: self.strategy.name().into(),
             is_running: self.is_running,
@@ -349,6 +364,52 @@ pub async fn run_paper_loop<F: AsyncDataFeed>(feed: Arc<F>, state: Arc<RwLock<Pa
         tokio::time::sleep(std::time::Duration::from_secs(poll_secs)).await;
     }
 }
+/// Real-market paper loop. It reads the selected public source for every
+/// iteration, so a stopped account can safely be reconfigured before starting.
+pub async fn run_market_paper_loop(feed: Arc<HttpFeed>, state: Arc<RwLock<PaperState>>) {
+    loop {
+        let (is_running, symbol, source, poll_secs, generation) = {
+            let paper = state.read().await;
+            (
+                paper.is_running,
+                paper.config.symbol.clone(),
+                paper.source.clone(),
+                paper.config.poll_interval_seconds,
+                paper.generation,
+            )
+        };
+        if !is_running {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            continue;
+        }
+        let since =
+            chrono::Utc::now() - chrono::Duration::days(if source == "binance" { 2 } else { 14 });
+        let result = fetch_public_market_bars(&feed, &source, &symbol, since, 8).await;
+        match result {
+            Ok(bars) if !bars.is_empty() => {
+                let mut paper = state.write().await;
+                if !paper.is_running || paper.generation != generation {
+                    continue;
+                }
+                for bar in bars {
+                    if let Err(error) = paper.process_bar(bar) {
+                        paper.log(PaperLogLevel::Error, format!("处理出错: {error}"));
+                    }
+                }
+            }
+            Ok(_) => {}
+            Err(error) => {
+                let mut paper = state.write().await;
+                paper.log(
+                    PaperLogLevel::Error,
+                    format!("拉取 {source} 行情失败: {error}"),
+                );
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(poll_secs)).await;
+    }
+}
+
 /// Deterministic replay for offline demonstrations and real-browser CI.
 /// This is visibly labeled synthetic in every snapshot.
 pub async fn run_offline_paper_loop(state: Arc<RwLock<PaperState>>) {
@@ -356,7 +417,7 @@ pub async fn run_offline_paper_loop(state: Arc<RwLock<PaperState>>) {
     use chrono::TimeZone;
     {
         let mut s = state.write().await;
-        s.source = "synthetic";
+        s.source = "synthetic".into();
     }
     let bars = SyntheticFeed::default()
         .fetch_historical(

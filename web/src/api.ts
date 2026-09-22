@@ -68,6 +68,8 @@ export const api = {
   paperStop: () => call<{ status: string }>('POST', '/api/paper/stop'),
   paperStrategy: (strategy: string) =>
     call<{ status: string; strategy: string }>('POST', '/api/paper/strategy', { strategy }),
+  paperConfigure: (source: SourceType, symbol: string, strategy: string) =>
+    call<{ status: string; source: SourceType; symbol: string; strategy: string }>('POST', '/api/paper/config', { source, symbol, strategy }),
   listPractice: () => call<{ concepts: PracticeConcept[]; modules: string[]; total: number }>('GET', '/api/practice'),
   runPractice: (req: {
     concept_id: string; module: 'data' | 'backtest' | 'paper' | 'compare'; symbol: string; source: SourceType; limit: number;

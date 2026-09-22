@@ -3,7 +3,7 @@
 use axiom::api;
 use axiom::app_state::AppState;
 use axiom::config::{default_config, load_config};
-use axiom::paper::run_paper_loop;
+use axiom::paper::run_market_paper_loop;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -36,7 +36,7 @@ async fn main() -> anyhow::Result<()> {
         tokio::spawn(axiom::paper::run_offline_paper_loop(paper_clone));
     } else {
         tokio::spawn(async move {
-            run_paper_loop(feed_clone, paper_clone).await;
+            run_market_paper_loop(feed_clone, paper_clone).await;
         });
     }
 

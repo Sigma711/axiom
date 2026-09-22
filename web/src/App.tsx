@@ -1100,10 +1100,13 @@ function PaperTrading({ targetConcept, theme }: { targetConcept?: string; theme:
   const [snapshot, setSnapshot] = useState<PaperSnapshot | null>(null);
   const [strategies, setStrategies] = useState<StrategyMeta[]>([]);
   const [strategy, setStrategy] = useState('');
+  const [source, setSource] = useState<SourceType>('binance');
+  const [symbol, setSymbol] = useState('BTCUSDT');
   const [error, setError] = useState('');
   const chartRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const selectedByUser = useRef(false);
+  const selectedMarketByUser = useRef(false);
 
   useEffect(() => {
     api.listStrategies().then(d => {
@@ -1115,7 +1118,22 @@ function PaperTrading({ targetConcept, theme }: { targetConcept?: string; theme:
 
   useEffect(() => {
     if (snapshot?.strategy && !selectedByUser.current) setStrategy(snapshot.strategy);
-  }, [snapshot?.strategy]);
+    if (snapshot?.source && snapshot?.symbol && !selectedMarketByUser.current) {
+      setSource(snapshot.source); setSymbol(snapshot.symbol);
+    }
+  }, [snapshot?.strategy, snapshot?.source, snapshot?.symbol]);
+
+  const chooseSource = (next: SourceType) => {
+    selectedMarketByUser.current = true;
+    setSource(next);
+    setSymbol(next === 'binance' ? 'BTCUSDT' : next === 'a_share' ? '600519' : 'AAPL');
+  };
+  const configureMarket = async () => {
+    if (!strategy) return;
+    setError('');
+    await api.paperConfigure(source, symbol, strategy);
+    setSnapshot(await api.paperSnapshot());
+  };
 
   // WebSocket
   useEffect(() => {
@@ -1154,7 +1172,7 @@ function PaperTrading({ targetConcept, theme }: { targetConcept?: string; theme:
   const start = async () => {
     try {
       setError('');
-      await api.paperStrategy(strategy);
+      await configureMarket();
       await api.paperStart();
       setSnapshot(await api.paperSnapshot());
     } catch (e) { setError(String(e)); }
@@ -1178,13 +1196,20 @@ function PaperTrading({ targetConcept, theme }: { targetConcept?: string; theme:
           <Dropdown label="策略" options={strategies.map(s => ({ v: s.name, l: s.display_name }))}
             value={strategy} onChange={value => { selectedByUser.current = true; setStrategy(value); }} minWidth={200} />
         </label>
+        <label>交易对
+          <SymbolPicker source={source} value={symbol} onChange={value => { selectedMarketByUser.current = true; setSymbol(value); }} />
+        </label>
+        <label>数据源
+          <Dropdown label="数据源" options={MARKET_SOURCE_OPTIONS} value={source} onChange={chooseSource} minWidth={140} />
+        </label>
+        <button className="ax-btn" onClick={() => configureMarket().catch(e => setError(String(e)))} disabled={snapshot.is_running || !strategy}>应用市场</button>
         <button className="ax-btn primary" onClick={start} disabled={snapshot.is_running}>▶ 启动</button>
         <button className="ax-btn" onClick={stop} disabled={!snapshot.is_running}>■ 停止</button>
         <span className={'ax-status ' + (snapshot.is_running ? 'on' : 'off')}>
           {snapshot.is_running ? '运行中' : '已停止'}
         </span>
       </div>
-      <p className="ax-practice-note">账户策略：{strategies.find(item => item.name === snapshot.strategy)?.display_name || snapshot.strategy || '—'}。启动将采用上方选择的策略；已有持仓和资金会保留。</p>
+      <p className="ax-practice-note">先选择市场、标的和策略，再应用或启动。切换市场会在停止状态下重置模拟账户，避免把不同币种或币种与股票的价格、持仓和盈亏混在一起。</p>
       {error && <div className="ax-error">{error}</div>}
       <div className="ax-paper-stats">
         <div className="ax-stat"><div className="ax-stat-label">现金</div><div className="ax-stat-value">{fmtMoney(snapshot.cash)}</div></div>

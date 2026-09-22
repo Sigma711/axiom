@@ -11,8 +11,14 @@ fi
 # The browser suite owns this dedicated test port; a stale prior run must not
 # make Vite silently choose a different one.
 pgrep -af "[v]ite.*18181" | awk '{print $1}' | xargs -r kill || true
-rm -rf web/test-results coverage/web-e2e
+rm -rf web/test-results coverage/web coverage/web-e2e
 mkdir -p coverage
+# Unit-level cases exercise pure API/chart/performance behavior; Playwright below
+# remains the release denominator because it observes the real browser bundle.
+(
+  cd web
+  npm run test:coverage
+)
 
 (
   cd web

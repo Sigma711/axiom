@@ -126,6 +126,24 @@ test('book chart visuals keep P&F boxes in columns and Kagi as orthogonal segmen
   expect(new Set(sameColumnXs).size).toBe(1);
 });
 
+test('paper trading applies the selected real market and symbol before it starts', async ({ page }) => {
+  const configurations: any[] = [];
+  await page.route('**/api/paper/config', async route => {
+    configurations.push(JSON.parse(route.request().postData() || '{}'));
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ status: 'configured', source: 'a_share', symbol: '600519', strategy: 'rsi' }) });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: '模拟盘', exact: true }).click();
+  const panel = page.locator('section').filter({ has: page.getByRole('heading', { name: '模拟盘' }) });
+  await panel.getByLabel('数据源').click();
+  await page.getByRole('option', { name: /A 股/ }).click();
+  await expect(panel.getByLabel('交易对')).toContainText('600519');
+  await panel.getByLabel('策略').click();
+  await page.getByRole('option', { name: 'RSI' }).click();
+  await panel.getByRole('button', { name: '应用市场' }).click();
+  await expect.poll(() => configurations).toEqual([{ source: 'a_share', symbol: '600519', strategy: 'rsi' }]);
+});
+
 test('backtest and comparison show the returned metrics', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: '回测', exact: true }).click();

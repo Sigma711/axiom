@@ -39,7 +39,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::OnceLock;
-use tokio::sync::RwLock as TokioRwLock;
+use tokio::sync::{Mutex as TokioMutex, RwLock as TokioRwLock};
 
 async fn market_bars(
     state: &AppState,
@@ -115,6 +115,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/paper/start", post(post_paper_start))
         .route("/api/paper/stop", post(post_paper_stop))
         .route("/api/paper/strategy", post(post_paper_strategy))
+        .route("/api/paper/config", post(post_paper_config))
         .route("/api/paper/ws", get(ws_paper))
         .route("/api/book/pdf", get(serve_book_pdf))
         .route("/api/knowledge", get(get_knowledge))
@@ -737,6 +738,41 @@ async fn post_paper_strategy(
     Ok(Json(json!({"status": "ok", "strategy": req.strategy})))
 }
 
+#[derive(Deserialize)]
+struct PaperMarketRequest {
+    source: String,
+    symbol: String,
+    strategy: String,
+    params: Option<std::collections::HashMap<String, f64>>,
+}
+
+async fn post_paper_config(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<PaperMarketRequest>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    crate::api_validation::market(&req.symbol, &req.source, 200, 2_000)?;
+    let strategy = make_strategy(&req.strategy, req.params.as_ref())
+        .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))?;
+    let mut paper = state.paper_state.write().await;
+    if paper.is_running {
+        return Err((
+            StatusCode::CONFLICT,
+            "请先停止模拟盘，再切换数据源或标的".into(),
+        ));
+    }
+    paper.reconfigure_market(req.source.clone(), req.symbol.clone(), strategy);
+    paper.log(
+        crate::paper::PaperLogLevel::Info,
+        format!("已切换为 {} / {}", req.source, req.symbol),
+    );
+    Ok(Json(json!({
+        "status": "configured",
+        "source": req.source,
+        "symbol": req.symbol,
+        "strategy": paper.strategy.name(),
+    })))
+}
+
 // -----------------------------------------------------------------------------
 // K线形态识别 + Heikin Ashi 端点
 // -----------------------------------------------------------------------------
@@ -1034,9 +1070,14 @@ struct SymbolsCache {
 }
 
 static SYMBOLS_CACHE: OnceLock<TokioRwLock<Option<SymbolsCache>>> = OnceLock::new();
+static SYMBOLS_REFRESHING: OnceLock<TokioMutex<bool>> = OnceLock::new();
 
 fn symbols_cache() -> &'static TokioRwLock<Option<SymbolsCache>> {
     SYMBOLS_CACHE.get_or_init(|| TokioRwLock::new(None))
+}
+
+fn symbols_refreshing() -> &'static TokioMutex<bool> {
+    SYMBOLS_REFRESHING.get_or_init(|| TokioMutex::new(false))
 }
 
 #[derive(serde::Deserialize)]
@@ -1096,36 +1137,42 @@ async fn fetch_symbols_from_binance() -> anyhow::Result<Vec<String>> {
     Ok(pairs.into_iter().map(|(s, _)| s).collect())
 }
 
-async fn get_cached_symbols() -> Vec<String> {
-    if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
-        return vec!["BTCUSDT".into(), "ETHUSDT".into()];
+async fn refresh_binance_symbols_in_background() {
+    let mut refreshing = symbols_refreshing().lock().await;
+    if *refreshing {
+        return;
     }
-    // 检查缓存 (5 分钟过期)
-    {
-        let cache = symbols_cache().read().await;
-        if let Some(c) = cache.as_ref() {
-            let age = (chrono::Utc::now() - c.fetched_at).num_seconds();
-            if age < 300 {
-                return c.symbols.clone();
-            }
-        }
-    }
-    // 重新拉取
-    match fetch_symbols_from_binance().await {
-        Ok(symbols) => {
-            let mut cache = symbols_cache().write().await;
-            *cache = Some(SymbolsCache {
-                symbols: symbols.clone(),
+    *refreshing = true;
+    tokio::spawn(async {
+        let fetched = fetch_symbols_from_binance().await;
+        if let Ok(symbols) = fetched {
+            *symbols_cache().write().await = Some(SymbolsCache {
+                symbols,
                 fetched_at: chrono::Utc::now(),
             });
-            symbols
+        } else if let Err(error) = fetched {
+            tracing::warn!(%error, "Binance directory refresh failed; retaining the immediately usable catalog");
         }
-        Err(e) => {
-            tracing::warn!("拉取 Binance 交易对失败: {}; 使用 fallback", e);
-            // Fallback: 常见 30 个 USDT 交易对
-            default_symbols()
-        }
+        *symbols_refreshing().lock().await = false;
+    });
+}
+
+async fn get_cached_symbols() -> (Vec<String>, &'static str, bool) {
+    if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
+        return (vec!["BTCUSDT".into(), "ETHUSDT".into()], "offline", false);
     }
+    if let Some(cache) = symbols_cache().read().await.as_ref().cloned() {
+        let age = (chrono::Utc::now() - cache.fetched_at).num_seconds();
+        if age >= 300 {
+            refresh_binance_symbols_in_background().await;
+            return (cache.symbols, "stale", true);
+        }
+        return (cache.symbols, "cached", true);
+    }
+    // The dropdown must open immediately even when an upstream directory is
+    // cold or unreachable. The full catalog replaces this seed asynchronously.
+    refresh_binance_symbols_in_background().await;
+    (default_symbols(), "refreshing", false)
 }
 
 fn default_symbols() -> Vec<String> {
@@ -1188,8 +1235,8 @@ async fn get_symbols(
         return Err(validate::bad("symbol query must be at most 64 characters"));
     }
     if source == "binance" {
-        let mut items: Vec<_> = get_cached_symbols()
-            .await
+        let (catalog, status, complete) = get_cached_symbols().await;
+        let mut items: Vec<_> = catalog
             .into_iter()
             .filter(|symbol| {
                 query.is_empty() || symbol.to_uppercase().contains(&query.to_uppercase())
@@ -1206,7 +1253,7 @@ async fn get_symbols(
         return Ok(Json(json!({
             "symbols": symbols, "items": page, "count": symbols.len(), "total": total,
             "universe_count": total, "offset": offset, "has_more": offset + symbols.len() < total,
-            "status": "live", "complete": true, "source": source
+            "status": status, "complete": complete, "source": source
         })));
     }
     let (items, total, universe_count, status, complete) =

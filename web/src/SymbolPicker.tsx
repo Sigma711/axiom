@@ -7,6 +7,8 @@ type Result = {
   items: SymbolItem[]; total: number; offset: number; has_more: boolean;
   universe_count: number; status: string; complete: boolean;
 };
+const catalogPageCache = new Map<string, Result>();
+const cacheKey = (source: SourceType, query: string, page: number) => source + '|' + query.trim().toUpperCase() + '|' + page;
 
 export function SymbolPicker({ source, value, onChange }: {
   source: SourceType; value: string; onChange: (symbol: string) => void;
@@ -16,25 +18,36 @@ export function SymbolPicker({ source, value, onChange }: {
   const [page, setPage] = useState(0);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState('');
+  const [refreshTick, setRefreshTick] = useState(0);
   const request = useRef(0);
   const root = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { setQuery(''); setPage(0); }, [source]);
+  useEffect(() => { setQuery(''); setPage(0); setResult(null); setError(''); }, [source]);
 
   useEffect(() => {
     if (!open) return;
     const id = ++request.current;
+    const key = cacheKey(source, query, page);
+    const cached = catalogPageCache.get(key);
+    if (cached) {
+      setResult(cached); setError('');
+      if (cached.complete) return;
+    }
+    // Opening a list and changing a page are intent actions: do not add an
+    // artificial debounce. Only a typed query is delayed to avoid bursts.
     const timer = window.setTimeout(() => {
       api.listSymbols(source, query, page * 50, 50).then(data => {
         if (id !== request.current) return;
+        catalogPageCache.set(key, data);
         setResult(data); setError('');
+        if (!data.complete && !query.trim()) window.setTimeout(() => setRefreshTick(tick => tick + 1), 750);
       }).catch(error => {
         if (id !== request.current) return;
         setError(String(error)); setResult(null);
       });
-    }, 220);
+    }, query.trim() ? 180 : 0);
     return () => window.clearTimeout(timer);
-  }, [open, source, query, page]);
+  }, [open, source, query, page, refreshTick]);
 
   useEffect(() => {
     if (!open) return;
@@ -57,7 +70,7 @@ export function SymbolPicker({ source, value, onChange }: {
     }
   };
   const state = result && !result.complete
-    ? '目录临时不可用；仍可输入交易代码。'
+    ? '完整目录正在后台更新；现在可搜索常用标的或直接输入代码。'
     : result ? '已检索 ' + result.total.toLocaleString() + ' 个匹配标的，目录共 ' + result.universe_count.toLocaleString() + ' 个。' : '';
 
   return (

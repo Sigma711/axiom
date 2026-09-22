@@ -9,7 +9,7 @@ use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 const PAGE_SIZE: usize = 100;
 const MAX_SEARCH_LIMIT: usize = 100;
@@ -29,9 +29,14 @@ struct CatalogSnapshot {
 }
 
 static CATALOGS: OnceLock<RwLock<HashMap<String, CatalogSnapshot>>> = OnceLock::new();
+static REFRESHING: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
 fn catalogs() -> &'static RwLock<HashMap<String, CatalogSnapshot>> {
     CATALOGS.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+fn refreshing() -> &'static Mutex<HashSet<String>> {
+    REFRESHING.get_or_init(|| Mutex::new(HashSet::new()))
 }
 
 fn seed(source: &str) -> Vec<SymbolItem> {
@@ -328,6 +333,29 @@ async fn live_catalog(source: &str) -> Result<Vec<SymbolItem>> {
     }
 }
 
+async fn refresh_catalog_in_background(source: &str) {
+    let mut active = refreshing().lock().await;
+    if !active.insert(source.to_owned()) {
+        return;
+    }
+    let source = source.to_owned();
+    tokio::spawn(async move {
+        match live_catalog(&source).await {
+            Ok(items) => {
+                catalogs().write().await.insert(
+                    source.clone(),
+                    CatalogSnapshot {
+                        items,
+                        fetched_at: Instant::now(),
+                    },
+                );
+            }
+            Err(error) => tracing::warn!(source, %error, "symbol directory refresh failed"),
+        }
+        refreshing().lock().await.remove(&source);
+    });
+}
+
 /// Search a complete current market directory. A successful result is cached for
 /// one day. If a refresh fails, the last complete snapshot stays usable.
 pub async fn search(
@@ -344,55 +372,35 @@ pub async fn search(
     let limit = limit.clamp(1, MAX_SEARCH_LIMIT);
 
     if let Some(snapshot) = catalogs().read().await.get(source).cloned() {
+        let universe_count = snapshot.items.len();
         let filtered = sort_and_filter(snapshot.items, query);
         let total = filtered.len();
-        let status = if snapshot.fetched_at.elapsed() <= CACHE_TTL {
-            "cached"
-        } else {
-            "stale"
-        };
+        let fresh = snapshot.fetched_at.elapsed() <= CACHE_TTL;
+        if !fresh {
+            refresh_catalog_in_background(source).await;
+        }
         return Ok((
             limited_page(filtered, offset, limit),
             total,
-            limit,
-            status,
+            universe_count,
+            if fresh { "cached" } else { "stale" },
             true,
         ));
     }
 
-    match live_catalog(source).await {
-        Ok(items) => {
-            let universe_count = items.len();
-            catalogs().write().await.insert(
-                source.into(),
-                CatalogSnapshot {
-                    items: items.clone(),
-                    fetched_at: Instant::now(),
-                },
-            );
-            let filtered = sort_and_filter(items, query);
-            let total = filtered.len();
-            Ok((
-                limited_page(filtered, offset, limit),
-                total,
-                universe_count,
-                "live",
-                true,
-            ))
-        }
-        Err(error) => {
-            tracing::warn!(source, %error, "symbol directory refresh failed");
-            let items = sort_and_filter(seed(source), query);
-            let total = items.len();
-            Ok((
-                limited_page(items, offset, limit),
-                total,
-                seed(source).len(),
-                "fallback",
-                false,
-            ))
-        }
-    }
+    // A complete public directory can take seconds to download. Return the
+    // useful seed now, and replace it in the same process as soon as the
+    // single background refresh completes.
+    refresh_catalog_in_background(source).await;
+    let items = sort_and_filter(seed(source), query);
+    let total = items.len();
+    Ok((
+        limited_page(items, offset, limit),
+        total,
+        seed(source).len(),
+        "refreshing",
+        false,
+    ))
 }
 
 #[cfg(test)]
