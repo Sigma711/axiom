@@ -780,35 +780,43 @@ async fn fetch_us_stock_nasdaq_at(
     since: DateTime<Utc>,
     limit: usize,
 ) -> Result<Vec<Bar>> {
-    let raw: serde_json::Value = client
-        .get(format!("{endpoint}/{symbol}/historical"))
-        .header(
-            reqwest::header::USER_AGENT,
-            "Mozilla/5.0 (compatible; AXIOM educational market reader/1.0)",
-        )
-        .header(reqwest::header::ACCEPT, "application/json")
-        .query(&[
-            ("assetclass", "stocks".to_owned()),
-            ("fromdate", since.format("%Y-%m-%d").to_string()),
-            ("todate", Utc::now().format("%Y-%m-%d").to_string()),
-            // Nasdaq defaults to a short first page without this explicit limit.
-            ("limit", limit.min(5_000).to_string()),
-        ])
-        .timeout(std::time::Duration::from_secs(15))
-        .send()
-        .await
-        .context("Nasdaq market request failed")?
-        .error_for_status()
-        .context("Nasdaq market returned HTTP error")?
-        .json()
-        .await
-        .context("invalid Nasdaq market JSON")?;
-    let mut bars = parse_nasdaq_bars(&raw)?;
-    bars.retain(|bar| bar.timestamp >= since);
-    if bars.len() > limit {
-        bars = bars.split_off(bars.len() - limit);
+    // Nasdaq separates common shares and exchange-traded funds by asset class.
+    // The catalog includes both, so a missing stock result must retry as an ETF.
+    let mut last_error = String::new();
+    for assetclass in ["stocks", "etf"] {
+        let attempt: Result<Vec<Bar>> = async {
+            let raw: serde_json::Value = client
+                .get(format!("{endpoint}/{symbol}/historical"))
+                .header(
+                    reqwest::header::USER_AGENT,
+                    "Mozilla/5.0 (compatible; AXIOM educational market reader/1.0)",
+                )
+                .header(reqwest::header::ACCEPT, "application/json")
+                .query(&[
+                    ("assetclass", assetclass.to_owned()),
+                    ("fromdate", since.format("%Y-%m-%d").to_string()),
+                    ("todate", Utc::now().format("%Y-%m-%d").to_string()),
+                    ("limit", limit.min(5_000).to_string()),
+                ])
+                .timeout(std::time::Duration::from_secs(15))
+                .send()
+                .await
+                .context("Nasdaq market request failed")?
+                .error_for_status()
+                .context("Nasdaq market returned HTTP error")?
+                .json()
+                .await
+                .context("invalid Nasdaq market JSON")?;
+            Ok(latest_daily_bars(parse_nasdaq_bars(&raw)?, since, limit))
+        }
+        .await;
+        match attempt {
+            Ok(bars) if !bars.is_empty() => return Ok(bars),
+            Ok(_) => last_error = format!("{assetclass} returned no daily rows"),
+            Err(error) => last_error = format!("{assetclass}: {error}"),
+        }
     }
-    Ok(bars)
+    anyhow::bail!("Nasdaq market has no usable daily rows for {symbol}: {last_error}")
 }
 
 async fn fetch_us_stock(symbol: &str, since: DateTime<Utc>, limit: usize) -> Result<Vec<Bar>> {
@@ -917,7 +925,8 @@ mod deployment_endpoint_tests {
 #[cfg(test)]
 mod public_market_source_tests {
     use super::*;
-    use axum::{routing::get, Json, Router};
+    use axum::{extract::Query, routing::get, Json, Router};
+    use std::collections::HashMap;
 
     async fn stale_eastmoney_fixture() -> Json<serde_json::Value> {
         Json(serde_json::json!({
@@ -934,9 +943,15 @@ mod public_market_source_tests {
         }))
     }
 
-    async fn current_tencent_fixture() -> Json<serde_json::Value> {
+    async fn current_tencent_fixture(
+        Query(query): Query<HashMap<String, String>>,
+    ) -> Json<serde_json::Value> {
+        let market_symbol = query
+            .get("param")
+            .and_then(|param| param.split(',').next())
+            .unwrap_or("sz000001");
         Json(serde_json::json!({
-            "data": {"sz000001": {"day": [[
+            "data": {market_symbol: {"day": [[
                 Utc::now().date_naive().to_string(), "10", "11", "12", "9", "100"
             ]]}}
         }))
@@ -970,6 +985,18 @@ mod public_market_source_tests {
         }))
     }
 
+    async fn nasdaq_etf_fixture(
+        axum::extract::Query(query): axum::extract::Query<
+            std::collections::HashMap<String, String>,
+        >,
+    ) -> Json<serde_json::Value> {
+        if query.get("assetclass").is_some_and(|value| value == "etf") {
+            nasdaq_fallback_fixture().await
+        } else {
+            Json(serde_json::json!({"data": null}))
+        }
+    }
+
     async fn provider_fixture_server() -> (String, tokio::task::JoinHandle<()>) {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
@@ -982,7 +1009,8 @@ mod public_market_source_tests {
                     .route("/tencent", get(current_tencent_fixture))
                     .route("/tencent-unavailable", get(unavailable_tencent_fixture))
                     .route("/yahoo/*symbol", get(empty_yahoo_fixture))
-                    .route("/nasdaq/*symbol", get(nasdaq_fallback_fixture)),
+                    .route("/nasdaq/*symbol", get(nasdaq_fallback_fixture))
+                    .route("/nasdaq-etf/*symbol", get(nasdaq_etf_fixture)),
             )
             .await
             .unwrap();
@@ -1284,6 +1312,26 @@ mod public_market_source_tests {
     }
 
     #[tokio::test]
+    async fn nasdaq_fallback_retries_etf_asset_class_for_listed_funds() {
+        let (base, server) = provider_fixture_server().await;
+        let client = reqwest::Client::new();
+        let since = Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
+        let bars = fetch_us_stock_at(
+            &client,
+            &format!("{base}/yahoo"),
+            &format!("{base}/nasdaq-etf"),
+            "SPY",
+            since,
+            5,
+        )
+        .await
+        .unwrap();
+        assert_eq!(bars.len(), 1);
+        assert_eq!(bars[0].close, 10.5);
+        server.abort();
+    }
+
+    #[tokio::test]
     async fn current_primary_survives_unavailable_tencent_fallback() {
         let (base, server) = provider_fixture_server().await;
         let client = reqwest::Client::new();
@@ -1307,16 +1355,14 @@ mod public_market_source_tests {
         let (base, server) = provider_fixture_server().await;
         let client = reqwest::Client::new();
         let since = Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
-        assert!(
-            fetch_a_share_tencent_at(&client, &format!("{base}/tencent"), "600519", since, 1,)
-                .await
-                .is_err()
-        );
-        assert!(
-            fetch_a_share_tencent_at(&client, &format!("{base}/tencent"), "830001", since, 1,)
-                .await
-                .is_err()
-        );
+        let sh = fetch_a_share_tencent_at(&client, &format!("{base}/tencent"), "600519", since, 1)
+            .await
+            .unwrap();
+        let bj = fetch_a_share_tencent_at(&client, &format!("{base}/tencent"), "920001", since, 1)
+            .await
+            .unwrap();
+        assert_eq!(sh[0].close, 11.0);
+        assert_eq!(bj[0].close, 11.0);
         server.abort();
     }
 }
