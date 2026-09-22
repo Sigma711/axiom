@@ -1,5 +1,22 @@
-use axiom::book;
+use axiom::{book, types::Bar};
+use chrono::{DateTime, Duration, Utc};
 use serde_json::json;
+
+fn closed_bars(closes: &[f64]) -> Vec<Bar> {
+    let start = DateTime::from_timestamp(0, 0).unwrap();
+    closes
+        .iter()
+        .enumerate()
+        .map(|(i, &close)| Bar {
+            timestamp: start + Duration::hours(i as i64),
+            open: close,
+            high: close + 1.0,
+            low: close - 1.0,
+            close,
+            volume: 100.0,
+        })
+        .collect()
+}
 
 #[test]
 fn industry_metrics_use_explicit_chinese_labeled_inputs_and_reject_invalid_values() {
@@ -90,9 +107,49 @@ fn every_book_catalog_default_is_executable_and_all_inputs_are_described() {
                 input.key
             );
         }
-        book::evaluate(&concept.id, &[], &json!({}))
+        let bars = if concept.id == "book_log_return" {
+            closed_bars(&[100.0, 110.0])
+        } else {
+            Vec::new()
+        };
+        book::evaluate(&concept.id, &bars, &json!({}))
             .unwrap_or_else(|e| panic!("{} defaults: {e}", concept.id));
     }
+}
+
+#[test]
+fn log_return_uses_the_last_two_closed_market_bars() {
+    let bars = closed_bars(&[90.0, 100.0, 110.0]);
+    let out = book::evaluate("book_log_return", &bars, &json!({})).unwrap();
+    assert_eq!(out["input_kind"], "market_bars");
+    assert_eq!(out["provenance"], "provided_market_bars");
+    assert!((out["values"]["book_log_return"].as_f64().unwrap() - (1.1_f64).ln()).abs() < 1e-12);
+    let concept = book::catalog()
+        .into_iter()
+        .find(|concept| concept.id == "book_log_return")
+        .unwrap();
+    assert_eq!(concept.input_kind, "market_bars");
+    assert!(concept.inputs.is_empty());
+}
+
+#[test]
+fn log_return_rejects_price_fixtures_short_unordered_and_future_bars() {
+    let bars = closed_bars(&[100.0, 110.0]);
+    assert!(book::evaluate(
+        "book_log_return",
+        &bars,
+        &json!({"start_price": 100.0, "end_price": 110.0})
+    )
+    .is_err());
+    assert!(book::evaluate("book_log_return", &bars[..1], &json!({})).is_err());
+
+    let mut duplicate_time = bars.clone();
+    duplicate_time[1].timestamp = duplicate_time[0].timestamp;
+    assert!(book::evaluate("book_log_return", &duplicate_time, &json!({})).is_err());
+
+    let mut future = bars;
+    future[1].timestamp = Utc::now() + Duration::hours(1);
+    assert!(book::evaluate("book_log_return", &future, &json!({})).is_err());
 }
 
 #[test]

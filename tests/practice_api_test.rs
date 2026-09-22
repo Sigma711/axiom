@@ -377,6 +377,81 @@ async fn book_financial_practices_require_equity_evidence_and_reject_crypto() {
 }
 
 #[tokio::test]
+async fn logarithmic_return_uses_the_last_two_observed_closes_only() {
+    let app = app();
+    let mut bars = SyntheticFeed::new(91)
+        .fetch_historical(
+            "BTCUSDT",
+            Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+            3,
+        )
+        .unwrap();
+    bars[0].close = bars[0].open;
+    let expected = (bars[2].close / bars[1].close).ln();
+    let (status, output) = request(
+        &app,
+        "/api/practice",
+        json!({"concept_id":"book_log_return","module":"data","symbol":"BTCUSDT","source":"synthetic","bars":bars,"inputs":{}}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{output}");
+    assert_eq!(output["provenance"], "provided_market_bars");
+    assert!((output["values"]["book_log_return"].as_f64().unwrap() - expected).abs() < 1e-12);
+    let (status, _) = request(
+        &app,
+        "/api/practice",
+        json!({"concept_id":"book_log_return","module":"data","symbol":"BTCUSDT","source":"synthetic","bars":bars,"inputs":{"start_price":100.0,"end_price":110.0}}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn rolling_24h_volume_requires_contiguous_hourly_crypto_bars() {
+    let app = app();
+    let bars = SyntheticFeed::new(73)
+        .fetch_historical(
+            "BTCUSDT",
+            Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+            30,
+        )
+        .unwrap();
+    let expected: f64 = bars.iter().skip(6).map(|bar| bar.volume).sum();
+    let body = |source: &str, symbol: &str, bars: Vec<axiom::types::Bar>, inputs: Value| json!({"concept_id":"book_volume_24h","module":"data","symbol":symbol,"source":source,"bars":bars,"inputs":inputs});
+    let (status, out) = request(
+        &app,
+        "/api/practice",
+        body("synthetic", "BTCUSDT", bars.clone(), json!({})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{out}");
+    assert_eq!(out["provenance"], "provided_market_bars");
+    assert_eq!(out["values"]["rolling_24h_volume"], expected);
+    for request_body in [
+        body("a_share", "600519", bars.clone(), json!({})),
+        body(
+            "synthetic",
+            "BTCUSDT",
+            bars.clone(),
+            json!({"hourly_volumes":[1,2]}),
+        ),
+        body("synthetic", "BTCUSDT", bars[..23].to_vec(), json!({})),
+    ] {
+        let (status, _) = request(&app, "/api/practice", request_body).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+    let mut gap = bars;
+    gap[29].timestamp += chrono::Duration::hours(1);
+    let (status, _) = request(
+        &app,
+        "/api/practice",
+        body("synthetic", "BTCUSDT", gap, json!({})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn five_nonstandard_charts_use_the_selected_real_bar_context() {
     let app = app();
     let bars = SyntheticFeed::new(31)

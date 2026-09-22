@@ -35,11 +35,11 @@ function chineseField(key: string, label?: string) {
   if (CHINESE_FIELDS[key]) return CHINESE_FIELDS[key];
   return key.replace(/_/g, ' · ');
 }
-function resultSentence(name: string, values: Record<string, number | null>, units?: Record<string, string>, hasSeries = false) {
+function resultSentence(name: string, values: Record<string, number | null>, units?: Record<string, string>, hasSeries = false, provenance: PracticeResult['provenance'] = 'editable_teaching_inputs') {
   const first = Object.entries(values).find(([, value]) => value != null);
   if (!first) return `${name} 当前没有足够数据，图中的空白表示预热期或无法定义的结果。`;
   const [key, value] = first;
-  const prefix = hasSeries ? '基于这段教学行情' : '给定图中的教学输入';
+  const prefix = provenance === 'provided_market_bars' ? '基于当前标的已收盘行情' : provenance === 'provided_result_context' ? '基于当前模块真实结果' : hasSeries ? '基于这段教学行情' : '给定图中的教学输入';
   const reading = hasSeries ? '曲线展示该数值随样本变化；留意水平、拐点和空白预热区。' : Object.keys(values).length > 1 ? '请结合各结果之间的关系解读。' : '这是单次计算结果，应结合它的定义和背景解读。';
   return `${prefix}，${name} 的${CHINESE_FIELDS[key] || '计算结果'}为 ${fmtNum(value, 6)}${chineseUnit(units?.[key]) ? ` ${chineseUnit(units?.[key])}` : ''}；${reading}`;
 }
@@ -596,11 +596,11 @@ function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}
         </>}
       </>}
       {result && <div className="ax-practice-result">
-        {result.chart && <BookChartVisual chart={result.chart} name={concept?.name || '当前图形'} />}
+        {result.chart ? <BookChartVisual chart={result.chart} name={concept?.name || '当前图形'} /> : result.series.length > 0 ? <KnowledgeSeriesVisual name={concept?.name || '当前序列'} result={result} /> : null}
         <p className={result.status === 'computed' ? 'positive' : 'negative'}>{result.status === 'computed' ? '已计算' : '无法计算'} · {result.provenance === 'provided_market_bars' ? '使用当前模块行情上下文' : result.provenance === 'provided_result_context' ? '使用当前模块真实结果' : '使用可编辑教学输入'}</p>
         {result.reason && <p>{result.reason}</p>}
         {Object.keys(result.values).length > 0 && <dl>{Object.entries(result.values).map(([key, value]) => <div key={key}><dt>{chineseField(key, key === conceptId ? concept?.name : undefined)}{result.units?.[key] ? `（${chineseUnit(result.units[key])}）` : ''}</dt><dd>{value == null ? '—' : fmtNum(value, 6)}</dd></div>)}</dl>}
-        <p className="ax-practice-reading">{resultSentence(concept?.name || '该概念', result.values, result.units)}</p>
+        <p className="ax-practice-reading">{resultSentence(concept?.name || '该概念', result.values, result.units, !result.chart && result.series.length > 0, result.provenance)}</p>
         {result.notes.map((note, index) => <p className="ax-practice-note" key={index}>{note}</p>)}
       </div>}
     </aside>

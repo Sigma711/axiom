@@ -139,13 +139,13 @@ pub fn catalog() -> Vec<PracticeConcept> {
                             key: key.clone(),
                             default: default.clone(),
                             label: (match key.as_str() {
-                                "ticks" => "有序逐笔成交价（元）",
+                                "ticks" => "有序逐笔成交价（报价单位）",
                                 "brick_size" => "砖宽（报价单位；0 = 首根收盘价的 1%）",
                                 "box_size" => "箱格（报价单位；0 = 首根收盘价的 1%）",
                                 "reversal_boxes" => "反转箱数（格）",
                                 "reversal_size" => "反转幅度（报价单位；0 = 首根收盘价的 1%）",
                                 "line_count" => "突破线数（条）",
-                                "range_size" => "区间宽度（元）",
+                                "range_size" => "区间宽度（报价单位）",
                                 "ticks_per_bar" => "每条成交笔数（笔）",
                                 _ => key,
                             })
@@ -327,10 +327,10 @@ pub fn evaluate(id: &str, source_bars: &[Bar], inputs: &Value) -> Result<Value, 
                     )
                 })
                 .collect::<Vec<_>>();
-            series(&mut out, "ha_open", opens, "currency");
-            series(&mut out, "ha_close", closes, "currency");
-            series(&mut out, "ha_high", highs, "currency");
-            series(&mut out, "ha_low", lows, "currency");
+            series(&mut out, "ha_open", opens, "报价单位");
+            series(&mut out, "ha_close", closes, "报价单位");
+            series(&mut out, "ha_high", highs, "报价单位");
+            series(&mut out, "ha_low", lows, "报价单位");
             json!({"kind":"heikin_ashi","bars":bars,"input":"provided_ohlcv_bars","source_price":"ohlc","source_bar_count":source_bars.len()})
         }
         "book_chart_renko" => {
@@ -364,7 +364,7 @@ pub fn evaluate(id: &str, source_bars: &[Bar], inputs: &Value) -> Result<Value, 
                     }
                 }
             }
-            series(&mut out, "renko_close", x, "currency");
+            series(&mut out, "renko_close", x, "报价单位");
             json!({"kind":"renko","bars":bars,"input":"provided_ohlcv_bars","source_price":"close","source_bar_count":source_bars.len(),"brick_size":b,"note":"砖由已收盘 K 线的收盘价按阈值合成，不是逐笔成交；每块固定一砖宽。"})
         }
         "book_chart_point_figure" => {
@@ -392,7 +392,7 @@ pub fn evaluate(id: &str, source_bars: &[Bar], inputs: &Value) -> Result<Value, 
                     }
                 }
             }
-            series(&mut out, "point_figure_box", x, "currency");
+            series(&mut out, "point_figure_box", x, "报价单位");
             json!({"kind":"point_figure","bars":bars,"input":"provided_ohlcv_bars","source_price":"close","source_bar_count":source_bars.len(),"box_size":b,"reversal_boxes":r})
         }
         "book_chart_kagi" => {
@@ -425,7 +425,7 @@ pub fn evaluate(id: &str, source_bars: &[Bar], inputs: &Value) -> Result<Value, 
                     x.push(last);
                 }
             }
-            series(&mut out, "kagi_turn", x, "currency");
+            series(&mut out, "kagi_turn", x, "报价单位");
             decorate_kagi(&mut bars);
             json!({"kind":"kagi","bars":bars,"input":"provided_ohlcv_bars","source_price":"close","source_bar_count":source_bars.len(),"reversal_size":r})
         }
@@ -466,7 +466,7 @@ pub fn evaluate(id: &str, source_bars: &[Bar], inputs: &Value) -> Result<Value, 
                     x.push(q);
                 }
             }
-            series(&mut out, "three_line_close", x, "currency");
+            series(&mut out, "three_line_close", x, "报价单位");
             json!({"kind":"three_line_break","bars":bars,"input":"provided_ohlcv_bars","source_price":"close","source_bar_count":source_bars.len(),"line_count":n})
         }
         "book_chart_range_bars" => {
@@ -486,7 +486,7 @@ pub fn evaluate(id: &str, source_bars: &[Bar], inputs: &Value) -> Result<Value, 
                     hi = q
                 }
             }
-            series(&mut out, "range_close", x, "currency");
+            series(&mut out, "range_close", x, "报价单位");
             json!({"kind":"range_bars","bars":bars,"input":"explicit_ordered_ticks","range_size":r,"note":"仅在已提供成交使范围达到阈值时完成；跳空不会虚构中间成交。"})
         }
         "book_chart_tick_bars" => {
@@ -494,7 +494,7 @@ pub fn evaluate(id: &str, source_bars: &[Bar], inputs: &Value) -> Result<Value, 
             let n = positive_integer(&v, "ticks_per_bar")?;
             let completed: Vec<_> = p.chunks(n).filter(|c| c.len() == n).collect();
             let x = completed.iter().map(|c| *c.last().unwrap()).collect();
-            series(&mut out, "tick_close", x, "currency");
+            series(&mut out, "tick_close", x, "报价单位");
             let bars = completed
                 .into_iter()
                 .map(|c| {

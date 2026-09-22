@@ -1,6 +1,7 @@
 //! 第一至十一章的可复算教学练习。coverage.json 保留每一条源记录和其可执行边界。
 use crate::knowledge::KnowledgeEntry;
 use crate::types::Bar;
+use chrono::Utc;
 use serde_json::{json, Value};
 
 pub fn entries() -> Vec<KnowledgeEntry> {
@@ -558,10 +559,7 @@ fn extra_inputs(id: &str) -> Option<Vec<(&'static str, &'static str, f64)>> {
             ("raw_price", "原始价格（元）", 10.),
             ("adjustment_factor", "复权因子", 1.2),
         ],
-        "book_log_return" => vec![
-            ("end_price", "期末价格（元）", 110.),
-            ("start_price", "期初价格（元）", 100.),
-        ],
+        "book_log_return" => vec![],
         "book_nonstandard_bar" => vec![
             ("open", "开盘价（元）", 100.),
             ("high", "最高价（元）", 109.),
@@ -887,6 +885,7 @@ pub fn catalog() -> Vec<crate::practice::PracticeConcept> {
         })
         .collect();
     for (id, name, formula) in EXTRA {
+        let market_bars = *id == "book_log_return";
         let fs = extra_inputs(id)
             .expect("registered extra inputs")
             .into_iter()
@@ -900,12 +899,23 @@ pub fn catalog() -> Vec<crate::practice::PracticeConcept> {
             id: (*id).into(),
             name: (*name).into(),
             category: "原书教学输入".into(),
-            input_kind: "independent_inputs".into(),
+            input_kind: if market_bars {
+                "market_bars".into()
+            } else {
+                "independent_inputs".into()
+            },
             inputs: fs,
-            notes: format!(
-                "{}；全部字段是可编辑教学输入，财报和盘口数据须注明来源与时点。",
-                formula
-            ),
+            notes: if market_bars {
+                format!(
+                    "{}；使用最近两根有序、已收盘OHLCV K线的收盘价计算。",
+                    formula
+                )
+            } else {
+                format!(
+                    "{}；全部字段是可编辑教学输入，财报和盘口数据须注明来源与时点。",
+                    formula
+                )
+            },
         });
     }
     for (id, name, formula, _, _) in INDUSTRY {
@@ -932,7 +942,17 @@ pub fn catalog() -> Vec<crate::practice::PracticeConcept> {
     }
     out
 }
-pub fn evaluate(id: &str, _bars: &[Bar], inputs: &Value) -> Result<Value, String> {
+fn log_return_bars(bars: &[Bar]) -> Result<&[Bar], String> {
+    crate::practice::validate_bars(bars)?;
+    if bars.len() < 2 {
+        return Err("对数收益率至少需要两根有序、已收盘的OHLCV K线".into());
+    }
+    if bars.last().unwrap().timestamp > Utc::now() {
+        return Err("最后一根K线时间在未来，不能视为已收盘".into());
+    }
+    Ok(bars)
+}
+pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String> {
     let supplied = inputs.as_object().ok_or("inputs 必须是对象")?;
     let definition = catalog()
         .into_iter()
@@ -1097,12 +1117,8 @@ pub fn evaluate(id: &str, _bars: &[Bar], inputs: &Value) -> Result<Value, String
         "book_period" => n("period_seconds")?,
         "book_adjustment" => n("raw_price")? * n("adjustment_factor")?,
         "book_log_return" => {
-            let end = n("end_price")?;
-            let start = n("start_price")?;
-            if end <= 0.0 || start <= 0.0 {
-                return Err("期初和期末价格必须大于零".into());
-            };
-            (end / start).ln()
+            let bars = log_return_bars(bars)?;
+            (bars[bars.len() - 1].close / bars[bars.len() - 2].close).ln()
         }
         "book_nonstandard_bar" => (n("open")? + n("high")? + n("low")? + n("close")?) / 4.0,
         "book_dcf" => {
@@ -1140,7 +1156,7 @@ pub fn evaluate(id: &str, _bars: &[Bar], inputs: &Value) -> Result<Value, String
         return Err("结果超出有限数值范围，请检查输入量级".into());
     }
     Ok(
-        json!({"concept_id":id,"input_kind":"independent_inputs","provenance":"explicit_inputs","status":"computed","reason":null,"values":{id:value},"units":{id:unit(id)},"series":[],"notes":["同一报告期口径；分母为零时拒绝计算。"],"inputs":merged}),
+        json!({"concept_id":id,"input_kind":if id == "book_log_return" {"market_bars"} else {"independent_inputs"},"provenance":if id == "book_log_return" {"provided_market_bars"} else {"explicit_inputs"},"status":"computed","reason":null,"values":{id:value},"units":{id:unit(id)},"series":[],"notes":[if id == "book_log_return" {"仅使用最近两根有序、已收盘OHLCV K线的收盘价；不使用手填价格或未来K线。"} else {"同一报告期口径；分母为零时拒绝计算。"}],"inputs":merged}),
     )
 }
 

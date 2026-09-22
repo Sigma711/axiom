@@ -5,8 +5,13 @@ use crate::{
     practice::{arr, boolean, div, num, Output, PracticeConcept, PracticeInput},
     types::Bar,
 };
+use chrono::{Duration, Utc};
 use serde_json::{json, Value};
 use std::{collections::BTreeSet, sync::OnceLock};
+
+fn uses_hourly_market_bars(id: &str) -> bool {
+    id == "book_volume_24h"
+}
 
 pub fn definitions() -> &'static Vec<Value> {
     static DATA: OnceLock<Vec<Value>> = OnceLock::new();
@@ -51,22 +56,38 @@ pub fn catalog() -> Vec<PracticeConcept> {
             id: text(d, "id"),
             name: text(d, "name"),
             category: text(d, "category"),
-            input_kind: "independent_inputs".into(),
-            inputs: d["defaults"]
-                .as_object()
-                .unwrap()
-                .iter()
-                .map(|(k, v)| PracticeInput {
-                    key: k.clone(),
-                    label: d["labels"][k].as_str().unwrap_or(k).to_owned(),
-                    default: v.clone(),
-                })
-                .collect(),
-            notes: format!(
-                "原书 PDF 第{}页；需独立外部观测，默认值是可编辑教学示例。{}",
-                d["pdf_page"],
-                text(d, "pitfalls")
-            ),
+            input_kind: if uses_hourly_market_bars(d["id"].as_str().unwrap_or_default()) {
+                "market_bars".into()
+            } else {
+                "independent_inputs".into()
+            },
+            inputs: if uses_hourly_market_bars(d["id"].as_str().unwrap_or_default()) {
+                json!({})
+            } else {
+                d["defaults"].clone()
+            }
+            .as_object()
+            .unwrap()
+            .iter()
+            .map(|(k, v)| PracticeInput {
+                key: k.clone(),
+                label: d["labels"][k].as_str().unwrap_or(k).to_owned(),
+                default: v.clone(),
+            })
+            .collect(),
+            notes: if uses_hourly_market_bars(d["id"].as_str().unwrap_or_default()) {
+                format!(
+                    "原书 PDF 第{}页；仅从连续24根完整1小时加密市场OHLCV K线计算，不接受手填成交量。{}",
+                    d["pdf_page"],
+                    text(d, "pitfalls")
+                )
+            } else {
+                format!(
+                    "原书 PDF 第{}页；需独立外部观测，默认值是可编辑教学示例。{}",
+                    d["pdf_page"],
+                    text(d, "pitfalls")
+                )
+            },
         })
         .collect()
 }
@@ -113,12 +134,33 @@ fn addresses(v: &Value, k: &str) -> Result<BTreeSet<String>, String> {
 fn ratio(o: &mut Output, key: &str, a: f64, b: f64, unit: &str) {
     o.value(key, div(a, b), unit, "分母为零，结果没有定义");
 }
-pub fn evaluate(id: &str, _bars: &[Bar], inputs: &Value) -> Result<Value, String> {
+fn continuous_24_hour_bars(bars: &[Bar]) -> Result<&[Bar], String> {
+    if bars.len() < 24 {
+        return Err("需要至少24根连续、完整的1小时加密市场OHLCV K线".into());
+    }
+    let window = &bars[bars.len() - 24..];
+    crate::practice::validate_bars(window)?;
+    if window
+        .windows(2)
+        .any(|pair| (pair[1].timestamp - pair[0].timestamp).num_seconds() != 3600)
+    {
+        return Err("24小时成交量要求相邻K线严格相隔1小时；拒绝缺口、非小时和日线数据".into());
+    }
+    if window.last().unwrap().timestamp + Duration::hours(1) > Utc::now() {
+        return Err("最后一根1小时K线尚未完整收盘或时间在未来".into());
+    }
+    Ok(window)
+}
+pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String> {
     let definition = definitions()
         .iter()
         .find(|d| d["id"] == id)
         .ok_or_else(|| format!("未知外部概念: {id}"))?;
-    let mut v = definition["defaults"].clone();
+    let mut v = if uses_hourly_market_bars(id) {
+        json!({})
+    } else {
+        definition["defaults"].clone()
+    };
     for (k, value) in inputs.as_object().ok_or("inputs 必须是对象")? {
         if v.get(k).is_none() {
             return Err(format!("不支持输入{k}"));
@@ -156,12 +198,14 @@ pub fn evaluate(id: &str, _bars: &[Bar], inputs: &Value) -> Result<Value, String
             );
         }
         "sum24" => {
-            let a = samples(&v, "hourly_volumes")?;
-            if a.len() != 24 {
-                return Err("需要24个连续完整小时；不得把缺失小时当零".into());
-            }
-            o.number("rolling_24h_volume", a.iter().sum(), unit);
-            o.series("hourly_volume", a.into_iter().map(Some).collect(), unit);
+            let bars = continuous_24_hour_bars(bars)?;
+            let volumes = bars.iter().map(|bar| bar.volume).collect::<Vec<_>>();
+            o.number("rolling_24h_volume", volumes.iter().sum(), unit);
+            o.series(
+                "hourly_volume",
+                volumes.into_iter().map(Some).collect(),
+                unit,
+            );
         }
         "basis" => {
             let spot = positive(&v, "spot")?;
@@ -461,9 +505,15 @@ pub fn evaluate(id: &str, _bars: &[Bar], inputs: &Value) -> Result<Value, String
         op => return Err(format!("unregistered supplement operation: {op}")),
     }
     o.note(&text(definition, "pitfalls"));
-    o.note("这是独立可编辑教学输入，不是当前币种真实数据；用于历史分析时必须核对数据发布时点。");
+    if uses_hourly_market_bars(id) {
+        o.note("仅使用调用方提供的连续24根完整1小时加密市场OHLCV K线；不使用手填成交量数组或未来数据。");
+    } else {
+        o.note(
+            "这是独立可编辑教学输入，不是当前币种真实数据；用于历史分析时必须核对数据发布时点。",
+        );
+    }
     let computed = o.values.values().any(|v| !v.is_null());
     Ok(
-        json!({"concept_id":id,"input_kind":"independent_inputs","provenance":"editable_teaching_inputs","status":if computed{"computed"}else{"undefined"},"reason":if computed{Value::Null}else{json!(o.reasons.join("；"))},"values":o.values,"units":o.units,"series":o.series,"notes":o.reasons,"inputs":v}),
+        json!({"concept_id":id,"input_kind":if uses_hourly_market_bars(id) {"market_bars"} else {"independent_inputs"},"provenance":if uses_hourly_market_bars(id) {"provided_market_bars"} else {"editable_teaching_inputs"},"status":if computed{"computed"}else{"undefined"},"reason":if computed{Value::Null}else{json!(o.reasons.join("；"))},"values":o.values,"units":o.units,"series":o.series,"notes":o.reasons,"inputs":v}),
     )
 }

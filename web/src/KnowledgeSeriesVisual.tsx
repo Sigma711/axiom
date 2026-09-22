@@ -1,8 +1,8 @@
 import type { PracticeResult } from './types';
 
 const colors = ['var(--accent-2)', 'var(--accent)', 'var(--green)', 'var(--red)', 'var(--text)'];
-const labels: Record<string, string> = { upper: '上轨', middle: '中轨', lower: '下轨', macd: 'MACD 快慢线差', signal: '信号线', histogram: '柱状差值', close: '收盘价', price: '价格', drawdown: '回撤', equity: '净值', volume: '成交量', plus_di: '正向指标', minus_di: '负向指标' };
-const units: Record<string, string> = { currency: '价格 / 元', price: '价格', fraction: '比例（小数）', percent: '百分比', '%': '百分比', ratio: '比率', shares: '股', volume: '成交量', '': '指标值' };
+const labels: Record<string, string> = { upper: '上轨', middle: '中轨', lower: '下轨', macd: 'MACD 快慢线差', signal: '信号线', histogram: '柱状差值', close: '收盘价', price: '价格', drawdown: '回撤', equity: '净值', volume: '成交量', hourly_volume: '每小时成交量', plus_di: '正向指标', minus_di: '负向指标' };
+const units: Record<string, string> = { currency: '价格 / 元', units: '数量 / 标的基本单位', price: '价格', fraction: '比例（小数）', percent: '百分比', '%': '百分比', ratio: '比率', shares: '股', volume: '成交量', '': '指标值' };
 const number = (v: number) => Math.abs(v) >= 10000 ? `${+(v / 10000).toPrecision(4)}万` : `${+v.toPrecision(4)}`;
 /** Unit-separated panels retain every trace and every missing observation. */
 export function KnowledgeSeriesVisual({ name, result }: { name: string; result: PracticeResult }) {

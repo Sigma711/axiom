@@ -1457,7 +1457,15 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
                 | "book_second_order_greeks"
         );
     let performance = concept.category == "风险-绩效";
-    if concept.input_kind == "market_bars" {
+    if concept.id == "book_volume_24h" {
+        json!({
+            "markets":["crypto"],
+            "modules":["data"],
+            "required_datasets":["24_consecutive_completed_1h_ohlcv"],
+            "source_policy":"real_required",
+            "goal":"只汇总所选加密交易对最近24根连续且已收盘的1小时成交量；缺口和日线不可当作24小时数据。"
+        })
+    } else if concept.input_kind == "market_bars" {
         json!({
             "markets":["crypto","cn_equity","us_equity"],
             "modules":["data","backtest","compare"],

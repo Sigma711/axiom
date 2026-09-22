@@ -309,5 +309,48 @@ test('five nonstandard chart practices draw only observed market reconstructions
     expect(payload.chart.source_bar_count).toBeGreaterThan(20);
     await expect(panel.locator(`svg[data-chart-kind="${kind}"]`)).toBeVisible();
     await expect(panel).toContainText('图形价不是成交价');
+    await expect(panel).toContainText('基于当前标的已收盘行情');
+    await expect(panel).toContainText('报价单位');
   }
+});
+
+test('rolling 24-hour volume sums the latest completed Binance hours without editable fixtures', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto('/data?concept=book_volume_24h&source=binance');
+  await page.getByRole('button', { name: '加载数据' }).click();
+  await expect(page.locator('.ax-chart svg.main-svg').first()).toBeVisible({ timeout: 20_000 });
+  const panel = page.getByLabel('概念实践');
+  await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+  const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  const response = await responsePromise;
+  expect(response.ok(), await response.text()).toBe(true);
+  const request = response.request().postDataJSON();
+  const bars = request.bars as Array<{ volume: number }>;
+  const expected = bars.slice(-24).reduce((sum, bar) => sum + bar.volume, 0);
+  const payload = await response.json();
+  expect(payload.provenance).toBe('provided_market_bars');
+  expect(payload.values.rolling_24h_volume).toBeCloseTo(expected, 8);
+  await expect(panel).toContainText('基于当前标的已收盘行情');
+  await expect(panel.getByRole('img', { name: /24-hour Volume 全部序列/ })).toBeVisible();
+  await expect(panel).toContainText('每小时成交量');
+});
+
+test('log-return practice uses the latest two observed closes across the current market', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto('/data?concept=book_log_return&source=binance');
+  await page.getByRole('button', { name: '加载数据' }).click();
+  await expect(page.locator('.ax-chart svg.main-svg').first()).toBeVisible({ timeout: 20_000 });
+  const panel = page.getByLabel('概念实践');
+  await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+  const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  const response = await responsePromise;
+  expect(response.ok(), await response.text()).toBe(true);
+  const request = response.request().postDataJSON();
+  const closes = (request.bars as Array<{ close: number }>).map(bar => bar.close);
+  const payload = await response.json();
+  expect(payload.provenance).toBe('provided_market_bars');
+  expect(payload.values.book_log_return).toBeCloseTo(Math.log(closes.at(-1)! / closes.at(-2)!), 10);
+  await expect(panel).toContainText('基于当前标的已收盘行情');
 });
