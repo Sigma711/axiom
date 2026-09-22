@@ -1,5 +1,4 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
-import Plotly from 'plotly.js-dist-min';
 import { api, appBase, appPath, fmtPct, fmtNum, fmtMoney, preferredCodeLocationUrl } from './api';
 import { performanceInputs } from './performance';
 import { KnowledgeSeriesVisual } from './KnowledgeSeriesVisual';
@@ -56,6 +55,26 @@ function plotTheme() {
   };
 }
 
+
+
+let plotlyModule: Promise<any> | undefined;
+function renderPlot(chart: HTMLDivElement, traces: any[], layout: any, config: any) {
+  // The book and knowledge pages never need the heavy charting library.
+  plotlyModule ??= import('plotly.js-dist-min').then(module => module.default);
+  let active = true;
+  let rendered = false;
+  void plotlyModule.then(plotly => {
+    if (!active) return;
+    rendered = true;
+    return plotly.react(chart, traces, layout, config);
+  }).catch(error => {
+    if (active) chart.textContent = `图表加载失败：${String(error)}`;
+  });
+  return () => {
+    active = false;
+    if (rendered) void plotlyModule?.then(plotly => plotly.purge(chart));
+  };
+}
 
 function dateAxis(grid: string) {
   return { type: 'date', gridcolor: grid, zerolinecolor: grid, tickformat: '%m-%d<br>%H:%M', hoverformat: '%Y-%m-%d %H:%M', tickangle: 0, nticks: 5, automargin: true };
@@ -784,7 +803,6 @@ function DataExplore({ targetConcept, targetSource, theme }: { targetConcept?: s
     const chart = chartRef.current;
     if (!chart) return;
     if (chartData.bars.length === 0) {
-      Plotly.purge(chart);
       chart.replaceChildren(Object.assign(document.createElement('p'), { className: 'ax-chart-empty', textContent: '没有可用的 K 线数据。请调整交易对、数据源或数量后重试。' }));
       return;
     }
@@ -848,8 +866,7 @@ function DataExplore({ targetConcept, targetSource, theme }: { targetConcept?: s
       const bottom = (subPanels.length - index - 1) * 0.17;
       layout[spec.key] = { gridcolor: colors.grid, title: spec.title, domain: [bottom, bottom + 0.13], anchor: 'x', fixedrange: false };
     }
-    Plotly.react(chart, traces, layout, { responsive: true, displayModeBar: false });
-    return () => Plotly.purge(chart);
+    return renderPlot(chart, traces, layout, { responsive: true, displayModeBar: false });
   }, [chartData, chartType, theme]);
 
   return (
@@ -975,7 +992,7 @@ function Backtest({ targetConcept, targetSource, theme }: { targetConcept?: stri
     if (!result || !chartRef.current) return;
     const chart = chartRef.current;
     const colors = plotTheme();
-    Plotly.react(chart, [{
+    return renderPlot(chart, [{
       x: result.equity_curve.map(p => new Date(p.timestamp)),
       y: result.equity_curve.map(p => p.equity),
       type: 'scatter', mode: 'lines', name: '净值',
@@ -989,7 +1006,6 @@ function Backtest({ targetConcept, targetSource, theme }: { targetConcept?: stri
       yaxis: { gridcolor: colors.grid, zerolinecolor: colors.grid, title: '净值 ($)' },
       hoverlabel: { bgcolor: colors.paper, bordercolor: colors.grid, font: { color: colors.text } },
     }, { responsive: true, displayModeBar: false });
-    return () => Plotly.purge(chart);
   }, [result, theme]);
 
   const currentMeta = strategies.find(s => s.name === strategy);
@@ -1164,7 +1180,7 @@ function PaperTrading({ targetConcept, targetSource, theme }: { targetConcept?: 
     if (snapshot.equity_curve.length === 0) return;
     const chart = chartRef.current;
     const colors = plotTheme();
-    Plotly.react(chart, [{
+    return renderPlot(chart, [{
       x: snapshot.equity_curve.map((p: EquityPoint) => new Date(p.timestamp)),
       y: snapshot.equity_curve.map((p: EquityPoint) => p.equity),
       type: 'scatter', mode: 'lines',
@@ -1178,7 +1194,6 @@ function PaperTrading({ targetConcept, targetSource, theme }: { targetConcept?: 
       yaxis: { gridcolor: colors.grid, zerolinecolor: colors.grid, title: '净值 ($)' },
       hoverlabel: { bgcolor: colors.paper, bordercolor: colors.grid, font: { color: colors.text } },
     }, { responsive: true, displayModeBar: false });
-    return () => Plotly.purge(chart);
   }, [snapshot, theme]);
 
   const start = async () => {
@@ -1355,7 +1370,7 @@ function CompareStrategies({ targetConcept, targetSource, theme }: { targetConce
     const names: Record<string, string> = {};
     strategies.forEach(s => { names[s.name] = s.display_name; });
     customStrategies.forEach((cs, i) => { names['custom_' + i] = '✦ ' + cs.name; });
-    Plotly.react(chart, results.map((r, i) => ({
+    return renderPlot(chart, results.map((r, i) => ({
       x: r.result.equity_curve.map(p => new Date(p.timestamp)),
       y: r.result.equity_curve.map(p => p.equity),
       type: 'scatter', mode: 'lines',
@@ -1370,7 +1385,6 @@ function CompareStrategies({ targetConcept, targetSource, theme }: { targetConce
       legend: { orientation: 'h', y: -0.15 },
       hoverlabel: { bgcolor: themeColors.paper, bordercolor: themeColors.grid, font: { color: themeColors.text } },
     }, { responsive: true, displayModeBar: false });
-    return () => Plotly.purge(chart);
   }, [results, strategies, customStrategies, theme]);
 
   return (

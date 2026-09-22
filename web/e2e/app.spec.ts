@@ -158,6 +158,7 @@ test('chart retains warm-up gaps, rejects invalid points, and exposes separate a
   await page.goto('/');
   await page.getByRole('button', { name: '数据探索', exact: true }).click();
   const chart = page.locator('.ax-chart');
+  await expect(chart.locator('svg.main-svg').first()).toBeVisible();
   const semantic = await chart.evaluate((node: any) => ({
     traces: node.data.map((trace: any) => ({ name: trace.name, y: trace.y, connectgaps: trace.connectgaps })),
     axes: Object.keys(node.layout).filter(key => key.startsWith('yaxis')),
@@ -762,4 +763,19 @@ test('practice surfaces an API failure after valid inputs', async ({ page }) => 
   await expect(panel.getByRole('button', { name: '运行教学计算', exact: true })).toBeVisible();
   await panel.getByRole('button', { name: '运行教学计算', exact: true }).click();
   await expect(panel.locator('.ax-error')).toContainText('HTTP 503');
+});
+
+
+test('knowledge page draws concept art without downloading the charting bundle', async ({ page }) => {
+  const chartRequests: string[] = [];
+  page.on('request', request => {
+    if (/plotly/i.test(request.url())) chartRequests.push(request.url());
+  });
+  await page.goto('/');
+  await page.locator('.ax-kb-card').first().locator('.ax-kb-details').click();
+  await expect(page.locator('.ax-knowledge-chart svg, .ax-series-illustration svg').first()).toBeVisible();
+  expect(chartRequests).toEqual([]);
+  await page.getByRole('button', { name: '数据探索', exact: true }).click();
+  await expect(page.locator('.ax-chart svg.main-svg').first()).toBeVisible();
+  expect(chartRequests.length).toBeGreaterThan(0);
 });
