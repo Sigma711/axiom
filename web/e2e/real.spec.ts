@@ -354,3 +354,32 @@ test('log-return practice uses the latest two observed closes across the current
   expect(payload.values.book_log_return).toBeCloseTo(Math.log(closes.at(-1)! / closes.at(-2)!), 10);
   await expect(panel).toContainText('基于当前标的已收盘行情');
 });
+
+test('CDP practice derives the last completed A-share session levels from its predecessor', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto('/data?concept=book_cdp&source=a_share');
+  await page.getByRole('button', { name: '加载数据' }).click();
+  await expect(page.locator('.ax-chart svg.main-svg').first()).toBeVisible({ timeout: 20_000 });
+  const panel = page.getByLabel('概念实践');
+  await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+  const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  const response = await responsePromise;
+  expect(response.ok(), await response.text()).toBe(true);
+  const request = response.request().postDataJSON();
+  expect(request.source).toBe('a_share');
+  expect(request.inputs).toEqual({});
+  const bars = request.bars as Array<{ timestamp: string; high: number; low: number; close: number }>;
+  expect(bars.length).toBeGreaterThanOrEqual(2);
+  const previous = bars.at(-2)!;
+  const p = (previous.high + previous.low + 2 * previous.close) / 4;
+  const payload = await response.json();
+  expect(payload.provenance).toBe('provided_market_bars');
+  expect(payload.values.cdp).toBeCloseTo(p, 8);
+  expect(payload.values.ah).toBeCloseTo(p + previous.high - previous.low, 8);
+  expect(payload.values.al).toBeCloseTo(p - previous.high + previous.low, 8);
+  expect(payload.values.nh).toBeCloseTo(2 * p - previous.low, 8);
+  expect(payload.values.nl).toBeCloseTo(2 * p - previous.high, 8);
+  expect(JSON.stringify(payload.notes)).toContain(bars.at(-1)!.timestamp.slice(0, 10));
+  await expect(panel).toContainText('基于当前标的已收盘行情');
+});

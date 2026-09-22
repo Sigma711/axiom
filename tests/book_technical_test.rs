@@ -18,8 +18,20 @@ fn all_book_technical_cards_are_executable_and_have_real_examples() {
     assert!(catalog.len() >= 98);
     let bars = bars(750);
     for c in catalog {
-        let result =
-            bt::evaluate(&c.id, &bars, &json!({})).unwrap_or_else(|e| panic!("{}: {}", c.id, e));
+        let mut daily_cdp_bars = Vec::new();
+        if c.id == "book_cdp" {
+            daily_cdp_bars = bars.clone();
+            for (index, bar) in daily_cdp_bars.iter_mut().enumerate() {
+                bar.timestamp = chrono::DateTime::from_timestamp(index as i64 * 86_400, 0).unwrap();
+            }
+        }
+        let selected_bars = if c.id == "book_cdp" {
+            &daily_cdp_bars
+        } else {
+            &bars
+        };
+        let result = bt::evaluate(&c.id, selected_bars, &json!({}))
+            .unwrap_or_else(|e| panic!("{}: {}", c.id, e));
         assert!(
             result["values"].as_object().is_some_and(|x| !x.is_empty()),
             "{}",
@@ -32,9 +44,30 @@ fn all_book_technical_cards_are_executable_and_have_real_examples() {
 }
 #[test]
 fn arithmetic_reference_examples() {
-    let cdp = bt::evaluate("book_cdp", &[], &json!({})).unwrap();
+    let mut cdp_bars = bars(2);
+    cdp_bars[0].high = 110.0;
+    cdp_bars[0].low = 90.0;
+    cdp_bars[0].close = 100.0;
+    cdp_bars[1].open = 122.0;
+    cdp_bars[1].high = 130.0;
+    cdp_bars[1].low = 120.0;
+    cdp_bars[1].close = 125.0;
+    let hourly = bt::evaluate("book_cdp", &cdp_bars, &json!({}));
+    assert!(hourly.is_err());
+    cdp_bars[1].timestamp = cdp_bars[0].timestamp + chrono::Duration::days(1);
+    let cdp = bt::evaluate("book_cdp", &cdp_bars, &json!({})).unwrap();
+    assert_eq!(cdp["input_kind"], "market_bars");
+    assert_eq!(cdp["provenance"], "provided_market_bars");
     assert_eq!(cdp["values"]["cdp"], 100.0);
     assert_eq!(cdp["values"]["ah"], 120.0);
+    assert_eq!(cdp["values"]["al"], 80.0);
+    assert_eq!(cdp["values"]["nh"], 110.0);
+    assert_eq!(cdp["values"]["nl"], 90.0);
+    assert!(cdp["notes"][0]
+        .as_str()
+        .is_some_and(|note| note.contains("1970-01-02T00:00:00+00:00")));
+    let undefined = bt::evaluate("book_cdp", &cdp_bars[..1], &json!({})).unwrap();
+    assert_eq!(undefined["status"], "undefined");
     let factor = bt::evaluate(
         "book_factor_score",
         &[],
@@ -48,20 +81,25 @@ fn arithmetic_reference_examples() {
 #[test]
 fn technical_series_do_not_rewrite_history_and_small_samples_do_not_panic() {
     let b = bars(180);
+    let mut daily_b = b.clone();
+    for (index, bar) in daily_b.iter_mut().enumerate() {
+        bar.timestamp = chrono::DateTime::from_timestamp(index as i64 * 86_400, 0).unwrap();
+    }
     for c in bt::catalog()
         .into_iter()
         .filter(|c| c.input_kind == "market_bars")
     {
+        let selected_bars = if c.id == "book_cdp" { &daily_b } else { &b };
         assert_eq!(
             bt::evaluate(&c.id, &[], &json!({})).unwrap()["status"],
             "undefined"
         );
         for n in [1, 2, 5, 13, 30] {
-            bt::evaluate(&c.id, &b[..n], &json!({}))
+            bt::evaluate(&c.id, &selected_bars[..n], &json!({}))
                 .unwrap_or_else(|e| panic!("{} {n}: {e}", c.id));
         }
-        let short = bt::evaluate(&c.id, &b[..120], &json!({})).unwrap();
-        let full = bt::evaluate(&c.id, &b, &json!({})).unwrap();
+        let short = bt::evaluate(&c.id, &selected_bars[..120], &json!({})).unwrap();
+        let full = bt::evaluate(&c.id, selected_bars, &json!({})).unwrap();
         for (a, z) in short["series"]
             .as_array()
             .unwrap()

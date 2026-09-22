@@ -15,6 +15,33 @@ pub(super) fn evaluate(id: &str, b: &[Bar], v: &Value, o: &mut Output) -> Result
         };
     }
     match id {
+        "cdp" => {
+            let Some(previous) = n.checked_sub(2).and_then(|index| b.get(index)) else {
+                for key in ["cdp", "ah", "al", "nh", "nl"] {
+                    o.value(key, None, "price", "需要上一根已收盘日线的高低收");
+                }
+                return Ok(());
+            };
+            if b.windows(2)
+                .any(|pair| pair[1].timestamp - pair[0].timestamp < chrono::Duration::hours(20))
+            {
+                return Err("CDP 需要日线；小时K线不是上一交易时段".into());
+            }
+            let p = (previous.high + previous.low + 2.0 * previous.close) / 4.0;
+            for (key, value) in [
+                ("cdp", p),
+                ("ah", p + previous.high - previous.low),
+                ("al", p - previous.high + previous.low),
+                ("nh", 2.0 * p - previous.low),
+                ("nl", 2.0 * p - previous.high),
+            ] {
+                o.number(key, value, "price");
+            }
+            o.note(&format!(
+                "取倒数第二根已收盘A股日线的高、低、收；数值适用于最后一根已收盘日线所属交易时段（{}），不把它称为当前自然日。",
+                b[n - 1].timestamp.to_rfc3339(),
+            ));
+        }
         "tema" => ser!(id, ma::tema(&c, p), "price"),
         "kama" => {
             let fast = per("fast")?;

@@ -1457,7 +1457,15 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
                 | "book_second_order_greeks"
         );
     let performance = concept.category == "风险-绩效";
-    if concept.id == "book_volume_24h" {
+    if concept.id == "book_cdp" {
+        json!({
+            "markets":["cn_equity"],
+            "modules":["data"],
+            "required_datasets":["two_ordered_completed_a_share_daily_ohlcv"],
+            "source_policy":"real_required",
+            "goal":"只用所选A股中有序的最近两根已收盘日线：以前一根日线高低收计算最后一根已收盘日线所属交易时段的CDP、AH、AL、NH、NL；不把它标为当前自然日，不接受手填价格或小时K线。"
+        })
+    } else if concept.id == "book_volume_24h" {
         json!({
             "markets":["crypto"],
             "modules":["data"],
@@ -1614,6 +1622,19 @@ fn practice_bars_are_closed(bars: &[Bar], source: &str) -> Result<(), ApiError> 
     Ok(())
 }
 
+fn cdp_requires_daily_a_share_bars(bars: &[Bar]) -> Result<(), ApiError> {
+    if bars.len() >= 2
+        && bars
+            .windows(2)
+            .any(|pair| pair[1].timestamp - pair[0].timestamp < Duration::hours(20))
+    {
+        return Err(validate::bad(
+            "CDP requires A-share daily bars; intraday bars are not a previous trading session",
+        ));
+    }
+    Ok(())
+}
+
 fn plan_allows(plan: &Value, field: &str, value: &str) -> bool {
     plan[field]
         .as_array()
@@ -1744,6 +1765,9 @@ async fn post_practice(
     };
     if !bars.is_empty() {
         practice_bars_are_closed(&bars, &source)?;
+    }
+    if concept.id == "book_cdp" {
+        cdp_requires_daily_a_share_bars(&bars)?;
     }
     let result_required = plan["source_policy"].as_str() == Some("result_required");
     if result_required {

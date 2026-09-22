@@ -51,7 +51,7 @@ async fn data_practice_accepts_only_concepts_with_a_data_plan() {
         .unwrap();
     for concept in practice::catalog()
         .into_iter()
-        .filter(|concept| concept.input_kind == "market_bars")
+        .filter(|concept| concept.input_kind == "market_bars" && concept.id != "book_cdp")
     {
         let mut first: Option<Value> = None;
         for module in ["data"] {
@@ -445,6 +445,50 @@ async fn logarithmic_return_uses_the_last_two_observed_closes_only() {
         &app,
         "/api/practice",
         json!({"concept_id":"book_log_return","module":"data","symbol":"BTCUSDT","source":"synthetic","bars":bars,"inputs":{"start_price":100.0,"end_price":110.0}}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn cdp_uses_the_previous_completed_a_share_daily_bar_only() {
+    let app = app();
+    let mut bars = SyntheticFeed::new(91)
+        .fetch_historical(
+            "600519",
+            Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+            2,
+        )
+        .unwrap();
+    bars[0].open = 100.0;
+    bars[0].high = 110.0;
+    bars[0].low = 90.0;
+    bars[0].close = 100.0;
+    bars[1].open = 122.0;
+    bars[1].high = 130.0;
+    bars[1].low = 120.0;
+    bars[1].close = 125.0;
+    bars[1].timestamp = bars[0].timestamp + chrono::Duration::days(1);
+    let body = |source: &str, input: Value| json!({"concept_id":"book_cdp","module":"data","symbol":"600519","source":source,"bars":bars,"inputs":input});
+    let (status, output) = request(&app, "/api/practice", body("a_share", json!({}))).await;
+    assert_eq!(status, StatusCode::OK, "{output}");
+    assert_eq!(output["provenance"], "provided_market_bars");
+    assert_eq!(output["context"], "module_snapshot");
+    assert_eq!(output["values"]["cdp"], 100.0);
+    assert_eq!(output["values"]["ah"], 120.0);
+    for body in [
+        body("binance", json!({})),
+        body("a_share", json!({"previous_high":110.0})),
+    ] {
+        let (status, _) = request(&app, "/api/practice", body).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+    let mut intraday = bars;
+    intraday[1].timestamp = intraday[0].timestamp + chrono::Duration::hours(1);
+    let (status, _) = request(
+        &app,
+        "/api/practice",
+        json!({"concept_id":"book_cdp","module":"data","symbol":"600519","source":"a_share","bars":intraday,"inputs":{}}),
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);

@@ -798,7 +798,6 @@ mod tests {
 
     #[tokio::test]
     async fn search_uses_fixed_snapshot_for_trimmed_queries_pages_and_stale_refresh() {
-        catalogs().write().await.clear();
         catalogs().write().await.insert(
             "a_share".into(),
             CatalogSnapshot {
@@ -840,8 +839,10 @@ mod tests {
         refreshing().lock().await.insert("us_stock".into());
         let (_, _, _, source, cached) = search("us_stock", "", 0, 1).await.unwrap();
         assert_eq!((source, cached), ("stale", true));
-        refreshing().lock().await.clear();
-        catalogs().write().await.clear();
+        refreshing().lock().await.remove("us_stock");
+        let mut snapshots = catalogs().write().await;
+        snapshots.remove("a_share");
+        snapshots.remove("us_stock");
     }
 
     #[tokio::test]
@@ -908,7 +909,7 @@ mod tests {
             .unwrap();
         assert_eq!(snapshot.items, original);
         catalogs().write().await.remove("refresh_fixture");
-        refreshing().lock().await.clear();
+        refreshing().lock().await.remove("refresh_fixture");
 
         let refreshed = vec![SymbolItem {
             symbol: "000001".into(),

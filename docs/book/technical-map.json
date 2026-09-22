@@ -398,15 +398,11 @@
     {
       "id": "book_cdp",
       "name": "CDP",
-      "summary": "用上一交易时段高低收计算逆势操作参考价。",
+      "summary": "仅用上一根已收盘A股日线的高低收计算CDP及五档逆势操作参考价，适用于最后一根已收盘日线所属的交易时段。",
       "example": "H110 L90 C100时CDP100，AH120、AL80。",
       "formula": "",
-      "input_kind": "independent_inputs",
-      "defaults": {
-        "previous_high": 110.0,
-        "previous_low": 90.0,
-        "previous_close": 100.0
-      },
+      "input_kind": "market_bars",
+      "defaults": {},
       "source_ids": [
         "book_20_04"
       ]

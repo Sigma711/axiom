@@ -66,6 +66,35 @@ test('knowledge card leads to an in-context practice result', async ({ page }) =
   await expect(page.getByLabel('概念实践')).toContainText('使用当前模块行情上下文');
 });
 
+test('CDP practice sends loaded A-share daily bars instead of editable HLC fields', async ({ page }) => {
+  const cdp = {
+    id: 'book_cdp', name: 'CDP', category: '原书补充·技术实践', input_kind: 'market_bars', inputs: [],
+    notes: '仅用上一根已收盘A股日线的高低收计算CDP。',
+    plan: { markets: ['cn_equity'], modules: ['data'], required_datasets: ['two_ordered_completed_a_share_daily_ohlcv'], source_policy: 'real_required', goal: '只用有序的最近两根已收盘A股日线。' }
+  };
+  await page.route('**/api/practice', async route => {
+    if (route.request().method() === 'GET') {
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ concepts: [cdp], modules: ['data'], total: 1 }) });
+    }
+    const request = JSON.parse(route.request().postData() || '{}');
+    expect(request).toMatchObject({ concept_id: 'book_cdp', source: 'a_share', inputs: {} });
+    expect(request.bars).toHaveLength(60);
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({
+      concept_id: 'book_cdp', status: 'computed', reason: null, input_kind: 'market_bars', provenance: 'provided_market_bars',
+      values: { cdp: 100, ah: 120, al: 80, nh: 110, nl: 90 }, units: { cdp: 'price', ah: 'price', al: 'price', nh: 'price', nl: 'price' },
+      series: [], notes: ['适用于最后一根已收盘日线所属交易时段。'], module: 'data', source: 'a_share', symbol: '600519', bars: []
+    }) });
+  });
+  await page.goto('/data?concept=book_cdp&source=a_share');
+  const panel = page.getByLabel('概念实践');
+  await expect(panel).toContainText('CDP');
+  await expect(panel).toContainText('A 股');
+  await expect(panel.locator('input')).toHaveCount(0);
+  await page.getByRole('button', { name: '运行实践' }).click();
+  await expect(panel).toContainText('基于当前标的已收盘行情');
+  await expect(panel).toContainText('100');
+});
+
 test('each rendered knowledge concept expands to an explanatory SVG', async ({ page }) => {
   await page.goto('/');
   const cards = page.locator('.ax-kb-card');

@@ -8,24 +8,6 @@ pub(super) fn evaluate(id: &str, v: &Value, o: &mut Output) -> Result<(), String
         };
     }
     match id {
-        "cdp" => {
-            let h = x("previous_high")?;
-            let l = x("previous_low")?;
-            let c = x("previous_close")?;
-            if h < l || c < l || c > h {
-                return Err("前期高低收不一致".into());
-            }
-            let p = (h + l + 2.0 * c) / 4.0;
-            for (k, z) in [
-                ("cdp", p),
-                ("ah", p + h - l),
-                ("al", p - h + l),
-                ("nh", 2.0 * p - l),
-                ("nl", 2.0 * p - h),
-            ] {
-                o.number(k, z, "price");
-            }
-        }
         "gann_angle" => o.number(
             "line_price",
             x("anchor_price")?
