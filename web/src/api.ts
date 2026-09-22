@@ -41,7 +41,7 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 
 export const api = {
   listStrategies: () => call<{ strategies: StrategyMeta[] }>('GET', '/api/strategies'),
-  listSymbols: () => call<{ symbols: string[]; count: number; source: string }>('GET', '/api/symbols'),
+  listSymbols: (source: SourceType = 'binance') => call<{ symbols: string[]; count: number; source: string }>('GET', '/api/symbols?source=' + encodeURIComponent(source)),
   getConfig: () => call<Record<string, unknown>>('GET', '/api/config'),
   listKnowledge: () => call<KnowledgeResponse>('GET', '/api/knowledge'),
   getData: (symbol: string, limit: number, source: SourceType) =>

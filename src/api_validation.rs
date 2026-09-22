@@ -9,16 +9,29 @@ pub fn bad(message: impl Into<String>) -> ApiError {
 }
 
 pub fn market(symbol: &str, source: &str, limit: usize, maximum: usize) -> Result<(), ApiError> {
-    if symbol.is_empty()
-        || symbol.len() > 30
-        || !symbol
-            .bytes()
-            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
-    {
-        return Err(bad("symbol must contain 1–30 uppercase letters or digits"));
+    if symbol.is_empty() || symbol.len() > 30 {
+        return Err(bad("symbol must contain 1–30 characters"));
     }
-    if !matches!(source, "real" | "synthetic") {
-        return Err(bad("source must be real or synthetic"));
+    // Legacy and deterministic fixture sources stay protocol-compatible for
+    // older saved lessons and automated checks; they are never offered by the UI.
+    if !crate::data::is_public_market_source(source) && !matches!(source, "real" | "synthetic") {
+        return Err(bad("source must be binance, a_share or us_stock"));
+    }
+    let valid_symbol = match source {
+        "synthetic" => symbol
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()),
+        "real" | "binance" => symbol
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()),
+        "a_share" => symbol.len() == 6 && symbol.bytes().all(|b| b.is_ascii_digit()),
+        "us_stock" => symbol
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'.' || b == b'-'),
+        _ => false,
+    };
+    if !valid_symbol {
+        return Err(bad("symbol is invalid for the selected market"));
     }
     if limit == 0 || limit > maximum {
         return Err(bad(format!("limit must be between 1 and {maximum}")));
@@ -187,4 +200,17 @@ pub fn indicator(token: &str) -> Result<(&str, usize), ApiError> {
         return Err(bad("indicator period must be between 1 and 500"));
     }
     Ok((name, period))
+}
+
+#[cfg(test)]
+mod market_source_tests {
+    use super::*;
+
+    #[test]
+    fn accepts_only_real_supported_market_and_symbol_pairs() {
+        assert!(market("BTCUSDT", "binance", 100, 5000).is_ok());
+        assert!(market("600519", "a_share", 100, 5000).is_ok());
+        assert!(market("AAPL", "us_stock", 100, 5000).is_ok());
+        assert!(market("BTCUSDT", "synthetic", 100, 5000).is_ok());
+    }
 }

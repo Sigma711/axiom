@@ -11,7 +11,7 @@
 use crate::types::Bar;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, TimeZone, Timelike, Utc};
+use chrono::{DateTime, Duration, NaiveDate, TimeZone, Timelike, Utc};
 use rand::{Rng, SeedableRng};
 use rand_distr::{Distribution, Normal};
 use std::fs::File;
@@ -390,6 +390,306 @@ impl AsyncDataFeed for HttpFeed {
     }
 }
 
+/// Real market sources exposed to learners. They all normalize their response
+/// into the same completed-OHLCV contract before callers see a candle.
+pub const PUBLIC_MARKET_SOURCES: &[&str] = &["binance", "a_share", "us_stock"];
+
+pub fn is_public_market_source(source: &str) -> bool {
+    PUBLIC_MARKET_SOURCES.contains(&source)
+}
+
+pub fn source_symbols(source: &str) -> Vec<String> {
+    match source {
+        "a_share" => ["600519", "000001", "300750", "601318"]
+            .into_iter()
+            .map(String::from)
+            .collect(),
+        "us_stock" => ["AAPL", "MSFT", "NVDA", "SPY"]
+            .into_iter()
+            .map(String::from)
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn complete_daily_bar(
+    date: &str,
+    open: f64,
+    high: f64,
+    low: f64,
+    close: f64,
+    volume: f64,
+) -> Option<Bar> {
+    let day = NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()?;
+    let timestamp = Utc.from_utc_datetime(&day.and_hms_opt(0, 0, 0)?);
+    let bar = Bar {
+        timestamp,
+        open,
+        high,
+        low,
+        close,
+        volume,
+    };
+    crate::practice::validate_bars(&[bar]).ok()?;
+    Some(bar)
+}
+
+fn parse_eastmoney_kline(row: &str) -> Option<Bar> {
+    let fields: Vec<_> = row.split(',').collect();
+    // date, open, close, high, low, volume, turnover...
+    Some(complete_daily_bar(
+        fields.first()?.trim(),
+        fields.get(1)?.trim().parse().ok()?,
+        fields.get(3)?.trim().parse().ok()?,
+        fields.get(4)?.trim().parse().ok()?,
+        fields.get(2)?.trim().parse().ok()?,
+        fields.get(5)?.trim().parse().ok()?,
+    )?)
+}
+
+fn parse_yahoo_bars(raw: &serde_json::Value) -> Result<Vec<Bar>> {
+    let result = raw
+        .pointer("/chart/result/0")
+        .context("Yahoo response has no result")?;
+    let times = result["timestamp"]
+        .as_array()
+        .context("Yahoo timestamps missing")?;
+    let quote = result
+        .pointer("/indicators/quote/0")
+        .context("Yahoo quotes missing")?;
+    let opens = quote["open"].as_array().context("Yahoo opens missing")?;
+    let highs = quote["high"].as_array().context("Yahoo highs missing")?;
+    let lows = quote["low"].as_array().context("Yahoo lows missing")?;
+    let closes = quote["close"].as_array().context("Yahoo closes missing")?;
+    let volumes = quote["volume"]
+        .as_array()
+        .context("Yahoo volumes missing")?;
+    let mut bars = Vec::new();
+    for i in 0..times.len() {
+        let Some(ts) = times[i].as_i64() else {
+            continue;
+        };
+        let (Some(open), Some(high), Some(low), Some(close), Some(volume)) = (
+            opens.get(i).and_then(serde_json::Value::as_f64),
+            highs.get(i).and_then(serde_json::Value::as_f64),
+            lows.get(i).and_then(serde_json::Value::as_f64),
+            closes.get(i).and_then(serde_json::Value::as_f64),
+            volumes.get(i).and_then(serde_json::Value::as_f64),
+        ) else {
+            continue;
+        };
+        let Some(timestamp) = Utc.timestamp_opt(ts, 0).single() else {
+            continue;
+        };
+        if timestamp.date_naive() >= Utc::now().date_naive() {
+            continue;
+        }
+        let bar = Bar {
+            timestamp,
+            open,
+            high,
+            low,
+            close,
+            volume,
+        };
+        if crate::practice::validate_bars(&[bar]).is_ok() {
+            bars.push(bar);
+        }
+    }
+    bars.sort_by_key(|bar| bar.timestamp);
+    bars.dedup_by_key(|bar| bar.timestamp);
+    crate::practice::validate_bars(&bars).map_err(anyhow::Error::msg)?;
+    Ok(bars)
+}
+
+fn json_number(value: &serde_json::Value) -> Option<f64> {
+    value.as_f64().or_else(|| value.as_str()?.parse().ok())
+}
+
+fn parse_tencent_a_share_bars(raw: &serde_json::Value, market_symbol: &str) -> Result<Vec<Bar>> {
+    let rows = raw
+        .pointer(&format!("/data/{market_symbol}/qfqday"))
+        .and_then(serde_json::Value::as_array)
+        .context("Tencent A-share response has no adjusted daily rows")?;
+    let bars: Vec<Bar> = rows
+        .iter()
+        .filter_map(|row| {
+            let row = row.as_array()?;
+            complete_daily_bar(
+                row.first()?.as_str()?,
+                json_number(row.get(1)?)?,
+                json_number(row.get(3)?)?,
+                json_number(row.get(4)?)?,
+                json_number(row.get(2)?)?,
+                json_number(row.get(5)?)?,
+            )
+        })
+        .collect();
+    crate::practice::validate_bars(&bars).map_err(anyhow::Error::msg)?;
+    Ok(bars)
+}
+
+async fn fetch_a_share_tencent(
+    symbol: &str,
+    since: DateTime<Utc>,
+    limit: usize,
+) -> Result<Vec<Bar>> {
+    let exchange = if symbol.starts_with(['6', '9']) {
+        "sh"
+    } else {
+        "sz"
+    };
+    let market_symbol = format!("{exchange}{symbol}");
+    let raw: serde_json::Value = reqwest::Client::new()
+        .get("https://web.ifzq.gtimg.cn/appstock/app/fqkline/get")
+        .header(
+            reqwest::header::USER_AGENT,
+            "AXIOM educational market reader/1.0",
+        )
+        .query(&[("param", format!("{market_symbol},day,,,{limit},qfq"))])
+        .timeout(std::time::Duration::from_secs(15))
+        .send()
+        .await
+        .context("Tencent A-share market request failed")?
+        .error_for_status()
+        .context("Tencent A-share market returned HTTP error")?
+        .json()
+        .await
+        .context("invalid Tencent A-share market JSON")?;
+    let mut bars = parse_tencent_a_share_bars(&raw, &market_symbol)?;
+    bars.retain(|bar| bar.timestamp >= since);
+    if bars.len() > limit {
+        bars = bars.split_off(bars.len() - limit);
+    }
+    Ok(bars)
+}
+
+async fn fetch_a_share(symbol: &str, since: DateTime<Utc>, limit: usize) -> Result<Vec<Bar>> {
+    anyhow::ensure!(
+        symbol.len() == 6 && symbol.bytes().all(|byte| byte.is_ascii_digit()),
+        "A-share symbol must be a six digit code"
+    );
+    let exchange = if symbol.starts_with(['6', '9']) {
+        "1"
+    } else {
+        "0"
+    };
+    let request = reqwest::Client::new()
+        .get("https://push2his.eastmoney.com/api/qt/stock/kline/get")
+        .header(
+            reqwest::header::USER_AGENT,
+            "AXIOM educational market reader/1.0",
+        )
+        .query(&[
+            ("secid", format!("{exchange}.{symbol}")),
+            ("klt", "101".to_owned()),
+            ("fqt", "0".to_owned()),
+            ("lmt", limit.min(5000).to_string()),
+            ("beg", since.format("%Y%m%d").to_string()),
+            ("end", Utc::now().format("%Y%m%d").to_string()),
+            ("fields1", "f1,f2,f3,f4,f5,f6".to_owned()),
+            (
+                "fields2",
+                "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61".to_owned(),
+            ),
+        ]);
+    let primary = async {
+        let raw: serde_json::Value = request
+            .timeout(std::time::Duration::from_secs(15))
+            .send()
+            .await
+            .context("A-share market request failed")?
+            .error_for_status()
+            .context("A-share market returned HTTP error")?
+            .json()
+            .await
+            .context("invalid A-share market JSON")?;
+        let rows = raw
+            .pointer("/data/klines")
+            .and_then(serde_json::Value::as_array)
+            .context("A-share response has no kline rows")?;
+        let bars: Vec<Bar> = rows
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .filter_map(parse_eastmoney_kline)
+            .collect();
+        crate::practice::validate_bars(&bars).map_err(anyhow::Error::msg)?;
+        Ok::<Vec<Bar>, anyhow::Error>(
+            bars.into_iter()
+                .filter(|bar| bar.timestamp >= since)
+                .take(limit)
+                .collect(),
+        )
+    }
+    .await;
+    match primary {
+        Ok(bars) if !bars.is_empty() => Ok(bars),
+        Ok(_) | Err(_) => fetch_a_share_tencent(symbol, since, limit).await,
+    }
+}
+
+async fn fetch_us_stock(symbol: &str, since: DateTime<Utc>, limit: usize) -> Result<Vec<Bar>> {
+    anyhow::ensure!(
+        !symbol.is_empty()
+            && symbol.len() <= 12
+            && symbol
+                .bytes()
+                .all(|byte| byte.is_ascii_uppercase() || byte == b'.' || byte == b'-'),
+        "US symbol must contain uppercase letters, digits, dot or dash"
+    );
+    let raw: serde_json::Value = reqwest::Client::new()
+        .get(format!(
+            "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+        ))
+        .header(
+            reqwest::header::USER_AGENT,
+            "AXIOM educational market reader/1.0",
+        )
+        .query(&[
+            ("period1", since.timestamp().to_string()),
+            ("period2", Utc::now().timestamp().to_string()),
+            ("interval", "1d".to_owned()),
+            ("includePrePost", "false".to_owned()),
+            ("events", "div,splits".to_owned()),
+        ])
+        .timeout(std::time::Duration::from_secs(15))
+        .send()
+        .await
+        .context("US market request failed")?
+        .error_for_status()
+        .context("US market returned HTTP error")?
+        .json()
+        .await
+        .context("invalid US market JSON")?;
+    let mut bars = parse_yahoo_bars(&raw)?;
+    bars.retain(|bar| bar.timestamp >= since);
+    if bars.len() > limit {
+        bars = bars.split_off(bars.len() - limit);
+    }
+    Ok(bars)
+}
+
+/// Fetch completed candles from a named free public source. Source-specific
+/// response peculiarities, daily session rules and parsers stay behind this seam.
+pub async fn fetch_public_market_bars(
+    feed: &HttpFeed,
+    source: &str,
+    symbol: &str,
+    since: DateTime<Utc>,
+    limit: usize,
+) -> Result<Vec<Bar>> {
+    anyhow::ensure!(
+        is_public_market_source(source),
+        "unknown public market source"
+    );
+    match source {
+        "binance" => feed.fetch_historical_async(symbol, since, limit).await,
+        "a_share" => fetch_a_share(symbol, since, limit).await,
+        "us_stock" => fetch_us_stock(symbol, since, limit).await,
+        _ => unreachable!("source is validated above"),
+    }
+}
+
 #[cfg(test)]
 mod deployment_endpoint_tests {
     use super::HttpFeed;
@@ -400,5 +700,59 @@ mod deployment_endpoint_tests {
             HttpFeed::new("target/test-market-cache").base_url,
             "https://data-api.binance.vision"
         );
+    }
+}
+
+#[cfg(test)]
+mod public_market_source_tests {
+    use super::*;
+
+    #[test]
+    fn eastmoney_daily_row_maps_its_documented_ohlcv_columns() {
+        let bar = parse_eastmoney_kline("2024-01-02,10.0,11.0,12.0,9.5,12345,0,0,0,0,0").unwrap();
+        assert_eq!(bar.timestamp.to_rfc3339(), "2024-01-02T00:00:00+00:00");
+        assert_eq!(
+            (bar.open, bar.high, bar.low, bar.close, bar.volume),
+            (10.0, 12.0, 9.5, 11.0, 12345.0)
+        );
+    }
+
+    #[test]
+    fn tencent_adjusted_rows_map_ohlcv_columns() {
+        let raw = serde_json::json!({"data":{"sh600519":{"qfqday":[["2024-01-02","10","11","12","9","100"]]}}});
+        let bars = parse_tencent_a_share_bars(&raw, "sh600519").unwrap();
+        assert_eq!(
+            (
+                bars[0].open,
+                bars[0].high,
+                bars[0].low,
+                bars[0].close,
+                bars[0].volume
+            ),
+            (10.0, 12.0, 9.0, 11.0, 100.0)
+        );
+    }
+
+    #[test]
+    fn yahoo_parser_discards_current_and_incomplete_sessions() {
+        let raw = serde_json::json!({"chart":{"result":[{"timestamp":[1704067200, 4102444800i64],"indicators":{"quote":[{"open":[10.0,null],"high":[12.0,null],"low":[9.0,null],"close":[11.0,null],"volume":[100.0,null]}]}}]}});
+        let bars = parse_yahoo_bars(&raw).unwrap();
+        assert_eq!(bars.len(), 1);
+        assert_eq!(bars[0].close, 11.0);
+    }
+
+    #[test]
+    fn public_sources_have_curated_symbols_and_no_synthetic_source() {
+        assert_eq!(PUBLIC_MARKET_SOURCES, &["binance", "a_share", "us_stock"]);
+        assert_eq!(
+            source_symbols("a_share"),
+            vec!["600519", "000001", "300750", "601318"]
+        );
+        assert_eq!(
+            source_symbols("us_stock"),
+            vec!["AAPL", "MSFT", "NVDA", "SPY"]
+        );
+        assert!(is_public_market_source("binance"));
+        assert!(!is_public_market_source("synthetic"));
     }
 }

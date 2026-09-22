@@ -134,7 +134,7 @@ impl PaperState {
             source: if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
                 "synthetic"
             } else {
-                "real"
+                "binance"
             },
             equity_curve: Vec::new(),
             bars: Vec::new(),

@@ -4,6 +4,13 @@ import { api, appBase, appPath, fmtPct, fmtNum, fmtMoney, preferredCodeLocationU
 import { performanceInputs } from './performance';
 import { KnowledgeSeriesVisual } from './KnowledgeSeriesVisual';
 import { indicatorPanel, validSeries, type IndicatorPanel } from './chart';
+const MARKET_SOURCE_OPTIONS = [
+  { v: 'binance', l: '加密货币 · Binance' },
+  { v: 'a_share', l: 'A 股 · 东方财富' },
+  { v: 'us_stock', l: '美股 · Yahoo Finance' },
+] as const;
+const MARKET_SOURCE_LABEL: Record<string, string> = Object.fromEntries(MARKET_SOURCE_OPTIONS.map(item => [item.v, item.l]));
+
 import type {
   TabId, SourceType, Bar, BacktestResult, StrategyMeta,
   KnowledgeResponse, KnowledgeEntry, CustomStrategy, ChartType,
@@ -450,7 +457,7 @@ function CandlePatternVisual({ concept }: { concept: KnowledgeEntry }) {
   const [error, setError] = useState('');
   useEffect(() => {
     let active = true;
-    Promise.all([practiceCatalog(), api.runPractice({ concept_id: concept.id, module: 'data', symbol: 'BTCUSDT', source: 'synthetic', limit: 80, inputs: {} })])
+    Promise.all([practiceCatalog(), api.runPractice({ concept_id: concept.id, module: 'data', symbol: 'BTCUSDT', source: 'binance', limit: 80, inputs: {} })])
       .then(([catalog, value]) => { if (active) { setPracticeConcept(catalog.find(item => item.id === concept.id) || null); setResult(value); } })
       .catch(reason => { if (active) setError(String(reason)); });
     return () => { active = false; };
@@ -692,7 +699,7 @@ function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 
   const [symbol, setSymbol] = useState('');
   const [customSymbol, setCustomSymbol] = useState('');
   const [limit, setLimit] = useState(200);
-  const [source, setSource] = useState<SourceType>('real');
+  const [source, setSource] = useState<SourceType>('binance');
   const [chartType, setChartType] = useState<ChartType>('candle');
   const [selectedIndicators, setSelectedIndicators] = useState<string[]>(['sma_20', 'rsi_14', 'bbands_20', 'macd', 'atr_14']);
   const appliedIndicators = useRef<string[]>(['sma_20', 'rsi_14', 'bbands_20', 'macd', 'atr_14']);
@@ -705,12 +712,11 @@ function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 
   const requestId = useRef(0);
 
   useEffect(() => {
-    api.listSymbols().then(d => {
+    api.listSymbols(source).then(d => {
       setSymbols(d.symbols);
-      if (d.symbols.includes('BTCUSDT')) setSymbol('BTCUSDT');
-      else if (d.symbols.length > 0) setSymbol(d.symbols[0]);
+      setSymbol(d.symbols[0] || '');
     }).catch(e => setError(String(e)));
-  }, []);
+  }, [source]);
 
   const loadData = useCallback(async (requestedIndicators = appliedIndicators.current) => {
     const id = ++requestId.current;
@@ -838,7 +844,7 @@ function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 
   return (
     <section className="ax-section">
       <h2>数据探索</h2>
-      <p className="ax-lead">真实 Binance 数据 + 指标叠加 + 形态识别。</p>
+      <p className="ax-lead">真实行情：加密货币、A 股与美股；支持指标叠加和形态识别。</p>
       <div className="ax-controls">
         <label>交易对
           <Dropdown label="交易对" options={symbols.map(s => ({ v: s, l: s }))} value={symbol} onChange={setSymbol} minWidth={120} />
@@ -852,7 +858,7 @@ function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 
             min={50} max={2000} step={50} />
         </label>
         <label>数据源
-          <Dropdown label="数据源" options={[{v:'real',l:'真实 (Binance)'},{v:'synthetic',l:'合成 (随机)'}]}
+          <Dropdown label="数据源" options={MARKET_SOURCE_OPTIONS}
             value={source} onChange={(v: SourceType) => setSource(v)} minWidth={140} />
         </label>
         <label>图表类型
@@ -872,7 +878,7 @@ function DataExplore({ targetConcept, theme }: { targetConcept?: string; theme: 
         <div className="ax-summary">
           <table>
             <tbody>
-              <tr><th>币种</th><td>{chartData?.symbol}</td><th>来源</th><td>{summary.source}</td></tr>
+              <tr><th>标的</th><td>{chartData?.symbol}</td><th>来源</th><td>{MARKET_SOURCE_LABEL[summary.source] || summary.source}</td></tr>
               <tr><th>K 线数</th><td>{summary.count}</td><th>首价</th><td>{fmtNum(summary.open)}</td></tr>
               <tr><th>末价</th><td>{fmtNum(summary.close)}</td><th>累计涨跌</th>
                 <td style={{ color: summary.return_pct >= 0 ? 'var(--green)' : 'var(--red)' }}>
@@ -907,7 +913,7 @@ function Backtest({ targetConcept, theme }: { targetConcept?: string; theme: 'li
   const [params, setParams] = useState<Record<string, number>>({});
   const [symbol, setSymbol] = useState('');
   const [symbols, setSymbols] = useState<string[]>([]);
-  const [source, setSource] = useState<SourceType>('real');
+  const [source, setSource] = useState<SourceType>('binance');
   const [limit, setLimit] = useState(500);
   const [capital, setCapital] = useState(10000);
   const [sl, setSl] = useState(0);
@@ -928,11 +934,11 @@ function Backtest({ targetConcept, theme }: { targetConcept?: string; theme: 'li
         setParams(p);
       }
     });
-    api.listSymbols().then(d => {
+    api.listSymbols(source).then(d => {
       setSymbols(d.symbols);
-      setSymbol('BTCUSDT');
+      setSymbol(d.symbols[0] || '');
     });
-  }, []);
+  }, [source]);
 
   // 切策略时加载默认参数
   useEffect(() => {
@@ -989,7 +995,7 @@ function Backtest({ targetConcept, theme }: { targetConcept?: string; theme: 'li
   return (
     <section className="ax-section">
       <h2>回测</h2>
-      <p className="ax-lead">在真实 Binance 数据上跑策略,看业绩指标。</p>
+      <p className="ax-lead">在所选真实市场的数据上跑策略，观察业绩指标。</p>
       <div className="ax-controls">
         <label>策略
           <Dropdown label="策略" options={strategies.map(s => ({ v: s.name, l: s.display_name }))}
@@ -1000,7 +1006,7 @@ function Backtest({ targetConcept, theme }: { targetConcept?: string; theme: 'li
             value={symbol} onChange={setSymbol} minWidth={120} />
         </label>
         <label>数据源
-          <Dropdown label="数据源" options={[{v:'real',l:'真实 (Binance)'},{v:'synthetic',l:'合成 (随机)'}]}
+          <Dropdown label="数据源" options={MARKET_SOURCE_OPTIONS}
             value={source} onChange={(v: SourceType) => setSource(v)} minWidth={140} />
         </label>
         <label>K 线数
@@ -1198,7 +1204,7 @@ function PaperTrading({ targetConcept, theme }: { targetConcept?: string; theme:
         <div className="ax-stat"><div className="ax-stat-label">持仓数量</div><div className="ax-stat-value">{fmtNum(snapshot.position_size, 4)}</div></div>
         <div className="ax-stat"><div className="ax-stat-label">成交笔数</div><div className="ax-stat-value">{snapshot.trades_count}</div></div>
         <div className="ax-stat"><div className="ax-stat-label">交易对</div><div className="ax-stat-value">{snapshot.symbol || '—'}</div></div>
-        <div className="ax-stat"><div className="ax-stat-label">数据源</div><div className="ax-stat-value">{snapshot.source === 'synthetic' ? '合成教学行情' : snapshot.source === 'real' ? 'Binance' : '—'}</div></div>
+        <div className="ax-stat"><div className="ax-stat-label">数据源</div><div className="ax-stat-value">{MARKET_SOURCE_LABEL[snapshot.source || ''] || '—'}</div></div>
         <div className="ax-stat"><div className="ax-stat-label">最新价</div><div className="ax-stat-value">{snapshot.current_bar ? fmtNum(snapshot.current_bar.close) : '—'}</div></div>
       </div>
       <div ref={chartRef} className="ax-chart"></div>
@@ -1214,7 +1220,7 @@ function PaperTrading({ targetConcept, theme }: { targetConcept?: string; theme:
           ))}
         </div>
       </details>
-      <PracticePanel module="paper" symbol={snapshot.symbol || 'BTCUSDT'} source={snapshot.source || 'real'} limit={snapshot.bars?.length || 200} bars={snapshot.bars} contextInputs={performanceInputs(snapshot.equity_curve, snapshot.initial_capital ?? snapshot.equity)} targetConcept={targetConcept} />
+      <PracticePanel module="paper" symbol={snapshot.symbol || 'BTCUSDT'} source={snapshot.source || 'binance'} limit={snapshot.bars?.length || 200} bars={snapshot.bars} contextInputs={performanceInputs(snapshot.equity_curve, snapshot.initial_capital ?? snapshot.equity)} targetConcept={targetConcept} />
     </section>
   );
 }
@@ -1228,7 +1234,7 @@ function CompareStrategies({ targetConcept, theme }: { targetConcept?: string; t
   const [customStrategies, setCustomStrategies] = useState<CustomStrategy[]>([]);
   const [symbol, setSymbol] = useState('');
   const [symbols, setSymbols] = useState<string[]>([]);
-  const [source, setSource] = useState<SourceType>('real');
+  const [source, setSource] = useState<SourceType>('binance');
   const [capital, setCapital] = useState(10000);
   const [results, setResults] = useState<Array<{ name: string; result: BacktestResult }>>([]);
   const [loading, setLoading] = useState(false);
@@ -1248,11 +1254,11 @@ function CompareStrategies({ targetConcept, theme }: { targetConcept?: string; t
       d.strategies.forEach(s => { if (s.name !== 'random') sel.add(s.name); });
       setSelected(sel);
     });
-    api.listSymbols().then(d => {
+    api.listSymbols(source).then(d => {
       setSymbols(d.symbols);
-      setSymbol('BTCUSDT');
+      setSymbol(d.symbols[0] || '');
     });
-  }, []);
+  }, [source]);
 
   const toggle = (name: string) => {
     setSelected(s => {
@@ -1356,7 +1362,7 @@ function CompareStrategies({ targetConcept, theme }: { targetConcept?: string; t
             value={symbol} onChange={setSymbol} minWidth={120} />
         </label>
         <label>数据源
-          <Dropdown label="数据源" options={[{v:'real',l:'真实 (Binance)'},{v:'synthetic',l:'合成 (随机)'}]}
+          <Dropdown label="数据源" options={MARKET_SOURCE_OPTIONS}
             value={source} onChange={(v: SourceType) => setSource(v)} minWidth={140} />
         </label>
         <label>资金

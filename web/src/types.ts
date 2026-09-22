@@ -107,7 +107,7 @@ export interface CustomStrategy {
 }
 
 export type ChartType = 'candle' | 'heikin_ashi';
-export type SourceType = 'real' | 'synthetic';
+export type SourceType = 'binance' | 'a_share' | 'us_stock';
 
 export interface PracticeConcept {
   id: string;

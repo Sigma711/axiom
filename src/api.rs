@@ -14,7 +14,7 @@
 
 use crate::api_validation::{self as validate, ApiError};
 use crate::app_state::AppState;
-use crate::data::{AsyncDataFeed, DataFeed, SyntheticFeed};
+use crate::data::{fetch_public_market_bars, source_symbols, DataFeed, SyntheticFeed};
 use crate::engine::{BacktestEngine, EngineConfig};
 use crate::metrics::compute_metrics;
 use crate::paper::PaperSnapshot;
@@ -48,31 +48,33 @@ async fn market_bars(
     limit: usize,
 ) -> Result<Vec<Bar>, ApiError> {
     validate::market(symbol, source, limit, 5000)?;
+    // The real alias is accepted only for old deep links; new callers use the explicit provider name.
+    let source = if source == "real" { "binance" } else { source };
+    if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Live market data is disabled in offline mode".into(),
+        ));
+    }
+    let now = Utc::now()
+        .with_minute(0)
+        .unwrap()
+        .with_second(0)
+        .unwrap()
+        .with_nanosecond(0)
+        .unwrap();
     let since = if source == "synthetic" {
         Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap()
+    } else if source == "binance" {
+        now - Duration::hours(limit as i64)
     } else {
-        Utc::now()
-            .with_minute(0)
-            .unwrap()
-            .with_second(0)
-            .unwrap()
-            .with_nanosecond(0)
-            .unwrap()
-            - Duration::hours(limit as i64)
+        // Daily markets need calendar runway: it includes weekends and holidays.
+        now - Duration::days((limit.saturating_mul(3)) as i64)
     };
     let bars = if source == "synthetic" {
         SyntheticFeed::default().fetch_historical(symbol, since, limit)
     } else {
-        if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
-            return Err((
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Live market data is disabled in offline mode; select synthetic data".into(),
-            ));
-        }
-        state
-            .feed
-            .fetch_historical_async(symbol, since, limit)
-            .await
+        fetch_public_market_bars(&state.feed, source, symbol, since, limit).await
     }
     .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
     validate::bars(&bars)?;
@@ -367,7 +369,7 @@ async fn get_data(
         .symbol
         .unwrap_or_else(|| state.config.trading.symbol.clone());
     let limit = q.limit.unwrap_or(200);
-    let source = q.source.unwrap_or_else(|| "real".to_string());
+    let source = q.source.unwrap_or_else(|| "binance".to_string());
 
     let bars = market_bars(&state, &symbol, &source, limit).await?;
 
@@ -468,7 +470,7 @@ async fn post_backtest(
         .clone()
         .unwrap_or_else(|| state.config.trading.symbol.clone());
     let limit = req.limit.unwrap_or(500);
-    let source = req.source.unwrap_or_else(|| "real".to_string());
+    let source = req.source.unwrap_or_else(|| "binance".to_string());
 
     validate::market(&symbol, &source, limit, 5000)?;
     let bars = if let Some(bars) = req.bars {
@@ -754,7 +756,7 @@ async fn get_patterns(
         .symbol
         .unwrap_or_else(|| state.config.trading.symbol.clone());
     let limit = q.limit.unwrap_or(100);
-    let source = q.source.unwrap_or_else(|| "real".to_string());
+    let source = q.source.unwrap_or_else(|| "binance".to_string());
     let bars = market_bars(&state, &symbol, &source, limit).await?;
 
     use crate::indicators::extra::detect_pattern;
@@ -784,7 +786,7 @@ async fn get_heikin_ashi(
         .symbol
         .unwrap_or_else(|| state.config.trading.symbol.clone());
     let limit = q.limit.unwrap_or(200);
-    let source = q.source.unwrap_or_else(|| "real".to_string());
+    let source = q.source.unwrap_or_else(|| "binance".to_string());
     let bars = market_bars(&state, &symbol, &source, limit).await?;
 
     let ha = crate::indicators::extra::heikin_ashi(&bars);
@@ -845,7 +847,7 @@ async fn get_indicators(
         .symbol
         .unwrap_or_else(|| state.config.trading.symbol.clone());
     let limit = q.limit.unwrap_or(200);
-    let source = q.source.unwrap_or_else(|| "real".to_string());
+    let source = q.source.unwrap_or_else(|| "binance".to_string());
     let bars = market_bars(&state, &symbol, &source, limit).await?;
 
     let closes: Vec<f64> = bars.iter().map(|b| b.close).collect();
@@ -1164,13 +1166,26 @@ fn default_symbols() -> Vec<String> {
     .collect()
 }
 
-async fn get_symbols() -> Json<Value> {
-    let symbols = get_cached_symbols().await;
-    Json(json!({
-        "symbols": symbols,
-        "count": symbols.len(),
-        "source": if symbols.len() > 30 { "binance" } else { "fallback" },
-    }))
+#[derive(Deserialize)]
+struct SymbolsQuery {
+    source: Option<String>,
+}
+
+async fn get_symbols(
+    axum::extract::Query(q): axum::extract::Query<SymbolsQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let source = q.source.unwrap_or_else(|| "binance".into());
+    if !crate::data::is_public_market_source(&source) {
+        return Err(validate::bad("source must be binance, a_share or us_stock"));
+    }
+    let symbols = if source == "binance" {
+        get_cached_symbols().await
+    } else {
+        source_symbols(&source)
+    };
+    Ok(Json(
+        json!({ "symbols": symbols, "count": symbols.len(), "source": source }),
+    ))
 }
 
 // -----------------------------------------------------------------------------
@@ -1315,7 +1330,7 @@ async fn post_practice(
     let symbol = req
         .symbol
         .unwrap_or_else(|| state.config.trading.symbol.clone());
-    let source = req.source.unwrap_or_else(|| "synthetic".into());
+    let source = req.source.unwrap_or_else(|| "binance".into());
     let limit = req.limit.unwrap_or(200);
     validate::market(&symbol, &source, limit, 5000)?;
     let registry = crate::practice::catalog();
