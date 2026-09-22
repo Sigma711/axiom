@@ -679,6 +679,8 @@ async fn fetch_us_stock_nasdaq(
             ("assetclass", "stocks".to_owned()),
             ("fromdate", since.format("%Y-%m-%d").to_string()),
             ("todate", Utc::now().format("%Y-%m-%d").to_string()),
+            // Nasdaq defaults to a short first page without this explicit limit.
+            ("limit", limit.min(5_000).to_string()),
         ])
         .timeout(std::time::Duration::from_secs(15))
         .send()
