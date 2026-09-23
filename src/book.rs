@@ -1,7 +1,7 @@
 //! 第一至十一章的可复算教学练习。coverage.json 保留每一条源记录和其可执行边界。
 use crate::knowledge::KnowledgeEntry;
 use crate::types::Bar;
-use chrono::Utc;
+use chrono::{Timelike, Utc};
 use serde_json::{json, Value};
 
 pub fn entries() -> Vec<KnowledgeEntry> {
@@ -486,7 +486,11 @@ const EXTRA: &[(&str, &str, &str)] = &[
         "委比=(买量-卖量)/(买量+卖量)",
     ),
     ("book_order_flow", "订单流分类", "净流入=主动买入-主动卖出"),
-    ("book_period", "K线周期", "周期秒数为输入元数据"),
+    (
+        "book_period",
+        "K线周期",
+        "由已验证来源约定：Binance 1小时=3600秒；A股/美股日线=86400秒",
+    ),
     ("book_adjustment", "复权价格", "复权价=原价×复权因子"),
     ("book_log_return", "对数坐标", "log return=ln(P1/P0)"),
     (
@@ -554,7 +558,7 @@ fn extra_inputs(id: &str) -> Option<Vec<(&'static str, &'static str, f64)>> {
             ("aggressive_buy_value", "主动买入额（元）", 60000.),
             ("aggressive_sell_value", "主动卖出额（元）", 40000.),
         ],
-        "book_period" => vec![("period_seconds", "周期长度（秒）", 300.)],
+        "book_period" => vec![],
         "book_adjustment" => vec![
             ("raw_price", "原始价格（元）", 10.),
             ("adjustment_factor", "复权因子", 1.2),
@@ -880,7 +884,10 @@ pub fn catalog() -> Vec<crate::practice::PracticeConcept> {
         })
         .collect();
     for (id, name, formula) in EXTRA {
-        let market_bars = matches!(*id, "book_log_return" | "book_nonstandard_bar");
+        let market_bars = matches!(
+            *id,
+            "book_log_return" | "book_nonstandard_bar" | "book_period"
+        );
         let fs = extra_inputs(id)
             .expect("registered extra inputs")
             .into_iter()
@@ -972,6 +979,91 @@ pub fn nonstandard_bar_ohlc4(open: f64, high: f64, low: f64, close: f64) -> Resu
         .is_finite()
         .then_some(value)
         .ok_or_else(|| "OHLC4 合成值超出可表示范围".into())
+}
+
+/// Summarizes the source-declared K-line period and observed timestamp gaps.
+///
+/// A stock's daily bar has a nominal 86,400-second calendar period even when a
+/// weekend, holiday, or suspension creates a larger gap between observations.
+/// Binance is expected to provide continuous one-hour bars; missing hours are
+/// reported as data gaps and never relabel the bars as multi-hour candles.
+pub fn market_period_summary(bars: &[Bar], source: &str) -> Result<Value, String> {
+    let (source_label, nominal_seconds, stock_daily) = match source {
+        "binance" | "real" => ("Binance 1小时", 3_600_i64, false),
+        "a_share" => ("A股日线", 86_400_i64, true),
+        "us_stock" => ("美股日线", 86_400_i64, true),
+        _ => return Err("K线周期只接受 Binance、A股或美股的真实来源".into()),
+    };
+    crate::practice::validate_bars(bars)?;
+    let first = bars.first().ok_or("K线周期至少需要一根已收盘OHLCV K线")?;
+    let last = bars.last().expect("checked non-empty bars");
+    if last.timestamp > Utc::now() {
+        return Err("最后一根K线时间在未来，不能视为已收盘".into());
+    }
+    if !stock_daily
+        && bars
+            .iter()
+            .any(|bar| bar.timestamp.timestamp().rem_euclid(nominal_seconds) != 0)
+    {
+        return Err("Binance 1小时K线时间戳必须位于UTC整点".into());
+    }
+    if stock_daily
+        && bars.iter().any(|bar| {
+            bar.timestamp.hour() != 0 || bar.timestamp.minute() != 0 || bar.timestamp.second() != 0
+        })
+    {
+        return Err("A股和美股日线必须使用UTC 00:00的交易日期标签".into());
+    }
+    let intervals: Vec<i64> = bars
+        .windows(2)
+        .map(|pair| (pair[1].timestamp - pair[0].timestamp).num_seconds())
+        .collect();
+    let last_interval = intervals.last().copied();
+    let (missing_expected_intervals, calendar_gap_count) = if stock_daily {
+        (
+            0_i64,
+            intervals
+                .iter()
+                .filter(|&&seconds| seconds > nominal_seconds)
+                .count() as i64,
+        )
+    } else {
+        (
+            intervals
+                .iter()
+                .map(|&seconds| (seconds / nominal_seconds - 1).max(0))
+                .sum(),
+            0_i64,
+        )
+    };
+    let range = format!(
+        "{} 至 {}",
+        first.timestamp.to_rfc3339(),
+        last.timestamp.to_rfc3339()
+    );
+    let mut notes = vec![format!(
+        "来源：{source_label}；名义周期：{nominal_seconds} 秒{}。本次含 {} 根已收盘K线，范围：{range}。",
+        if stock_daily { "（日线的日历长度，不是开市时长）" } else { "（1小时）" },
+        bars.len()
+    )];
+    if let Some(seconds) = last_interval {
+        notes.push(format!("最近相邻观测间隔：{seconds} 秒。"));
+    } else {
+        notes.push("只有一根K线，无法核对相邻观测间隔。".into());
+    }
+    if stock_daily && calendar_gap_count > 0 {
+        notes.push(format!("发现 {calendar_gap_count} 个大于86400秒的日期空档（周末、节假日或停牌均可能造成）；它们不表示多日K线。"));
+    }
+    if !stock_daily && missing_expected_intervals > 0 {
+        notes.push(format!("发现 {missing_expected_intervals} 个缺小时空档；名义周期仍为1小时，缺口应作为数据完整性问题处理。"));
+    }
+    Ok(json!({
+        "concept_id":"book_period", "input_kind":"market_bars", "provenance":"provided_market_bars",
+        "status":"computed", "reason":null,
+        "values":{"book_period":nominal_seconds,"last_observed_interval_seconds":last_interval,"bar_count":bars.len(),"missing_expected_intervals":missing_expected_intervals,"calendar_gap_count":calendar_gap_count},
+        "units":{"book_period":"秒","last_observed_interval_seconds":"秒","bar_count":"根 K 线","missing_expected_intervals":"个预期周期","calendar_gap_count":"个日期空档"},
+        "series":[],"notes":notes,"inputs":{}
+    }))
 }
 
 pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String> {
@@ -1136,7 +1228,7 @@ pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String>
             n("bid_size")? + n("ask_size")?,
         )?,
         "book_order_flow" => n("aggressive_buy_value")? - n("aggressive_sell_value")?,
-        "book_period" => n("period_seconds")?,
+        "book_period" => return Err("K线周期必须由 API 根据已验证真实来源和已收盘K线计算".into()),
         "book_adjustment" => n("raw_price")? * n("adjustment_factor")?,
         "book_log_return" => {
             let bars = log_return_bars(bars)?;
@@ -1184,7 +1276,10 @@ pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String>
     if !value.is_finite() {
         return Err("结果超出有限数值范围，请检查输入量级".into());
     }
-    let market_bars = matches!(id, "book_log_return" | "book_nonstandard_bar");
+    let market_bars = matches!(
+        id,
+        "book_log_return" | "book_nonstandard_bar" | "book_period"
+    );
     let mut result = json!({"concept_id":id,"input_kind":if market_bars {"market_bars"} else {"independent_inputs"},"provenance":if market_bars {"provided_market_bars"} else {"explicit_inputs"},"status":"computed","reason":null,"values":{id:value},"units":{id:unit(id)},"series":[],"notes":[if id == "book_log_return" {"仅使用最近两根有序、已收盘OHLCV K线的收盘价；不使用手填价格或未来K线。"} else if id == "book_nonstandard_bar" {"OHLC4 是已收盘真实K线的合成展示价；同时列出实际收盘价，合成价不可作为成交价。"} else {"同一报告期口径；分母为零时拒绝计算。"}],"inputs":merged});
     if id == "book_nonstandard_bar" {
         let actual_close = bars.last().unwrap().close;

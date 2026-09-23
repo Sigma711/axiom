@@ -494,3 +494,33 @@ test('nonstandard OHLC4 practice uses observed candles and separates synthetic f
     expect(JSON.stringify(payload.notes)).toContain('不可作为成交价');
   }
 });
+
+test('period practice uses each real source contract and labels observation gaps', async ({ page }) => {
+  test.setTimeout(120_000);
+  for (const source of ['binance', 'a_share', 'us_stock'] as const) {
+    await page.goto(`/data?concept=book_period&source=${source}`);
+    await page.getByRole('button', { name: '加载数据' }).click();
+    const panel = page.getByLabel('概念实践');
+    await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+    const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+    await panel.getByRole('button', { name: '运行实践' }).click();
+    const response = await responsePromise;
+    expect(response.ok(), await response.text()).toBe(true);
+    const request = response.request().postDataJSON();
+    const payload = await response.json();
+    const bars = request.bars as Array<{ timestamp: string }>;
+    const expected = source === 'binance' ? 3_600 : 86_400;
+    expect(request.inputs).toEqual({});
+    expect(payload.provenance).toBe('provided_market_bars');
+    expect(payload.values.book_period).toBe(expected);
+    expect(payload.values.bar_count).toBe(bars.length);
+    if (bars.length > 1) {
+      expect(payload.values.last_observed_interval_seconds).toBe((Date.parse(bars.at(-1)!.timestamp) - Date.parse(bars.at(-2)!.timestamp)) / 1000);
+    }
+    for (const bar of bars) {
+      const date = new Date(bar.timestamp);
+      if (source === 'binance') expect(date.getUTCMinutes()).toBe(0);
+      else expect([date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds()]).toEqual([0, 0, 0]);
+    }
+  }
+});

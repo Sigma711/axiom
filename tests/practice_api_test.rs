@@ -896,3 +896,44 @@ async fn nonstandard_bar_compares_observed_ohlc4_with_actual_close_without_manua
     let (status, _) = request(&app, "/api/practice", body(json!({"open":100.0}))).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn book_period_requires_real_source_bound_bars_and_preserves_stock_calendar_gaps() {
+    let app = app();
+    let crypto = json!([
+        {"timestamp":"2024-01-01T00:00:00Z","open":100.0,"high":101.0,"low":99.0,"close":100.0,"volume":1.0},
+        {"timestamp":"2024-01-01T01:00:00Z","open":100.0,"high":102.0,"low":99.0,"close":101.0,"volume":1.0}
+    ]);
+    let stock = json!([
+        {"timestamp":"2024-01-05T00:00:00Z","open":100.0,"high":101.0,"low":99.0,"close":100.0,"volume":1.0},
+        {"timestamp":"2024-01-08T00:00:00Z","open":100.0,"high":102.0,"low":99.0,"close":101.0,"volume":1.0}
+    ]);
+    for (source, symbol, bars, expected) in [
+        ("binance", "BTCUSDT", crypto.clone(), 3_600),
+        ("a_share", "600519", stock.clone(), 86_400),
+        ("us_stock", "AAPL", stock.clone(), 86_400),
+    ] {
+        let (status, output) = request(&app, "/api/practice", json!({
+            "concept_id":"book_period","module":"data","source":source,"symbol":symbol,"bars":bars,"inputs":{}
+        })).await;
+        assert_eq!(status, StatusCode::OK, "{source}: {output}");
+        assert_eq!(output["provenance"], "provided_market_bars");
+        assert_eq!(output["values"]["book_period"].as_i64(), Some(expected));
+        if source != "binance" {
+            assert_eq!(
+                output["values"]["last_observed_interval_seconds"].as_i64(),
+                Some(259_200)
+            );
+            assert!(output["notes"].to_string().contains("不表示多日K线"));
+        }
+    }
+    for request_body in [
+        json!({"concept_id":"book_period","module":"data","source":"synthetic","symbol":"BTCUSDT","bars":crypto,"inputs":{}}),
+        json!({"concept_id":"book_period","module":"data","source":"binance","symbol":"BTCUSDT","bars":stock,"inputs":{"period_seconds":300}}),
+        json!({"concept_id":"book_period","module":"backtest","source":"binance","symbol":"BTCUSDT","bars":stock,"inputs":{}}),
+        json!({"concept_id":"book_period","module":"data","source":"binance","symbol":"BTCUSDT","bars":[{"timestamp":"2024-01-01T00:30:00Z","open":100.0,"high":101.0,"low":99.0,"close":100.0,"volume":1.0}],"inputs":{}}),
+    ] {
+        let (status, _) = request(&app, "/api/practice", request_body).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+}

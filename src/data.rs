@@ -497,6 +497,15 @@ fn parse_yahoo_bars_at(raw: &serde_json::Value, now: DateTime<Utc>) -> Result<Ve
         if !yahoo_bar_is_complete(timestamp, regular_session, now) {
             continue;
         }
+        // Yahoo labels a US daily bar at local midnight (04:00/05:00 UTC).
+        // Normalize its already-identified trading date to this project's UTC
+        // daily-date convention; completeness remains checked against the raw time.
+        let timestamp = Utc.from_utc_datetime(
+            &timestamp
+                .date_naive()
+                .and_hms_opt(0, 0, 0)
+                .expect("midnight is a valid time"),
+        );
         let bar = Bar {
             timestamp,
             open,
@@ -1188,6 +1197,10 @@ mod public_market_source_tests {
         let after_close =
             parse_yahoo_bars_at(&raw, Utc.with_ymd_and_hms(2026, 9, 22, 20, 0, 1).unwrap())
                 .unwrap();
+        assert_eq!(
+            after_close[1].timestamp.to_rfc3339(),
+            "2026-09-22T00:00:00+00:00"
+        );
         assert_eq!(after_close.len(), 2);
 
         let weekend =
@@ -1195,7 +1208,6 @@ mod public_market_source_tests {
                 .unwrap();
         assert_eq!(weekend.len(), 2);
     }
-
     #[test]
     fn nasdaq_rows_parse_display_numbers_and_reverse_chronology() {
         let raw = serde_json::json!({"data":{"tradesTable":{"rows":[

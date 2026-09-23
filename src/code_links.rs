@@ -133,10 +133,10 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
             }
         }
         for c in crate::book::catalog() {
-            let references = if c.id == "book_nonstandard_bar" {
-                vec!["src/book.rs::nonstandard_bar_ohlc4".to_string()]
-            } else {
-                vec![format!("src/book.rs::evaluate::{}", c.id)]
+            let references = match c.id.as_str() {
+                "book_nonstandard_bar" => vec!["src/book.rs::nonstandard_bar_ohlc4".to_string()],
+                "book_period" => vec!["src/book.rs::market_period_summary".to_string()],
+                _ => vec![format!("src/book.rs::evaluate::{}", c.id)],
             };
             if let Some(r) = first_existing(references) {
                 out.insert(c.id, r);

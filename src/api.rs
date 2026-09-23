@@ -1457,7 +1457,15 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
                 | "book_second_order_greeks"
         );
     let performance = concept.category == "风险-绩效";
-    if concept.id == "book_annualized_volatility" {
+    if concept.id == "book_period" {
+        json!({
+            "markets":["crypto","cn_equity","us_equity"],
+            "modules":["data"],
+            "required_datasets":["completed_ohlcv_with_source_cadence"],
+            "source_policy":"real_required",
+            "goal":"使用所选市场的已收盘K线核对来源约定的名义周期与相邻观测间隔：Binance为连续1小时K线（3600秒），A股和美股为日线（名义86400秒）。股票周末、节假日或停牌形成的日期空档不会被误判为多日K线；不接受手填周期或模拟数据。"
+        })
+    } else if concept.id == "book_annualized_volatility" {
         json!({
             "markets":["crypto","cn_equity","us_equity"],
             "modules":["data"],
@@ -1920,6 +1928,16 @@ async fn post_practice(
             "practice source is not applicable to this concept",
         ));
     }
+    if concept.id == "book_period"
+        && !req
+            .inputs
+            .as_object()
+            .is_some_and(serde_json::Map::is_empty)
+    {
+        return Err(validate::bad(
+            "K线周期由已验证来源和K线决定，不接受手填覆盖",
+        ));
+    }
     if plan["source_policy"].as_str() == Some("real_required") && source == "synthetic" {
         return Err(validate::bad(
             "real_required practice does not accept synthetic market bars",
@@ -1944,6 +1962,11 @@ async fn post_practice(
     if concept.id == "book_relative_volume_at_time" {
         relative_volume_requires_continuous_binance_hours(&bars, &source)?;
     }
+    let period_summary = if concept.id == "book_period" {
+        Some(crate::book::market_period_summary(&bars, &source).map_err(validate::bad)?)
+    } else {
+        None
+    };
     let annualization = if concept.id == "book_annualized_volatility" {
         annualized_volatility_requires_source_cadence(&bars, &source)?;
         Some(annualization_basis_for_source(&source)?)
@@ -1993,16 +2016,19 @@ async fn post_practice(
             }
         }
     }
-    let mut result = match annualization {
-        Some(annualization) => crate::practice::evaluate_with_annualization(
-            &req.concept_id,
-            &bars,
-            &evaluator_inputs,
-            annualization,
-        ),
-        None => crate::practice::evaluate(&req.concept_id, &bars, &evaluator_inputs),
-    }
-    .map_err(validate::bad)?;
+    let mut result = match period_summary {
+        Some(summary) => summary,
+        None => match annualization {
+            Some(annualization) => crate::practice::evaluate_with_annualization(
+                &req.concept_id,
+                &bars,
+                &evaluator_inputs,
+                annualization,
+            ),
+            None => crate::practice::evaluate(&req.concept_id, &bars, &evaluator_inputs),
+        }
+        .map_err(validate::bad)?,
+    };
     result["module"] = json!(req.module);
     result["symbol"] = json!(symbol);
     result["source"] = json!(source);

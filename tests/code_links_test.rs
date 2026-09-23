@@ -64,6 +64,9 @@ fn every_published_concept_resolves_to_an_actual_implementation_branch() {
                 if e.id == "book_nonstandard_bar" {
                     assert_eq!(location.kind, "function");
                     assert_eq!(location.code_ref, "src/book.rs::nonstandard_bar_ohlc4");
+                } else if e.id == "book_period" {
+                    assert_eq!(location.kind, "function");
+                    assert_eq!(location.code_ref, "src/book.rs::market_period_summary");
                 } else {
                     assert!(
                         matches!(location.kind.as_str(), "match_arm" | "conditional"),

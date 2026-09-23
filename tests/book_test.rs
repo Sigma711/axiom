@@ -1,5 +1,5 @@
 use axiom::{book, types::Bar};
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, TimeZone, Utc};
 use serde_json::json;
 
 fn closed_bars(closes: &[f64]) -> Vec<Bar> {
@@ -89,6 +89,11 @@ fn every_industry_metric_has_a_worked_literal_answer() {
 #[test]
 fn every_book_catalog_default_is_executable_and_all_inputs_are_described() {
     for concept in book::catalog() {
+        // This concept is source-bound: its contract is exercised through
+        // market_period_summary and the API, not synthetic teaching defaults.
+        if concept.id == "book_period" {
+            continue;
+        }
         assert!(
             !concept.name.trim().is_empty(),
             "{} has no name",
@@ -317,4 +322,43 @@ fn nonstandard_bar_practice_reuses_the_validated_ohlc4_calculation() {
     assert!(book::evaluate("book_nonstandard_bar", &bars, &json!({"open":100.0})).is_err());
     bars[1].high = 101.0;
     assert!(book::evaluate("book_nonstandard_bar", &bars, &json!({})).is_err());
+}
+
+#[test]
+fn period_summary_uses_the_source_contract_and_does_not_turn_stock_weekends_into_multiday_bars() {
+    let start = Utc.with_ymd_and_hms(2024, 1, 5, 0, 0, 0).unwrap(); // Friday
+    let mut bars = closed_bars(&[100.0, 101.0]);
+    bars[0].timestamp = start;
+    bars[1].timestamp = start + Duration::days(3); // Monday: calendar gap, still daily bars
+    let stock = book::market_period_summary(&bars, "a_share").unwrap();
+    assert_eq!(stock["values"]["book_period"].as_i64(), Some(86_400));
+    assert_eq!(
+        stock["values"]["last_observed_interval_seconds"].as_i64(),
+        Some(259_200)
+    );
+    assert_eq!(stock["values"]["calendar_gap_count"].as_i64(), Some(1));
+    assert!(stock["notes"].to_string().contains("不表示多日K线"));
+
+    let crypto = book::market_period_summary(&bars, "binance").unwrap();
+    assert_eq!(crypto["values"]["book_period"].as_i64(), Some(3_600));
+    assert_eq!(
+        crypto["values"]["missing_expected_intervals"].as_i64(),
+        Some(71)
+    );
+    assert!(crypto["notes"].to_string().contains("缺小时"));
+}
+
+#[test]
+fn period_summary_rejects_untrusted_source_empty_disordered_or_future_bars() {
+    assert!(book::market_period_summary(&[], "binance").is_err());
+    let mut bars = closed_bars(&[100.0, 101.0]);
+    bars[1].timestamp = bars[0].timestamp;
+    let single = book::market_period_summary(&closed_bars(&[100.0]), "us_stock").unwrap();
+    assert!(single["values"]["last_observed_interval_seconds"].is_null());
+    assert!(single["notes"].to_string().contains("无法核对相邻观测间隔"));
+    assert!(book::market_period_summary(&bars, "binance").is_err());
+    let future = Utc::now() + Duration::hours(1);
+    bars[1].timestamp = future;
+    assert!(book::market_period_summary(&bars, "binance").is_err());
+    assert!(book::market_period_summary(&closed_bars(&[100.0]), "synthetic").is_err());
 }
