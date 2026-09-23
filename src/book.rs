@@ -2092,3 +2092,45 @@ fn unit(id: &str) -> &'static str {
         _ => "fraction",
     }
 }
+
+/// Computes the blockchain snapshot practices from one validated, oldest-to-newest
+/// ten-block Bitcoin-mainnet observation window.
+pub fn market_bitcoin_block_summary(
+    concept_id: &str,
+    blocks: &[crate::data::BitcoinBlock],
+) -> Result<Value, String> {
+    if !matches!(concept_id, "book_block_height" | "book_block_size") || blocks.len() != 10 {
+        return Err(
+            "Bitcoin block practice requires a supported concept and exactly 10 blocks".into(),
+        );
+    }
+    for pair in blocks.windows(2) {
+        if pair[0].height.checked_add(1) != Some(pair[1].height)
+            || pair[1].previous_hash != pair[0].hash
+            || pair[0].size_bytes == 0
+            || pair[1].size_bytes == 0
+        {
+            return Err(
+                "Bitcoin blocks must be linked consecutive heights with positive serialized sizes"
+                    .into(),
+            );
+        }
+    }
+    let total = blocks
+        .iter()
+        .try_fold(0u64, |sum, block| sum.checked_add(block.size_bytes))
+        .ok_or_else(|| "Bitcoin block-size total overflow".to_string())?;
+    let values = if concept_id == "book_block_height" {
+        json!({"reference_height":blocks[0].height,"latest_height":blocks.last().unwrap().height,"blocks_since_reference":blocks.last().unwrap().height - blocks[0].height,"observed_block_count":blocks.len()})
+    } else {
+        json!({"total_size_bytes":total,"mean_size_bytes":total as f64 / blocks.len() as f64,"sample_block_count":blocks.len()})
+    };
+    let units = if concept_id == "book_block_height" {
+        json!({"reference_height":"blocks","latest_height":"blocks","blocks_since_reference":"blocks","observed_block_count":"blocks"})
+    } else {
+        json!({"total_size_bytes":"bytes","mean_size_bytes":"bytes","sample_block_count":"blocks"})
+    };
+    Ok(
+        json!({"concept_id":concept_id,"input_kind":"market_bars","provenance":"server_fetched_bitcoin_block_snapshot","status":"computed","reason":null,"values":values,"units":units,"series":[],"inputs":{},"notes":["窗口是当前观察到的10个连续 Bitcoin 主网区块（最早到最新）。高度差为9；区块时间只按提供者原样展示，未假设其单调。","区块高度和序列化字节数描述网络进度与数据大小，不说明资产估值、未来价格或交易信号。"],"source_ids":[if concept_id == "book_block_height" {"appendix_074"} else {"appendix_077"}]}),
+    )
+}

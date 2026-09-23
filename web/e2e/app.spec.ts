@@ -246,6 +246,41 @@ test('backtest and comparison show the returned metrics', async ({ page }) => {
   await expect(page.locator('.ax-cmp-table')).toContainText('均线交叉');
 });
 
+test('Bitcoin block practices draw the observed chain and byte distribution in both themes', async ({ page }) => {
+  const ids = ['book_block_height', 'book_block_size'];
+  const hash = (index: number) => index.toString(16).padStart(64, '0');
+  const blocks = Array.from({ length: 10 }, (_, index) => ({ height: 100 + index, hash: hash(index + 1), previous_hash: hash(index), timestamp: 1_800_000_000 + index * 600, size_bytes: 1_000_000 + index * 100_000 }));
+  const blockSnapshot = { network: 'bitcoin_mainnet', provider: 'Blockstream Esplora', endpoint: 'https://blockstream.info/api/blocks', fetched_at: '2026-09-23T00:00:00Z', first_height: 100, last_height: 109, observed_block_count: 10, first_hash: hash(1), last_hash: hash(10) };
+  await page.route('**/api/practice', async route => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: { total: 2, modules: ['data'], concepts: ids.map(id => ({ id, name: id === ids[0] ? '区块高度' : '区块大小', category: '链上', input_kind: 'independent_inputs', inputs: [], notes: 'Bitcoin 主网最近区块', plan: { markets: ['crypto'], modules: ['data'], required_datasets: ['bitcoin_mainnet_recent_blocks'], source_policy: 'real_required', goal: '读取最近十个真实区块' } })) } });
+    const request = route.request().postDataJSON();
+    expect(ids).toContain(request.concept_id);
+    expect(request.inputs).toEqual({});
+    expect(request.bars).toBeUndefined();
+    expect(request.limit).toBe(10);
+    const height = request.concept_id === ids[0];
+    return route.fulfill({ json: { concept_id: request.concept_id, input_kind: 'independent_inputs', status: 'computed', reason: null, provenance: 'server_fetched_bitcoin_block_snapshot', values: height ? { latest_height: 109, reference_height: 100, blocks_since_reference: 9, observed_block_count: 10 } : { total_size_bytes: 14_500_000, mean_size_bytes: 1_450_000, sample_block_count: 10 }, units: {}, series: [], notes: [], module: 'data', source: 'binance', symbol: 'BTCUSDT', bars: [], block_snapshot: blockSnapshot, blocks } });
+  });
+  for (const id of ids) {
+    await page.goto(`/data?concept=${id}&source=binance`);
+    const panel = page.getByLabel('概念实践');
+    await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+    await panel.getByRole('button', { name: '运行实践' }).click();
+    await expect(panel.locator('.ax-block-snapshot')).toBeVisible();
+    await expect(panel.locator('[data-height]')).toHaveCount(10);
+    if (id === ids[0]) await expect(panel).toContainText('十个区块只有九段相邻关系');
+    else await expect(panel).toContainText('14,500,000 字节');
+    if (await page.getByLabel('切换到浅色模式').count()) await page.getByLabel('切换到浅色模式').click();
+    await expect(panel.locator('.ax-block-snapshot')).toHaveScreenshot(`${id}-light.png`, { maxDiffPixelRatio: 0.01 });
+    const light = await panel.locator('.ax-block-snapshot').evaluate(node => getComputedStyle(node).backgroundColor);
+    await page.getByLabel('切换到深色模式').click();
+    expect(await panel.locator('.ax-block-snapshot').evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(light);
+    await expect(panel.locator('.ax-block-snapshot')).toHaveScreenshot(`${id}-dark.png`, { maxDiffPixelRatio: 0.01 });
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.locator('.ax-block-scroll').evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+});
+
 test('changing the backtest market discards a delayed result from the previous market', async ({ page }) => {
   let releaseFirst: () => void = () => {};
   const firstHeld = new Promise<void>(resolve => { releaseFirst = resolve; });

@@ -12,6 +12,9 @@ use std::{collections::BTreeSet, sync::OnceLock};
 fn uses_hourly_market_bars(id: &str) -> bool {
     id == "book_volume_24h"
 }
+fn uses_bitcoin_block_snapshot(id: &str) -> bool {
+    matches!(id, "book_block_height" | "book_block_size")
+}
 
 pub fn definitions() -> &'static Vec<Value> {
     static DATA: OnceLock<Vec<Value>> = OnceLock::new();
@@ -56,12 +59,12 @@ pub fn catalog() -> Vec<PracticeConcept> {
             id: text(d, "id"),
             name: text(d, "name"),
             category: text(d, "category"),
-            input_kind: if uses_hourly_market_bars(d["id"].as_str().unwrap_or_default()) {
+            input_kind: if uses_hourly_market_bars(d["id"].as_str().unwrap_or_default()) || uses_bitcoin_block_snapshot(d["id"].as_str().unwrap_or_default()) {
                 "market_bars".into()
             } else {
                 "independent_inputs".into()
             },
-            inputs: if uses_hourly_market_bars(d["id"].as_str().unwrap_or_default()) {
+            inputs: if uses_hourly_market_bars(d["id"].as_str().unwrap_or_default()) || uses_bitcoin_block_snapshot(d["id"].as_str().unwrap_or_default()) {
                 json!({})
             } else {
                 d["defaults"].clone()
@@ -75,7 +78,9 @@ pub fn catalog() -> Vec<PracticeConcept> {
                 default: v.clone(),
             })
             .collect(),
-            notes: if uses_hourly_market_bars(d["id"].as_str().unwrap_or_default()) {
+            notes: if uses_bitcoin_block_snapshot(d["id"].as_str().unwrap_or_default()) {
+                format!("原书 PDF 第{}页；服务器直接取得未缓存的10个连续Bitcoin主网区块，不接受客户端输入。{}", d["pdf_page"], text(d, "pitfalls"))
+            } else if uses_hourly_market_bars(d["id"].as_str().unwrap_or_default()) {
                 format!(
                     "原书 PDF 第{}页；仅从连续24根完整1小时加密市场OHLCV K线计算，不接受手填成交量。{}",
                     d["pdf_page"],
@@ -152,6 +157,12 @@ fn continuous_24_hour_bars(bars: &[Bar]) -> Result<&[Bar], String> {
     Ok(window)
 }
 pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String> {
+    if uses_bitcoin_block_snapshot(id) {
+        return Err(
+            "Bitcoin block snapshot practice requires the server-fetched Bitcoin mainnet endpoint"
+                .into(),
+        );
+    }
     let definition = definitions()
         .iter()
         .find(|d| d["id"] == id)

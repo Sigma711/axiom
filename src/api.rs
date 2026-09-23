@@ -1496,6 +1496,8 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
     let performance = concept.category == "风险-绩效";
     if matches!(concept.id.as_str(), "book_net_volume" | "volume_profile") {
         json!({"markets":["crypto"],"modules":["data"],"required_datasets":["server_fetched_binance_usdt_spot_recent_trades"],"source_policy":"real_required","goal":"服务器直接取得最近最多1000笔Binance USDT现货逐笔成交，校验连续交易ID与非递减毫秒时间。Net Volume按相邻成交价分类，首笔作锚点、等价量单列；Volume Profile按实际价格汇总数量并按已披露算法计算70%价值区。不接收客户端K线或输入，不把近期记录冒称完整小时、交易日或资金净流入。"})
+    } else if matches!(concept.id.as_str(), "book_block_height" | "book_block_size") {
+        json!({"markets":["crypto"],"modules":["data"],"required_datasets":["server_fetched_bitcoin_mainnet_blocks"],"source_policy":"real_required","goal":"服务器从 Blockstream Esplora /api/blocks 取得未缓存的十个 Bitcoin 主网区块，主源失败时才使用 mempool Esplora。校验十个连续高度、哈希前序链接和正序列化字节数；不假设区块时间单调，不接受客户端K线或输入。高度差为最后高度减第一高度（9）；大小统计为十块总字节数和平均字节数，不构成价格预测或交易信号。"})
     } else if concept.id == "book_52w_range" {
         json!({"markets":["cn_equity","us_equity"],"modules":["data"],"required_datasets":["server_fetched_completed_daily_ohlcv_364_calendar_days","pre_window_daily_observation","at_least_180_window_observations"],"source_policy":"real_required","goal":"服务器固定取得400根股票日线，以最新已收盘日线为截止取前364自然日开区间；要求窗口前历史锚点及至少180根窗口内观测。显示提供者OHLC的高低与收盘位置，不宣称已核验复权口径或交易日完整性。拒绝客户端价格、K线及教学输入。"})
     } else if crate::book_technical::is_pair_practice(&concept.id) {
@@ -2190,6 +2192,55 @@ async fn post_practice(
         return Err(validate::bad(
             "practice source is not applicable to this concept",
         ));
+    }
+    if matches!(concept.id.as_str(), "book_block_height" | "book_block_size") {
+        if source != "binance"
+            || symbol != "BTCUSDT"
+            || req.limit.is_some_and(|requested| requested != 10)
+            || req.bars.is_some()
+            || !req
+                .inputs
+                .as_object()
+                .is_some_and(serde_json::Map::is_empty)
+        {
+            return Err(validate::bad("Bitcoin block practice uses the fixed BTCUSDT selector and server-fetched ten-block mainnet snapshot only"));
+        }
+        if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Live market data is disabled in offline mode".into(),
+            ));
+        }
+        let snapshot = state
+            .feed
+            .fetch_bitcoin_mainnet_blocks()
+            .await
+            .map_err(|error| (StatusCode::BAD_GATEWAY, error.to_string()))?;
+        let mut result = crate::book::market_bitcoin_block_summary(&concept.id, &snapshot.blocks)
+            .map_err(validate::bad)?;
+        let first = snapshot.blocks.first().unwrap();
+        let last = snapshot.blocks.last().unwrap();
+        result["module"] = json!("data");
+        result["symbol"] = json!(symbol);
+        result["source"] = json!(source);
+        result["context"] = json!("selected_dataset");
+        result["provenance"] = json!("server_fetched_bitcoin_block_snapshot");
+        result["bar_origin"] = json!("server_fetched_bitcoin_block_snapshot");
+        result["bars"] = json!([]);
+        result["block_snapshot"] = json!({
+            "network":"bitcoin_mainnet","provider":snapshot.provider,"endpoint":snapshot.endpoint,
+            "fetched_at":snapshot.fetched_at,"first_height":first.height,"last_height":last.height,
+            "observed_block_count":snapshot.blocks.len(),"first_hash":first.hash,"last_hash":last.hash
+        });
+        result["blocks"] = json!(snapshot
+            .blocks
+            .iter()
+            .map(|block| json!({
+                "height":block.height,"hash":block.hash,"previous_hash":block.previous_hash,
+                "timestamp":block.timestamp,"size_bytes":block.size_bytes
+            }))
+            .collect::<Vec<_>>());
+        return Ok(Json(result));
     }
     if crate::book_technical::is_pair_practice(&concept.id) {
         return post_pair_practice(&state, &req, &symbol, &source, limit).await;

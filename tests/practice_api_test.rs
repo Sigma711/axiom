@@ -74,6 +74,8 @@ async fn data_practice_accepts_only_concepts_with_a_data_plan() {
                     | "bid_ask_spread"
                     | "book_order_imbalance"
                     | "book_pitfall_order_imbalance"
+                    | "book_block_height"
+                    | "book_block_size"
             )
     }) {
         let mut first: Option<Value> = None;
@@ -1900,4 +1902,56 @@ async fn recent_trade_practices_fetch_actual_trades_and_disclose_the_exact_windo
         }
     }
     server.abort();
+}
+
+async fn mock_bitcoin_blocks() -> Json<Value> {
+    Json(json!((0..10).map(|i| {
+        let height = 900_009 - i;
+        json!({"id":format!("{height:064x}"),"height":height,"previousblockhash":format!("{:064x}", height-1),"timestamp":1_700_000_000 + i * 7,"size":1000+i})
+    }).collect::<Vec<_>>()))
+}
+#[tokio::test]
+async fn bitcoin_block_practices_use_server_mainnet_snapshot_and_reject_client_data() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            axum::Router::new().route("/api/blocks", get(mock_bitcoin_blocks)),
+        )
+        .await
+        .unwrap()
+    });
+    let dir = PathBuf::from(format!("target/practice-blocks-{}", uuid::Uuid::new_v4()));
+    let mut state = AppState::new(default_config(), dir.clone());
+    let mut feed = HttpFeed::new(&dir);
+    feed.bitcoin_esplora_url = format!("http://127.0.0.1:{port}");
+    feed.bitcoin_mempool_url = format!("http://127.0.0.1:{port}");
+    state.feed = Arc::new(feed);
+    let app = api::router(Arc::new(state));
+    for id in ["book_block_height", "book_block_size"] {
+        let (status, body) = request(&app, "/api/practice", json!({"concept_id":id,"module":"data","source":"binance","symbol":"BTCUSDT","limit":10,"inputs":{}})).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["provenance"], "server_fetched_bitcoin_block_snapshot");
+        assert_eq!(body["block_snapshot"]["network"], "bitcoin_mainnet");
+        assert_eq!(body["block_snapshot"]["observed_block_count"], 10);
+        assert_eq!(body["blocks"].as_array().unwrap().len(), 10);
+        assert_eq!(body["blocks"][0]["height"], 900_000);
+        if id == "book_block_height" {
+            assert_eq!(body["values"]["blocks_since_reference"], 9);
+        } else {
+            assert_eq!(body["values"]["total_size_bytes"], 10045);
+        }
+    }
+    for bad in [
+        json!({"concept_id":"book_block_height","module":"data","source":"synthetic","symbol":"BTCUSDT","inputs":{}}),
+        json!({"concept_id":"book_block_height","module":"data","source":"binance","symbol":"BTCUSDT","bars":[],"inputs":{}}),
+        json!({"concept_id":"book_block_height","module":"data","source":"binance","symbol":"BTCUSDT","inputs":{"height":1}}),
+        json!({"concept_id":"book_block_height","module":"data","source":"binance","symbol":"BTCUSDT","limit":9,"inputs":{}}),
+    ] {
+        let (status, _) = request(&app, "/api/practice", bad).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+    server.abort();
+    std::fs::remove_dir_all(dir).unwrap();
 }

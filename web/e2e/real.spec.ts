@@ -1107,3 +1107,43 @@ test('recent-trade concepts derive tick net volume and price distribution from e
   const profile = page.locator('.ax-trade-profile');
   expect(await profile.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
 });
+
+test('Bitcoin block practices read linked mainnet blocks and independently recompute heights and bytes', async ({ page }) => {
+  test.setTimeout(120_000);
+  for (const conceptId of ['book_block_height', 'book_block_size']) {
+    await page.goto(`/data?concept=${conceptId}&source=binance`);
+    const panel = page.getByLabel('概念实践');
+    await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+    const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+    const requestPromise = page.waitForRequest(request => request.url().includes('/api/practice') && request.method() === 'POST');
+    await panel.getByRole('button', { name: '运行实践' }).click();
+    const [request, response] = await Promise.all([requestPromise, responsePromise]);
+    expect(request.postDataJSON()).toMatchObject({ concept_id: conceptId, module: 'data', source: 'binance', symbol: 'BTCUSDT', limit: 10, inputs: {} });
+    expect(request.postDataJSON().bars).toBeUndefined();
+    expect(response.ok(), await response.text()).toBe(true);
+    const result = await response.json();
+    expect(result.provenance).toBe('server_fetched_bitcoin_block_snapshot');
+    expect(result.block_snapshot.network).toBe('bitcoin_mainnet');
+    expect(result.block_snapshot.endpoint).toMatch(/^https:\/\/(blockstream\.info|mempool\.space)\/api\/blocks$/);
+    expect(result.blocks).toHaveLength(10);
+    expect(result.blocks[0].height).toBe(result.block_snapshot.first_height);
+    expect(result.blocks[9].height).toBe(result.block_snapshot.last_height);
+    for (let index = 1; index < result.blocks.length; index++) {
+      expect(result.blocks[index].height).toBe(result.blocks[index - 1].height + 1);
+      expect(result.blocks[index].previous_hash).toBe(result.blocks[index - 1].hash);
+    }
+    if (conceptId === 'book_block_height') {
+      expect(result.values.latest_height - result.values.reference_height).toBe(9);
+      expect(result.values.blocks_since_reference).toBe(9);
+      await expect(panel).toContainText('十个区块只有九段相邻关系');
+    } else {
+      const total = result.blocks.reduce((sum: number, block: { size_bytes: number }) => sum + block.size_bytes, 0);
+      expect(result.values.total_size_bytes).toBe(total);
+      expect(result.values.mean_size_bytes).toBeCloseTo(total / 10, 9);
+      await expect(panel.locator('.ax-block-size-bar')).toHaveCount(10);
+    }
+    await expect(panel.locator('.ax-block-snapshot')).toBeVisible();
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.locator('.ax-block-scroll').evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+});

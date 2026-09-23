@@ -398,6 +398,97 @@ pub struct BinanceDepthSnapshot {
     pub asks: Vec<BinanceDepthLevel>,
 }
 
+/// A Bitcoin mainnet block as returned by an Esplora blocks snapshot.
+#[derive(Clone, Debug, Serialize)]
+pub struct BitcoinBlock {
+    pub height: u64,
+    pub hash: String,
+    pub previous_hash: String,
+    pub timestamp: DateTime<Utc>,
+    pub size_bytes: u64,
+}
+#[derive(Clone, Debug, Serialize)]
+pub struct BitcoinBlockSnapshot {
+    pub provider: String,
+    pub endpoint: String,
+    pub fetched_at: DateTime<Utc>,
+    pub blocks: Vec<BitcoinBlock>,
+}
+fn valid_bitcoin_hash(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+fn parse_bitcoin_block_snapshot(raw: &serde_json::Value) -> Result<Vec<BitcoinBlock>> {
+    let rows = raw
+        .as_array()
+        .context("Bitcoin blocks response must be an array")?;
+    anyhow::ensure!(
+        rows.len() == 10,
+        "Bitcoin block snapshot must contain exactly 10 blocks"
+    );
+    let mut blocks: Vec<BitcoinBlock> = Vec::with_capacity(rows.len());
+    for row in rows {
+        let height = row["height"]
+            .as_u64()
+            .context("Bitcoin block height must be an unsigned integer")?;
+        let hash = row["id"]
+            .as_str()
+            .context("Bitcoin block id must be a string")?
+            .to_owned();
+        let previous_hash = row["previousblockhash"]
+            .as_str()
+            .context("Bitcoin previousblockhash must be a string")?
+            .to_owned();
+        anyhow::ensure!(
+            valid_bitcoin_hash(&hash) && valid_bitcoin_hash(&previous_hash),
+            "Bitcoin block hashes must be 64 hexadecimal characters"
+        );
+        anyhow::ensure!(
+            hash != previous_hash,
+            "Bitcoin block hash cannot equal its previous hash"
+        );
+        let size_bytes = row["size"]
+            .as_u64()
+            .filter(|size| *size > 0)
+            .context("Bitcoin block size must be positive bytes")?;
+        let seconds = row["timestamp"]
+            .as_i64()
+            .context("Bitcoin block timestamp must be Unix seconds")?;
+        let timestamp = Utc
+            .timestamp_opt(seconds, 0)
+            .single()
+            .context("Bitcoin block timestamp is invalid")?;
+        if let Some(newer) = blocks.last() {
+            anyhow::ensure!(
+                newer.height.checked_sub(1) == Some(height),
+                "Bitcoin block heights must be consecutive newest-to-oldest"
+            );
+            anyhow::ensure!(
+                newer.previous_hash == hash,
+                "Bitcoin block hashes are not linked newest-to-oldest"
+            );
+        }
+        blocks.push(BitcoinBlock {
+            height,
+            hash,
+            previous_hash,
+            timestamp,
+            size_bytes,
+        });
+    }
+    blocks.reverse();
+    for pair in blocks.windows(2) {
+        anyhow::ensure!(
+            pair[0].height.checked_add(1) == Some(pair[1].height),
+            "Bitcoin block heights must be consecutive oldest-to-newest"
+        );
+        anyhow::ensure!(
+            pair[1].previous_hash == pair[0].hash,
+            "Bitcoin block hashes are not linked oldest-to-newest"
+        );
+    }
+    Ok(blocks)
+}
+
 fn parse_binance_depth_snapshot(raw: &serde_json::Value) -> Result<BinanceDepthSnapshot> {
     let update_id = raw["lastUpdateId"]
         .as_u64()
@@ -469,6 +560,8 @@ fn parse_binance_depth_snapshot(raw: &serde_json::Value) -> Result<BinanceDepthS
 
 pub struct HttpFeed {
     pub base_url: String,
+    pub bitcoin_esplora_url: String,
+    pub bitcoin_mempool_url: String,
     pub csv: CsvFeed,
     client: reqwest::Client,
 }
@@ -477,11 +570,53 @@ impl HttpFeed {
     pub fn new(cache_dir: impl Into<PathBuf>) -> Self {
         Self {
             base_url: "https://data-api.binance.vision".to_string(),
+            bitcoin_esplora_url: "https://blockstream.info".to_string(),
+            bitcoin_mempool_url: "https://mempool.space".to_string(),
             csv: CsvFeed::new(cache_dir),
             client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(15))
                 .build()
                 .expect("无法创建 HTTP client"),
+        }
+    }
+
+    async fn fetch_bitcoin_blocks_from(
+        &self,
+        provider: &str,
+        endpoint: &str,
+    ) -> Result<BitcoinBlockSnapshot> {
+        let endpoint = endpoint.trim_end_matches('/');
+        let raw: serde_json::Value = self
+            .client
+            .get(format!("{}/api/blocks", endpoint))
+            .send()
+            .await
+            .context("Bitcoin blocks request failed")?
+            .error_for_status()
+            .context("Bitcoin blocks response failed")?
+            .json()
+            .await
+            .context("invalid Bitcoin blocks JSON")?;
+        let blocks = parse_bitcoin_block_snapshot(&raw)?;
+        Ok(BitcoinBlockSnapshot {
+            provider: provider.into(),
+            endpoint: format!("{}/api/blocks", endpoint),
+            fetched_at: Utc::now(),
+            blocks,
+        })
+    }
+    /// Fetches an uncached current Bitcoin-mainnet window. Mempool is used only
+    /// when Blockstream fails; neither provider is cached or synthesized.
+    pub async fn fetch_bitcoin_mainnet_blocks(&self) -> Result<BitcoinBlockSnapshot> {
+        match self
+            .fetch_bitcoin_blocks_from("blockstream_esplora", &self.bitcoin_esplora_url)
+            .await
+        {
+            Ok(snapshot) => Ok(snapshot),
+            Err(primary) => self
+                .fetch_bitcoin_blocks_from("mempool_esplora", &self.bitcoin_mempool_url)
+                .await
+                .with_context(|| format!("Blockstream failed: {primary}")),
         }
     }
 
@@ -2110,5 +2245,52 @@ mod recent_trade_parser_tests {
         ambiguous[0]["price"] = json!("100000000000000000000");
         ambiguous[1]["price"] = json!("100000000000000000001");
         assert!(parse_binance_recent_trades(&ambiguous, cutoff).is_err());
+    }
+}
+
+#[cfg(test)]
+mod bitcoin_block_snapshot_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn hash(n: u8) -> String {
+        format!("{n:064x}")
+    }
+    fn rows() -> serde_json::Value {
+        json!((0..10).map(|i| {
+            let height = 1000 - i;
+            json!({"id":hash(height as u8),"height":height,"previousblockhash":hash((height-1) as u8),"timestamp":1700000000 + (i as i64 * 17),"size":1000+i})
+        }).collect::<Vec<_>>())
+    }
+    #[test]
+    fn bitcoin_snapshot_normalizes_provider_newest_first_to_height_ascending() {
+        let blocks = parse_bitcoin_block_snapshot(&rows()).unwrap();
+        assert_eq!(blocks.len(), 10);
+        assert_eq!(blocks[0].height, 991);
+        assert_eq!(blocks.last().unwrap().height, 1000);
+        assert_eq!(blocks[1].previous_hash, blocks[0].hash);
+    }
+    #[test]
+    fn bitcoin_snapshot_rejects_malformed_unlinked_and_nonpositive_rows() {
+        let mut cases = Vec::new();
+        cases.push(json!({"not":"array"}));
+        let mut missing = rows();
+        missing.as_array_mut().unwrap().pop();
+        cases.push(missing);
+        let mut height = rows();
+        height[1]["height"] = json!(997);
+        cases.push(height);
+        let mut link = rows();
+        link[0]["previousblockhash"] = json!(hash(42));
+        cases.push(link);
+        let mut zero = rows();
+        zero[0]["size"] = json!(0);
+        cases.push(zero);
+        let mut bad_hash = rows();
+        bad_hash[0]["id"] = json!("bad");
+        cases.push(bad_hash);
+        for value in cases {
+            assert!(parse_bitcoin_block_snapshot(&value).is_err());
+        }
     }
 }

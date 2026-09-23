@@ -178,7 +178,12 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
         }
         for d in crate::supplement::definitions() {
             if let (Some(id), Some(op)) = (d["id"].as_str(), d["op"].as_str()) {
-                if let Some(r) = first_existing([format!("src/supplement.rs::evaluate::{op}")]) {
+                let candidates = if matches!(id, "book_block_height" | "book_block_size") {
+                    vec!["src/book.rs::market_bitcoin_block_summary".to_string()]
+                } else {
+                    vec![format!("src/supplement.rs::evaluate::{op}")]
+                };
+                if let Some(r) = first_existing(candidates) {
                     out.insert(id.into(), r);
                 }
             }

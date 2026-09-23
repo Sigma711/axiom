@@ -806,3 +806,26 @@ fn recent_trade_calculators_have_direction_and_value_area_oracles() {
     assert!(axiom::practice::evaluate("volume_profile", &[], &json!({})).is_err());
     assert!(axiom::book_technical::evaluate("book_net_volume", &[], &json!({})).is_err());
 }
+
+#[test]
+fn bitcoin_block_snapshot_summary_uses_ten_linked_blocks_and_correct_byte_math() {
+    use axiom::data::BitcoinBlock;
+    let blocks = (0..10)
+        .map(|i| BitcoinBlock {
+            height: 900_000 + i,
+            hash: format!("{:064x}", i + 1),
+            previous_hash: format!("{:064x}", i),
+            timestamp: DateTime::from_timestamp(1_700_000_000 + i as i64, 0).unwrap(),
+            size_bytes: 1_000 + i,
+        })
+        .collect::<Vec<_>>();
+    let height = book::market_bitcoin_block_summary("book_block_height", &blocks).unwrap();
+    assert_eq!(height["values"]["blocks_since_reference"], 9);
+    assert_eq!(height["values"]["latest_height"], 900_009);
+    let size = book::market_bitcoin_block_summary("book_block_size", &blocks).unwrap();
+    assert_eq!(size["values"]["total_size_bytes"], 10_045);
+    assert_eq!(size["values"]["mean_size_bytes"], 1004.5);
+    let mut broken = blocks.clone();
+    broken[4].previous_hash = "wrong".into();
+    assert!(book::market_bitcoin_block_summary("book_block_size", &broken).is_err());
+}

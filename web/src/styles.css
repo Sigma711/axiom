@@ -506,3 +506,18 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
   font-size: 0.82rem;
   line-height: 1.55;
 }
+.ax-block-snapshot { margin: 1rem 0; padding: 1rem; border: 1px solid var(--border); border-radius: 14px; background: var(--bg-card); color: var(--text); }
+.ax-block-source { margin: 0 0 .7rem; color: var(--text-dim); font-size: .84rem; line-height: 1.5; overflow-wrap: anywhere; }
+.ax-block-scroll { max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
+.ax-block-scroll svg { display: block; max-width: none; }
+.ax-block-link { stroke: var(--border); stroke-width: 5; stroke-linecap: round; }
+.ax-block-node { fill: var(--bg-card); stroke: var(--accent); stroke-width: 3; }
+.ax-block-endpoint { fill: var(--accent); stroke: var(--bg-card); stroke-width: 3; }
+.ax-block-height { fill: var(--text); font: 600 11px ui-monospace, monospace; }
+.ax-block-hash, .ax-block-axis, .ax-block-tick { fill: var(--text-dim); font: 11px ui-monospace, monospace; }
+.ax-block-grid { stroke: var(--border); stroke-width: 1; }
+.ax-block-mean { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 4; }
+.ax-block-size-bar { fill: var(--accent); opacity: .76; }
+.ax-block-size-bar:hover { opacity: 1; }
+.ax-block-snapshot figcaption { margin-top: .6rem; font-size: .88rem; line-height: 1.65; }
+.ax-block-caveat { margin: .55rem 0 0; color: var(--text-dim); font-size: .8rem; line-height: 1.5; }

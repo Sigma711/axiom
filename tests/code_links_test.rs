@@ -106,6 +106,12 @@ fn every_published_concept_resolves_to_an_actual_implementation_branch() {
                 } else if e.id == "book_pitfall_open_candle" {
                     assert_eq!(location.kind, "function");
                     assert_eq!(location.code_ref, "src/book.rs::market_open_candle_summary");
+                } else if matches!(e.id.as_str(), "book_block_height" | "book_block_size") {
+                    assert_eq!(location.kind, "function");
+                    assert_eq!(
+                        location.code_ref,
+                        "src/book.rs::market_bitcoin_block_summary"
+                    );
                 } else {
                     assert!(
                         matches!(location.kind.as_str(), "match_arm" | "conditional"),
