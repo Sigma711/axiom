@@ -696,7 +696,7 @@
     {
       "id": "book_r_squared",
       "name": "𝑅2",
-      "summary": "一元含截距回归中，策略与基准收益相关系数的平方。",
+      "summary": "用同一结果序列中逐期策略净值收益和同时间戳基准收盘收益计算：带截距一元回归的 R² 等于两者皮尔逊相关系数的平方。",
       "example": "完全线性关系R²=1，但不证明策略有超额收益。",
       "formula": "",
       "input_kind": "independent_inputs",

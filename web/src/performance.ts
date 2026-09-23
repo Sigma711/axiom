@@ -8,7 +8,7 @@ export function performanceInputs(points: EquityPoint[] | undefined, initialCapi
   const returns = observed.slice(1).map((value, index) => observed[index] > 0 ? value / observed[index] - 1 : NaN);
   const elapsedDays = (Date.parse(points[points.length - 1].timestamp) - Date.parse(points[0].timestamp)) / 86_400_000;
   const context: Record<string, unknown> = {
-    equity, returns, strategy_returns: returns, initial_capital: initial, elapsed_days: elapsedDays,
+    equity, equity_points: points.map(point => ({ timestamp: point.timestamp, equity: point.equity })), returns, strategy_returns: returns, initial_capital: initial, elapsed_days: elapsedDays,
     periods_per_year: elapsedDays > 0 ? (points.length - 1) * 365 / elapsedDays : 0,
     risk_free_annual: 0,
   };

@@ -77,8 +77,6 @@
   }
 }
 
-body { transition: background-color 0.2s ease, color 0.2s ease; }
-
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
 body {

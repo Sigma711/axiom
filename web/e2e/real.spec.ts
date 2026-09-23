@@ -257,7 +257,7 @@ test('knowledge practice opens the applicable module and market instead of forci
 
 test('performance practice derives Sharpe and benchmark metrics from the selected real backtest', async ({ page }) => {
   test.setTimeout(120_000);
-  for (const concept of ['sharpe', 'information_ratio']) {
+  for (const concept of ['sharpe', 'information_ratio', 'book_r_squared']) {
     await page.goto(`/backtest?concept=${concept}&source=binance`);
     const panel = page.getByLabel('概念实践');
     await expect(panel.getByRole('button', { name: '运行实践' })).toBeVisible();
@@ -274,11 +274,29 @@ test('performance practice derives Sharpe and benchmark metrics from the selecte
     const request = response.request().postDataJSON();
     expect(request.module).toBe('backtest');
     expect(request.bars.length).toBeGreaterThan(40);
-    if (concept === 'information_ratio') {
+    if (concept === 'information_ratio' || concept === 'book_r_squared') {
       expect(request.inputs.strategy_returns.length).toBeGreaterThan(1);
       expect(request.inputs.benchmark_returns.length).toBe(request.inputs.strategy_returns.length);
     }
+    if (concept === 'book_r_squared') {
+      expect(request.inputs.equity.length === request.bars.length || request.inputs.equity.length === request.bars.length + 1).toBe(true);
+      expect(request.inputs.equity_points).toHaveLength(request.bars.length);
+      expect(request.inputs.equity_points.map((point: { timestamp: string }) => Date.parse(point.timestamp))).toEqual(request.bars.map((bar: { timestamp: string }) => Date.parse(bar.timestamp)));
+      for (let index = 1; index < request.bars.length; index += 1) {
+        const offset = request.inputs.equity.length === request.bars.length + 1 ? 1 : 0;
+        expect(request.inputs.strategy_returns[index - 1]).toBeCloseTo(request.inputs.equity[offset + index] / request.inputs.equity[offset + index - 1] - 1, 12);
+        expect(request.inputs.benchmark_returns[index - 1]).toBeCloseTo(request.bars[index].close / request.bars[index - 1].close - 1, 12);
+      }
+    }
     const payload = await response.json();
+    if (concept === 'book_r_squared') {
+      const strategy = request.inputs.strategy_returns as number[], benchmark = request.inputs.benchmark_returns as number[];
+      const mean = (values: number[]) => values.reduce((total, value) => total + value, 0) / values.length;
+      const a = mean(strategy), b = mean(benchmark);
+      const correlation = strategy.reduce((total, value, index) => total + (value - a) * (benchmark[index] - b), 0) /
+        Math.sqrt(strategy.reduce((total, value) => total + (value - a) ** 2, 0) * benchmark.reduce((total, value) => total + (value - b) ** 2, 0));
+      expect(payload.values.r_squared).toBeCloseTo(correlation ** 2, 10);
+    }
     expect(payload.provenance).toBe('provided_result_context');
     await expect(panel).toContainText('使用当前模块真实结果');
   }

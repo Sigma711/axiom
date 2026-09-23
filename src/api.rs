@@ -1465,6 +1465,14 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
             "source_policy":"real_required",
             "goal":"使用所选市场的已收盘K线计算相邻收盘价简单收益率样本标准差；加密1小时线按8760小时/年，A股和美股日线按252个交易日/年惯例。年化口径由已验证数据源决定，不接受手填。"
         })
+    } else if concept.id == "book_r_squared" {
+        json!({
+            "markets":["crypto","cn_equity","us_equity"],
+            "modules":["backtest","paper","compare"],
+            "required_datasets":["matched_result_bars","real_strategy_equity","same_period_benchmark_returns"],
+            "source_policy":"result_required",
+            "goal":"使用本页结果中按相同顺序提供的净值和已收盘行情，核对相邻简单收益与基准收盘收益逐期一致；按带截距一元回归的相关系数平方计算 R²，不使用教学默认数组。"
+        })
     } else if concept.id == "book_cdp" {
         json!({
             "markets":["cn_equity"],
@@ -1706,6 +1714,84 @@ fn finite_input_array(inputs: &Value, key: &str) -> Result<Vec<f64>, ApiError> {
         .collect()
 }
 
+fn is_close(a: f64, b: f64) -> bool {
+    (a - b).abs() <= 1e-10 * (1.0 + a.abs().max(b.abs()))
+}
+
+fn validate_r_squared_observations(bars: &[Bar], inputs: &Value) -> Result<(), ApiError> {
+    let strategy = finite_input_array(inputs, "strategy_returns")?;
+    let benchmark = finite_input_array(inputs, "benchmark_returns")?;
+    let equity = finite_input_array(inputs, "equity")?;
+    if bars.len() < 3 || strategy.len() != bars.len() - 1 || benchmark.len() != bars.len() - 1 {
+        return Err(validate::bad(
+            "R² practice needs at least three aligned bars and two same-period returns",
+        ));
+    }
+    let offset = if equity.len() == bars.len() {
+        0
+    } else if equity.len() == bars.len() + 1 {
+        let initial = inputs["initial_capital"]
+            .as_f64()
+            .filter(|value| value.is_finite() && *value > 0.0)
+            .ok_or_else(|| validate::bad("R² practice needs finite positive initial_capital for the initial-equity offset"))?;
+        if !is_close(equity[0], initial) {
+            return Err(validate::bad(
+                "R² initial_capital must match the leading equity observation",
+            ));
+        }
+        1
+    } else {
+        return Err(validate::bad(
+            "R² equity must have one value per supplied bar, optionally preceded by initial_capital",
+        ));
+    };
+    if equity.iter().any(|value| *value <= 0.0) {
+        return Err(validate::bad("R² equity observations must be positive"));
+    }
+    let points = inputs["equity_points"]
+        .as_array()
+        .filter(|points| points.len() == bars.len())
+        .ok_or_else(|| {
+            validate::bad("R² practice needs one timestamped equity point per supplied bar")
+        })?;
+    for (index, (bar, point)) in bars.iter().zip(points).enumerate() {
+        let timestamp = point["timestamp"]
+            .as_str()
+            .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+            .map(|value| value.with_timezone(&Utc))
+            .ok_or_else(|| validate::bad("R² equity_points need RFC3339 timestamps"))?;
+        let value = point["equity"]
+            .as_f64()
+            .filter(|value| value.is_finite() && *value > 0.0)
+            .ok_or_else(|| validate::bad("R² equity_points need finite positive equity"))?;
+        if timestamp != bar.timestamp {
+            return Err(validate::bad(
+                "R² equity_points timestamps must exactly match supplied bars",
+            ));
+        }
+        if !is_close(value, equity[offset + index]) {
+            return Err(validate::bad(
+                "R² equity_points must match the supplied equity sequence",
+            ));
+        }
+    }
+    for index in 1..bars.len() {
+        let expected_strategy = equity[offset + index] / equity[offset + index - 1] - 1.0;
+        let expected_benchmark = bars[index].close / bars[index - 1].close - 1.0;
+        if !is_close(strategy[index - 1], expected_strategy) {
+            return Err(validate::bad(
+                "strategy_returns must equal consecutive supplied equity returns",
+            ));
+        }
+        if !is_close(benchmark[index - 1], expected_benchmark) {
+            return Err(validate::bad(
+                "benchmark_returns must equal consecutive same-timestamp bar-close returns",
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn validate_result_context(
     concept: &crate::practice::PracticeConcept,
     bars: &[Bar],
@@ -1729,7 +1815,13 @@ fn validate_result_context(
     }
     let benchmark_dependent = matches!(
         concept.id.as_str(),
-        "information_ratio" | "treynor" | "tracking_error" | "capture_ratio" | "beta" | "alpha"
+        "information_ratio"
+            | "treynor"
+            | "tracking_error"
+            | "capture_ratio"
+            | "beta"
+            | "alpha"
+            | "book_r_squared"
     );
     if benchmark_dependent {
         let strategy = finite_input_array(inputs, "strategy_returns")?;
@@ -1743,6 +1835,9 @@ fn validate_result_context(
             return Err(validate::bad(
                 "benchmark performance practice needs at least two aligned returns",
             ));
+        }
+        if concept.id == "book_r_squared" {
+            validate_r_squared_observations(bars, inputs)?;
         }
     } else if matches!(
         concept.id.as_str(),
@@ -1850,6 +1945,7 @@ async fn post_practice(
         if let Some(values) = evaluator_inputs.as_object_mut() {
             for key in [
                 "equity",
+                "equity_points",
                 "returns",
                 "initial_capital",
                 "elapsed_days",

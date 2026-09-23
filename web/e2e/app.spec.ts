@@ -871,3 +871,47 @@ test('knowledge page draws concept art without downloading the charting bundle',
   await expect(page.locator('.ax-chart svg.main-svg').first()).toBeVisible();
   expect(chartRequests.length).toBeGreaterThan(0);
 });
+
+
+test('R² performance practice sends an auditable equity path and matched benchmark returns', async ({ page }) => {
+  const concept = { id:'book_r_squared', name:'R²', category:'原书补充·技术实践', input_kind:'independent_inputs', inputs:[{key:'strategy_returns',label:'策略收益率',default:[0.01,0.02]},{key:'benchmark_returns',label:'基准收益率',default:[0.01,0.02]}], notes:'同周期收益', plan:{markets:['crypto','cn_equity','us_equity'],modules:['backtest','paper','compare'],required_datasets:['matched_result_bars','real_strategy_equity','same_period_benchmark_returns'],source_policy:'result_required',goal:'核对收益。'} };
+  await page.route('**/api/practice', async route => {
+    if (route.request().method() === 'GET') return route.fulfill({ json:{ concepts:[concept], modules:['data','backtest','paper','compare'], total:1 } });
+    return route.fulfill({ json:{ concept_id:'book_r_squared', status:'computed', provenance:'provided_result_context', values:{r_squared:0.5}, units:{r_squared:'fraction'}, series:[], notes:['使用当前模块真实结果。'] } });
+  });
+  await page.goto('/backtest?concept=book_r_squared');
+  const panel = page.getByLabel('概念实践');
+  await panel.getByRole('button', { name:'运行实践' }).click();
+  await expect(panel).toContainText('先在当前模块运行真实回测');
+  await page.getByRole('button', { name:'运行回测' }).click();
+  await expect(panel.getByLabel('策略收益率')).toBeDisabled();
+  await expect(panel.getByLabel('基准收益率')).toBeDisabled();
+  const request = page.waitForRequest(item => item.url().includes('/api/practice') && item.method() === 'POST');
+  await panel.getByRole('button', { name:'运行实践' }).click();
+  const body = (await request).postDataJSON();
+  expect(body.inputs.equity).toHaveLength(body.bars.length);
+  expect(body.inputs.equity_points).toHaveLength(body.bars.length);
+  expect(body.inputs.equity_points.map((point: { timestamp: string }) => Date.parse(point.timestamp))).toEqual(body.bars.map((bar: { timestamp: string }) => Date.parse(bar.timestamp)));
+  expect(body.inputs.strategy_returns).toHaveLength(body.bars.length - 1);
+  expect(body.inputs.benchmark_returns).toHaveLength(body.bars.length - 1);
+  expect(body.inputs.initial_capital).toBe(10000);
+  for (let index = 1; index < body.bars.length; index += 1) {
+    expect(body.inputs.strategy_returns[index - 1]).toBeCloseTo(body.inputs.equity[index] / body.inputs.equity[index - 1] - 1, 12);
+    expect(body.inputs.benchmark_returns[index - 1]).toBeCloseTo(body.bars[index].close / body.bars[index - 1].close - 1, 12);
+  }
+});
+
+test('theme switch immediately gives body the active background token', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('切换到浅色模式').click();
+  const backgrounds = await page.evaluate(() => {
+    const sample = document.createElement('div');
+    sample.style.backgroundColor = 'var(--bg)';
+    document.body.append(sample);
+    const active = getComputedStyle(sample).backgroundColor;
+    const body = getComputedStyle(document.body).backgroundColor;
+    sample.remove();
+    return { active, body };
+  });
+  expect(backgrounds.body).toBe(backgrounds.active);
+});

@@ -285,3 +285,23 @@ fn cointegration_degenerate_inputs_are_explicit() {
         assert!(r["values"]["cointegration_p_value"].is_null());
     }
 }
+
+#[test]
+fn r_squared_matches_the_worked_pearson_example_and_leaves_constant_series_undefined() {
+    let result = bt::evaluate(
+        "book_r_squared",
+        &[],
+        &json!({"strategy_returns":[0.05,-0.01904761904761909,0.03],"benchmark_returns":[0.1,-0.1,0.1]}),
+    ).unwrap();
+    assert!(
+        (result["values"]["r_squared"].as_f64().unwrap() - 0.920_773_699_023_893_5).abs() < 1e-12
+    );
+    let constant = bt::evaluate(
+        "book_r_squared",
+        &[],
+        &json!({"strategy_returns":[0.01,0.01],"benchmark_returns":[0.02,0.03]}),
+    )
+    .unwrap();
+    assert_eq!(constant["status"], "undefined");
+    assert!(constant["values"]["r_squared"].is_null());
+}

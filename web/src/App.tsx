@@ -575,6 +575,11 @@ function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}
     const parsed: Record<string, unknown> = {};
     try {
       for (const input of concept.inputs) parsed[input.key] = usePageContext && Object.prototype.hasOwnProperty.call(contextInputs, input.key) ? contextInputs[input.key] : JSON.parse(inputs[input.key] ?? 'null');
+      if (concept.id === 'book_r_squared' && usePageContext) {
+        for (const key of ['equity', 'equity_points', 'initial_capital']) {
+          if (Object.prototype.hasOwnProperty.call(contextInputs, key)) parsed[key] = contextInputs[key];
+        }
+      }
     } catch {
       setError('输入必须是有效的 JSON 数值、数组或字符串。');
       return;

@@ -741,3 +741,63 @@ async fn result_practice_rejects_invalid_evidence_without_falling_back_to_teachi
         assert_eq!(body["context"], "editable_teaching_inputs");
     }
 }
+
+#[tokio::test]
+async fn book_r_squared_uses_verified_same_period_equity_and_market_returns() {
+    let app = app();
+    let bars = json!([
+        {"timestamp":"2024-01-01T00:00:00Z","open":100.0,"high":100.0,"low":100.0,"close":100.0,"volume":1.0},
+        {"timestamp":"2024-01-01T01:00:00Z","open":110.0,"high":110.0,"low":110.0,"close":110.0,"volume":1.0},
+        {"timestamp":"2024-01-01T02:00:00Z","open":99.0,"high":99.0,"low":99.0,"close":99.0,"volume":1.0},
+        {"timestamp":"2024-01-01T03:00:00Z","open":108.9,"high":108.9,"low":108.9,"close":108.9,"volume":1.0}
+    ]);
+    let inputs = json!({
+        "initial_capital": 100.0,
+        "equity": [100.0, 98.0, 105.0, 103.0, 106.09],
+        "equity_points": [
+            {"timestamp":"2024-01-01T00:00:00Z","equity":98.0},
+            {"timestamp":"2024-01-01T01:00:00Z","equity":105.0},
+            {"timestamp":"2024-01-01T02:00:00Z","equity":103.0},
+            {"timestamp":"2024-01-01T03:00:00Z","equity":106.09}
+        ],
+        "strategy_returns": [105.0 / 98.0 - 1.0, 103.0 / 105.0 - 1.0, 0.03],
+        "benchmark_returns": [0.1, -0.1, 0.1]
+    });
+    let body = |inputs: Value| {
+        json!({
+            "concept_id":"book_r_squared", "module":"backtest", "symbol":"BTCUSDT",
+            "source":"binance", "bars":bars, "inputs":inputs
+        })
+    };
+    let (status, out) = request(&app, "/api/practice", body(inputs.clone())).await;
+    assert_eq!(status, StatusCode::OK, "{out}");
+    assert_eq!(out["provenance"], "provided_result_context");
+    assert!((out["values"]["r_squared"].as_f64().unwrap() - 0.790_826_854_342_459_4).abs() < 1e-12);
+
+    for changed in [
+        json!({"initial_capital":100.0,"equity":[100.0,98.0,105.0,103.0,106.09],"strategy_returns":[105.0/98.0-1.0,0.01,0.03],"benchmark_returns":[0.1,-0.1,0.1]}),
+        json!({"initial_capital":100.0,"equity":[100.0,98.0,105.0,103.0,106.09],"strategy_returns":[105.0/98.0-1.0,103.0/105.0-1.0,0.03],"benchmark_returns":[0.1,0.0,0.1]}),
+        json!({"initial_capital":100.0,"equity":[100.0,98.0,105.0,103.0],"strategy_returns":[105.0/98.0-1.0,103.0/105.0-1.0,0.03],"benchmark_returns":[0.1,-0.1,0.1]}),
+    ] {
+        let (status, _) = request(&app, "/api/practice", body(changed)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+    for points in [
+        json!([
+            {"timestamp":"2024-01-01T01:00:00Z","equity":98.0},
+            {"timestamp":"2024-01-01T00:00:00Z","equity":105.0},
+            {"timestamp":"2024-01-01T02:00:00Z","equity":103.0},
+            {"timestamp":"2024-01-01T03:00:00Z","equity":106.09}
+        ]),
+        json!([
+            {"timestamp":"2024-01-01T00:00:00Z","equity":98.0},
+            {"timestamp":"2024-01-01T01:00:00Z","equity":105.0},
+            {"timestamp":"2024-01-01T02:00:00Z","equity":103.0}
+        ]),
+    ] {
+        let mut changed = inputs.clone();
+        changed["equity_points"] = points;
+        let (status, _) = request(&app, "/api/practice", body(changed)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+}
