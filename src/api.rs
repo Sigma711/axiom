@@ -65,6 +65,11 @@ async fn market_bars(
             "Live market data is disabled in offline mode".into(),
         ));
     }
+    let requested = if source == "synthetic" {
+        limit
+    } else {
+        limit.saturating_add(1)
+    };
     let now = Utc::now()
         .with_minute(0)
         .unwrap()
@@ -75,23 +80,31 @@ async fn market_bars(
     let since = if source == "synthetic" {
         Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap()
     } else if source == "binance" {
-        now - Duration::hours(limit as i64)
+        now - Duration::hours(requested as i64)
     } else {
         // Daily markets need calendar runway: it includes weekends and holidays.
-        now - Duration::days((limit.saturating_mul(3)) as i64)
+        now - Duration::days((requested.saturating_mul(3)) as i64)
     };
     let bars = if source == "synthetic" {
-        SyntheticFeed::default().fetch_historical(symbol, since, limit)
+        SyntheticFeed::default().fetch_historical(symbol, since, requested)
     } else {
-        fetch_public_market_bars(&state.feed, source, symbol, since, limit).await
+        fetch_public_market_bars(&state.feed, source, symbol, since, requested).await
     }
     .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+    completed_market_bars(bars, source, Utc::now(), limit)
+}
+
+fn completed_market_bars(
+    mut bars: Vec<Bar>,
+    source: &str,
+    now: chrono::DateTime<Utc>,
+    limit: usize,
+) -> Result<Vec<Bar>, ApiError> {
     let close_after = source_candle_close_after(source)?;
-    let now = Utc::now();
-    let bars: Vec<_> = bars
-        .into_iter()
-        .filter(|bar| bar.timestamp + close_after <= now)
-        .collect();
+    bars.retain(|bar| bar.timestamp + close_after <= now);
+    if bars.len() > limit {
+        bars = bars.split_off(bars.len() - limit);
+    }
     if bars.is_empty() {
         return Err(validate::bad(
             "market request returned no completed candles",
@@ -2094,8 +2107,8 @@ fn empty_inputs() -> Value {
 #[cfg(test)]
 mod binance_catalog_tests {
     use super::{
-        fetch_symbols_from_binance_at, practice_bars_are_closed, select_binance_symbols,
-        source_candle_close_after, BinanceSymbol, BinanceTicker,
+        completed_market_bars, fetch_symbols_from_binance_at, practice_bars_are_closed,
+        select_binance_symbols, source_candle_close_after, BinanceSymbol, BinanceTicker,
     };
     use crate::types::Bar;
     use axum::{routing::get, Json, Router};
@@ -2141,6 +2154,34 @@ mod binance_catalog_tests {
         };
         assert!(practice_bars_are_closed(&[saturday_daily_label], "a_share").is_ok());
         assert!(source_candle_close_after("unknown").is_err());
+    }
+
+    #[test]
+    fn completed_market_bars_keeps_the_requested_count_after_dropping_an_open_candle() {
+        let now = Utc::now();
+        for source in ["binance", "a_share", "us_stock"] {
+            let close_after = source_candle_close_after(source).unwrap();
+            let step = if source == "binance" {
+                Duration::hours(1)
+            } else {
+                Duration::days(1)
+            };
+            let bars: Vec<Bar> = (0..6)
+                .map(|index| Bar {
+                    timestamp: now - close_after - step * (5 - index) + Duration::seconds(1),
+                    open: 1.0,
+                    high: 1.0,
+                    low: 1.0,
+                    close: 1.0,
+                    volume: 1.0,
+                })
+                .collect();
+            let selected = completed_market_bars(bars.clone(), source, now, 5).unwrap();
+            assert_eq!(selected.len(), 5, "{source}");
+            assert_eq!(selected[0].timestamp, bars[0].timestamp);
+            assert_eq!(selected[4].timestamp, bars[4].timestamp);
+            assert!(completed_market_bars(vec![bars[5]], source, now, 5).is_err());
+        }
     }
 
     #[tokio::test]

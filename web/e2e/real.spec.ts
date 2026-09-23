@@ -500,6 +500,7 @@ test('period practice uses each real source contract and labels observation gaps
   for (const source of ['binance', 'a_share', 'us_stock'] as const) {
     await page.goto(`/data?concept=book_period&source=${source}`);
     await page.getByRole('button', { name: '加载数据' }).click();
+    await expect(page.locator('.ax-chart svg.main-svg').first()).toBeVisible({ timeout: 30_000 });
     const panel = page.getByLabel('概念实践');
     await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
     const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
