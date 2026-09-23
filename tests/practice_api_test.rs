@@ -937,3 +937,94 @@ async fn book_period_requires_real_source_bound_bars_and_preserves_stock_calenda
         assert_eq!(status, StatusCode::BAD_REQUEST);
     }
 }
+
+#[tokio::test]
+async fn rolling_correlation_uses_only_verified_current_result_returns_across_markets() {
+    let app = app();
+    let strategy = vec![105.0 / 98.0 - 1.0, 103.0 / 105.0 - 1.0, 0.03];
+    let benchmark = vec![0.1, -0.1, 0.1];
+
+    for (source, symbol, timestamps) in [
+        (
+            "binance",
+            "BTCUSDT",
+            vec![
+                "2024-01-01T00:00:00Z",
+                "2024-01-01T01:00:00Z",
+                "2024-01-01T02:00:00Z",
+                "2024-01-01T03:00:00Z",
+            ],
+        ),
+        (
+            "a_share",
+            "600519",
+            vec![
+                "2024-01-01T00:00:00Z",
+                "2024-01-02T00:00:00Z",
+                "2024-01-03T00:00:00Z",
+                "2024-01-04T00:00:00Z",
+            ],
+        ),
+        (
+            "us_stock",
+            "AAPL",
+            vec![
+                "2024-01-01T00:00:00Z",
+                "2024-01-02T00:00:00Z",
+                "2024-01-03T00:00:00Z",
+                "2024-01-04T00:00:00Z",
+            ],
+        ),
+    ] {
+        let closes = [100.0, 110.0, 99.0, 108.9];
+        let bars = Value::Array(
+            timestamps
+                .iter()
+                .zip(closes)
+                .map(|(timestamp, close)| {
+                    json!({"timestamp":timestamp,"open":close,"high":close,"low":close,"close":close,"volume":1.0})
+                })
+                .collect(),
+        );
+        let inputs = json!({
+            "period":2,
+            "initial_capital":100.0,
+            "equity":[100.0,98.0,105.0,103.0,106.09],
+            "equity_points":timestamps.iter().zip([98.0,105.0,103.0,106.09]).map(|(timestamp,equity)| json!({"timestamp":timestamp,"equity":equity})).collect::<Vec<_>>(),
+            "strategy_returns":strategy,
+            "benchmark_returns":benchmark,
+            "series_x":strategy,
+            "series_y":benchmark
+        });
+        let body = |inputs: Value| {
+            json!({
+                "concept_id":"rolling_correlation","module":"backtest","symbol":symbol,
+                "source":source,"bars":bars,"inputs":inputs
+            })
+        };
+        let (status, out) = request(&app, "/api/practice", body(inputs.clone())).await;
+        assert_eq!(status, StatusCode::OK, "{source}: {out}");
+        assert_eq!(out["provenance"], "provided_result_context");
+        let values = out["series"][0]["values"].as_array().unwrap();
+        assert!(values[0].is_null(), "{out}");
+        assert_eq!(values.len(), strategy.len());
+        assert!((values[1].as_f64().unwrap() - 1.0).abs() < 1e-12);
+        assert!((values[2].as_f64().unwrap() - 1.0).abs() < 1e-12);
+
+        for (key, value) in [
+            ("series_x", json!([0.0, 0.0, 0.0])),
+            ("series_y", json!([0.0, 0.0, 0.0])),
+            ("period", json!(1)),
+            ("period", json!(4)),
+        ] {
+            let mut changed = inputs.clone();
+            changed[key] = value;
+            let (status, _) = request(&app, "/api/practice", body(changed)).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{source} {key}");
+        }
+        let mut missing = inputs.clone();
+        missing.as_object_mut().unwrap().remove("series_x");
+        let (status, _) = request(&app, "/api/practice", body(missing)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{source}");
+    }
+}

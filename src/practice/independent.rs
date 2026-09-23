@@ -37,7 +37,7 @@ pub(super) fn defaults(id: &str) -> Option<Value> {
             json!({"net_advances":[100.0,120.0,80.0,160.0,150.0,130.0,110.0,180.0,160.0,200.0,170.0,140.0,120.0,220.0,200.0,180.0,210.0,240.0,230.0,250.0,220.0,200.0,240.0,270.0,260.0,280.0,250.0,290.0,280.0,300.0,260.0,250.0,310.0,300.0,320.0,330.0,290.0,340.0,350.0,320.0]})
         }
         "rolling_correlation" => {
-            json!({"series_x":[1.0,2.0,3.0,4.0,5.0],"series_y":[2.0,4.0,6.0,8.0,10.0],"period":3})
+            json!({"series_x":[],"series_y":[],"period":3})
         }
         "total_return" | "cagr" | "max_drawdown" | "calmar" => {
             json!({"equity":[10000.0,10500.0,10200.0,11000.0],"elapsed_days":365.0})
@@ -359,9 +359,10 @@ pub(super) fn evaluate(id: &str, v: &Value, o: &mut Output) -> Result<(), String
             let bb = a("series_y")?;
             paired(&aa, &bb)?;
             let p = period(v, "period")?;
-            if p < 2 {
-                return Err("correlation period 至少2".into());
+            if p < 2 || p > aa.len() {
+                return Err("correlation period 必须是 2..=已核验收益样本数的整数".into());
             }
+            o.note("策略净值逐期收益与同时间戳标的收盘收益的滚动相关性；不是双资产配对交易证据。");
             o.series(id, stats::rolling_correlation(&aa, &bb, p), "correlation");
         }
         "total_return" | "cagr" | "max_drawdown" | "calmar" => {

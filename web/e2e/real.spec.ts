@@ -37,7 +37,7 @@ test('real Rust service supports the four-module learning journey', async ({ pag
   await page.getByRole('button', { name: '模拟盘', exact: true }).click();
   await expect(page.getByRole('heading', { name: '模拟盘' })).toBeVisible();
   await page.getByRole('button', { name: '策略', exact: true }).click();
-  await page.getByText('买入持有 (基准)', { exact: true }).click();
+  await page.getByRole('option', { name: '买入持有 (基准)', exact: true }).click();
   await expect(page.getByRole('button', { name: /启动/ })).toBeEnabled();
   await Promise.all([
     page.waitForResponse(response => response.url().includes('/api/paper/config') && response.ok()),
@@ -523,4 +523,130 @@ test('period practice uses each real source contract and labels observation gaps
       else expect([date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds()]).toEqual([0, 0, 0]);
     }
   }
+});
+
+test('rolling correlation rebuilds strategy and benchmark returns from each live market result', async ({ page }) => {
+  test.setTimeout(180_000);
+  const correlation = (x: number[], y: number[]) => {
+    const xMean = x.reduce((sum, value) => sum + value, 0) / x.length;
+    const yMean = y.reduce((sum, value) => sum + value, 0) / y.length;
+    const numerator = x.reduce((sum, value, index) => sum + (value - xMean) * (y[index] - yMean), 0);
+    const denominator = Math.sqrt(
+      x.reduce((sum, value) => sum + (value - xMean) ** 2, 0) *
+      y.reduce((sum, value) => sum + (value - yMean) ** 2, 0),
+    );
+    return denominator === 0 ? null : numerator / denominator;
+  };
+  for (const market of [
+    { source: 'binance', label: '加密货币 · Binance' },
+    { source: 'a_share', label: 'A 股 · 公开行情' },
+    { source: 'us_stock', label: '美股 · 公开行情' },
+  ]) {
+    await page.goto('/backtest?concept=rolling_correlation&source=' + market.source);
+    await page.getByRole('button', { name: '数据源', exact: true }).click();
+    await page.getByRole('option', { name: market.label, exact: true }).click();
+    await page.getByRole('button', { name: '运行回测' }).click();
+    await expect(page.locator('.ax-metrics')).toBeVisible({ timeout: 35_000 });
+    const panel = page.getByLabel('概念实践');
+    await expect(panel.locator('.ax-practice-inputs input')).toHaveCount(1);
+    const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+    await panel.getByRole('button', { name: '运行实践' }).click();
+    const response = await responsePromise;
+    expect(response.ok(), await response.text()).toBe(true);
+    const request = response.request().postDataJSON();
+    expect(request.source).toBe(market.source);
+    expect(request.inputs.series_x).toEqual(request.inputs.strategy_returns);
+    expect(request.inputs.series_y).toEqual(request.inputs.benchmark_returns);
+    expect(request.inputs.equity_points.map((point: { timestamp: string }) => Date.parse(point.timestamp))).toEqual(request.bars.map((bar: { timestamp: string }) => Date.parse(bar.timestamp)));
+    const strategy = request.inputs.strategy_returns as number[];
+    const benchmark = request.inputs.benchmark_returns as number[];
+    const period = request.inputs.period as number;
+    expect(period).toBeGreaterThanOrEqual(2);
+    expect(period).toBeLessThanOrEqual(strategy.length);
+    const expected = strategy.map((_: number, index: number) => index < period - 1 ? null : correlation(
+      strategy.slice(index + 1 - period, index + 1),
+      benchmark.slice(index + 1 - period, index + 1),
+    ));
+    const payload = await response.json();
+    const actual = payload.series.find((series: { name: string }) => series.name === 'rolling_correlation').values;
+    expect(actual).toHaveLength(expected.length);
+    for (let index = 0; index < expected.length; index += 1) {
+      const expectedValue = expected[index];
+      if (expectedValue == null) expect(actual[index]).toBeNull();
+      else expect(actual[index]).toBeCloseTo(expectedValue, 10);
+    }
+    expect(payload.provenance).toBe('provided_result_context');
+    await expect(panel).toContainText('不是双资产配对交易证据');
+  }
+});
+
+test('rolling correlation accepts aligned real compare and paper results', async ({ page }) => {
+  test.setTimeout(150_000);
+  const assertPractice = async (module: 'compare' | 'paper') => {
+    const panel = page.getByLabel('概念实践');
+    const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+    await panel.getByRole('button', { name: '运行实践' }).click();
+    const response = await responsePromise;
+    expect(response.ok(), await response.text()).toBe(true);
+    const request = response.request().postDataJSON();
+    expect(request.module).toBe(module);
+    expect(request.inputs.series_x).toEqual(request.inputs.strategy_returns);
+    expect(request.inputs.series_y).toEqual(request.inputs.benchmark_returns);
+    expect(request.inputs.equity_points.map((point: { timestamp: string }) => Date.parse(point.timestamp))).toEqual(request.bars.map((bar: { timestamp: string }) => Date.parse(bar.timestamp)));
+    const offset = request.inputs.equity.length === request.bars.length + 1 ? 1 : 0;
+    for (let index = 1; index < request.bars.length; index += 1) {
+      expect(request.inputs.strategy_returns[index - 1]).toBeCloseTo(
+        request.inputs.equity[offset + index] / request.inputs.equity[offset + index - 1] - 1, 12,
+      );
+      expect(request.inputs.benchmark_returns[index - 1]).toBeCloseTo(
+        request.bars[index].close / request.bars[index - 1].close - 1, 12,
+      );
+    }
+    const strategy = request.inputs.strategy_returns as number[];
+    const benchmark = request.inputs.benchmark_returns as number[];
+    const period = request.inputs.period as number;
+    const correlation = (x: number[], y: number[]) => {
+      const xMean = x.reduce((sum, value) => sum + value, 0) / x.length;
+      const yMean = y.reduce((sum, value) => sum + value, 0) / y.length;
+      const numerator = x.reduce((sum, value, index) => sum + (value - xMean) * (y[index] - yMean), 0);
+      const denominator = Math.sqrt(
+        x.reduce((sum, value) => sum + (value - xMean) ** 2, 0) *
+        y.reduce((sum, value) => sum + (value - yMean) ** 2, 0),
+      );
+      return denominator === 0 ? null : numerator / denominator;
+    };
+    const payload = await response.json();
+    const values = payload.series.find((series: { name: string }) => series.name === 'rolling_correlation').values;
+    expect(values.slice(0, period - 1).every((value: unknown) => value == null)).toBe(true);
+    for (const index of [period - 1, strategy.length - 1]) {
+      const expected = correlation(
+        strategy.slice(index + 1 - period, index + 1),
+        benchmark.slice(index + 1 - period, index + 1),
+      );
+      if (expected == null) expect(values[index]).toBeNull();
+      else expect(values[index]).toBeCloseTo(expected, 10);
+    }
+    expect(payload.provenance).toBe('provided_result_context');
+  };
+
+  await page.goto('/compare?concept=rolling_correlation&source=binance');
+  await expect.poll(() => page.locator('.ax-pool-item').count(), { timeout: 20_000 }).toBeGreaterThanOrEqual(2);
+  await page.getByRole('button', { name: '跑对比' }).click();
+  await expect.poll(() => page.locator('.ax-cmp-table tbody tr').count(), { timeout: 35_000 }).toBeGreaterThanOrEqual(2);
+  await assertPractice('compare');
+
+  await page.goto('/paper?concept=rolling_correlation&source=binance');
+  await page.getByRole('button', { name: '策略', exact: true }).click();
+  await page.getByRole('option', { name: '买入持有 (基准)', exact: true }).click();
+  await expect(page.getByRole('button', { name: /启动/ })).toBeEnabled({ timeout: 20_000 });
+  await Promise.all([
+    page.waitForResponse(response => response.url().includes('/api/paper/start') && response.ok()),
+    page.getByRole('button', { name: /启动/ }).click(),
+  ]);
+  await expect(page.locator('.ax-paper-stats')).toContainText(/成交笔数\s*1/, { timeout: 20_000 });
+  await assertPractice('paper');
+  await Promise.all([
+    page.waitForResponse(response => response.url().includes('/api/paper/stop') && response.ok()),
+    page.getByRole('button', { name: /停止/ }).click(),
+  ]);
 });

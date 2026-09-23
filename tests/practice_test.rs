@@ -30,6 +30,18 @@ fn every_unique_knowledge_concept_has_editable_executable_practice() {
     let actual: BTreeSet<_> = cat.iter().map(|e| e.id.clone()).collect();
     assert_eq!(actual, expected);
     assert_eq!(actual.len(), 168);
+    let rolling = cat
+        .iter()
+        .find(|item| item.id == "rolling_correlation")
+        .unwrap();
+    assert_eq!(
+        rolling
+            .inputs
+            .iter()
+            .map(|input| input.key.as_str())
+            .collect::<Vec<_>>(),
+        vec!["period"]
+    );
     let bars: Vec<_> = (0..240)
         .map(|i| axiom::types::Bar {
             timestamp: chrono::DateTime::from_timestamp(i * 3600, 0).unwrap(),
@@ -41,7 +53,12 @@ fn every_unique_knowledge_concept_has_editable_executable_practice() {
         })
         .collect();
     for item in cat {
-        let result = practice::evaluate(&item.id, &bars, &json!({}))
+        let inputs = if item.id == "rolling_correlation" {
+            json!({"series_x":[0.01,0.02,0.03],"series_y":[0.03,0.02,0.01],"period":2})
+        } else {
+            json!({})
+        };
+        let result = practice::evaluate(&item.id, &bars, &inputs)
             .unwrap_or_else(|e| panic!("{}: {}", item.id, e));
         assert!(
             result["values"].as_object().is_some_and(|v| !v.is_empty()),

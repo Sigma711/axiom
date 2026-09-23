@@ -577,9 +577,15 @@ function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}
     const parsed: Record<string, unknown> = {};
     try {
       for (const input of concept.inputs) parsed[input.key] = usePageContext && Object.prototype.hasOwnProperty.call(contextInputs, input.key) ? contextInputs[input.key] : JSON.parse(inputs[input.key] ?? 'null');
-      if (concept.id === 'book_r_squared' && usePageContext) {
+      if ((concept.id === 'book_r_squared' || concept.id === 'rolling_correlation') && usePageContext) {
         for (const key of ['equity', 'equity_points', 'initial_capital']) {
           if (Object.prototype.hasOwnProperty.call(contextInputs, key)) parsed[key] = contextInputs[key];
+        }
+        if (concept.id === 'rolling_correlation') {
+          parsed.strategy_returns = contextInputs.strategy_returns;
+          parsed.benchmark_returns = contextInputs.benchmark_returns;
+          parsed.series_x = contextInputs.strategy_returns;
+          parsed.series_y = contextInputs.benchmark_returns;
         }
       }
     } catch {

@@ -52,7 +52,10 @@ pub fn correlation(x: &[f64], y: &[f64]) -> Option<f64> {
 pub fn rolling_correlation(x: &[f64], y: &[f64], period: usize) -> Vec<Option<f64>> {
     let n = x.len().min(y.len());
     let mut out = vec![None; n];
-    for i in period..n {
+    if period < 2 || period > n {
+        return out;
+    }
+    for i in period - 1..n {
         let xw = &x[i + 1 - period..=i];
         let yw = &y[i + 1 - period..=i];
         out[i] = correlation(xw, yw);

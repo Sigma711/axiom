@@ -38,6 +38,15 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+fn source_candle_close_after(source: &str) -> Result<Duration, ApiError> {
+    match source {
+        "real" | "binance" | "synthetic" => Ok(Duration::hours(1)),
+        "a_share" => Ok(Duration::hours(8)),
+        "us_stock" => Ok(Duration::hours(22)),
+        _ => Err(validate::bad("unsupported market source")),
+    }
+}
+
 use std::sync::OnceLock;
 use tokio::sync::{Mutex as TokioMutex, RwLock as TokioRwLock};
 
@@ -77,6 +86,17 @@ async fn market_bars(
         fetch_public_market_bars(&state.feed, source, symbol, since, limit).await
     }
     .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+    let close_after = source_candle_close_after(source)?;
+    let now = Utc::now();
+    let bars: Vec<_> = bars
+        .into_iter()
+        .filter(|bar| bar.timestamp + close_after <= now)
+        .collect();
+    if bars.is_empty() {
+        return Err(validate::bad(
+            "market request returned no completed candles",
+        ));
+    }
     validate::bars(&bars)?;
     Ok(bars)
 }
@@ -1473,6 +1493,14 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
             "source_policy":"real_required",
             "goal":"使用所选市场的已收盘K线计算相邻收盘价简单收益率样本标准差；加密1小时线按8760小时/年，A股和美股日线按252个交易日/年惯例。年化口径由已验证数据源决定，不接受手填。"
         })
+    } else if concept.id == "rolling_correlation" {
+        json!({
+            "markets":["crypto","cn_equity","us_equity"],
+            "modules":["backtest","paper","compare"],
+            "required_datasets":["matched_result_bars","real_strategy_equity","same_period_benchmark_returns"],
+            "source_policy":"result_required",
+            "goal":"使用本页真实策略净值逐期收益与同时间戳标的收盘收益，按所选窗口计算滚动皮尔逊相关系数。窗口未满或任一窗口序列为常数时返回空值；它说明策略与所选标的的同期联动，不是双资产配对交易证据，也不接受手填收益数组。"
+        })
     } else if concept.id == "book_r_squared" {
         json!({
             "markets":["crypto","cn_equity","us_equity"],
@@ -1631,12 +1659,7 @@ fn source_market(source: &str) -> Option<&'static str> {
 }
 
 fn practice_bars_are_closed(bars: &[Bar], source: &str) -> Result<(), ApiError> {
-    let close_after = match source {
-        "real" | "binance" | "synthetic" => Duration::hours(1),
-        "a_share" => Duration::hours(8),
-        "us_stock" => Duration::hours(22),
-        _ => return Err(validate::bad("unsupported practice source")),
-    };
+    let close_after = source_candle_close_after(source)?;
     if bars
         .last()
         .is_some_and(|bar| bar.timestamp + close_after > Utc::now())
@@ -1829,6 +1852,27 @@ fn validate_r_squared_observations(bars: &[Bar], inputs: &Value) -> Result<(), A
     Ok(())
 }
 
+fn validate_rolling_correlation_observations(bars: &[Bar], inputs: &Value) -> Result<(), ApiError> {
+    validate_r_squared_observations(bars, inputs)?;
+    let strategy = finite_input_array(inputs, "strategy_returns")?;
+    let benchmark = finite_input_array(inputs, "benchmark_returns")?;
+    let series_x = finite_input_array(inputs, "series_x")?;
+    let series_y = finite_input_array(inputs, "series_y")?;
+    if series_x.len() != strategy.len() || series_y.len() != benchmark.len() {
+        return Err(validate::bad(
+            "rolling correlation aliases must have one value per verified return",
+        ));
+    }
+    for index in 0..strategy.len() {
+        if !is_close(series_x[index], strategy[index])
+            || !is_close(series_y[index], benchmark[index])
+        {
+            return Err(validate::bad("rolling correlation aliases must exactly match verified strategy and benchmark returns"));
+        }
+    }
+    Ok(())
+}
+
 fn validate_result_context(
     concept: &crate::practice::PracticeConcept,
     bars: &[Bar],
@@ -1859,6 +1903,7 @@ fn validate_result_context(
             | "beta"
             | "alpha"
             | "book_r_squared"
+            | "rolling_correlation"
     );
     if benchmark_dependent {
         let strategy = finite_input_array(inputs, "strategy_returns")?;
@@ -1875,6 +1920,8 @@ fn validate_result_context(
         }
         if concept.id == "book_r_squared" {
             validate_r_squared_observations(bars, inputs)?;
+        } else if concept.id == "rolling_correlation" {
+            validate_rolling_correlation_observations(bars, inputs)?;
         }
     } else if matches!(
         concept.id.as_str(),
@@ -2047,10 +2094,54 @@ fn empty_inputs() -> Value {
 #[cfg(test)]
 mod binance_catalog_tests {
     use super::{
-        fetch_symbols_from_binance_at, select_binance_symbols, BinanceSymbol, BinanceTicker,
+        fetch_symbols_from_binance_at, practice_bars_are_closed, select_binance_symbols,
+        source_candle_close_after, BinanceSymbol, BinanceTicker,
     };
+    use crate::types::Bar;
     use axum::{routing::get, Json, Router};
+    use chrono::{Duration, Utc};
     use serde_json::json;
+
+    #[test]
+    fn completed_candle_policy_is_shared_across_market_and_practice_boundaries() {
+        let now = Utc::now();
+        for (source, expected) in [("binance", 1), ("a_share", 8), ("us_stock", 22)] {
+            let close_after = source_candle_close_after(source).unwrap();
+            assert_eq!(close_after, Duration::hours(expected));
+            let completed = Bar {
+                timestamp: now - close_after - Duration::seconds(1),
+                open: 1.0,
+                high: 1.0,
+                low: 1.0,
+                close: 1.0,
+                volume: 0.0,
+            };
+            let unfinished = Bar {
+                timestamp: now - close_after + Duration::seconds(1),
+                ..completed
+            };
+            assert!(
+                practice_bars_are_closed(&[completed], source).is_ok(),
+                "{source}"
+            );
+            assert!(
+                practice_bars_are_closed(&[unfinished], source).is_err(),
+                "{source}"
+            );
+        }
+        let saturday_daily_label = Bar {
+            timestamp: chrono::DateTime::parse_from_rfc3339("2024-01-06T00:00:00Z")
+                .unwrap()
+                .with_timezone(&Utc),
+            open: 1.0,
+            high: 1.0,
+            low: 1.0,
+            close: 1.0,
+            volume: 0.0,
+        };
+        assert!(practice_bars_are_closed(&[saturday_daily_label], "a_share").is_ok());
+        assert!(source_candle_close_after("unknown").is_err());
+    }
 
     #[tokio::test]
     async fn catalog_fetches_both_public_endpoints_and_rejects_bad_responses() {

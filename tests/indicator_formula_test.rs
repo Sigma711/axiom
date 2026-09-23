@@ -53,8 +53,23 @@ fn statistical_indicators_define_warmups_degenerate_inputs_and_ratios() {
     assert!(alpha(&[0.1, 0.2], &[1.0, 1.0], 0.01).is_none());
 
     let rolling = rolling_correlation(&[1.0, 2.0, 3.0], &[3.0, 2.0, 1.0], 2);
-    assert_eq!(rolling[..2], [None, None]);
-    assert_eq!(rolling[2], Some(-1.0));
+    assert_eq!(rolling, vec![None, Some(-1.0), Some(-1.0)]);
+    assert_eq!(
+        rolling_correlation(&[1.0, 2.0], &[2.0, 1.0], 2),
+        vec![None, Some(-1.0)]
+    );
+    assert_eq!(
+        rolling_correlation(&[1.0, 2.0], &[2.0, 1.0], 3),
+        vec![None, None]
+    );
+    assert_eq!(
+        rolling_correlation(&[1.0, 2.0], &[2.0, 1.0], 1),
+        vec![None, None]
+    );
+    assert_eq!(
+        rolling_correlation(&[1.0, 1.0, 1.0], &[2.0, 3.0, 4.0], 2),
+        vec![None, None, None]
+    );
     assert_eq!(
         percentile_rank(&[1.0, 2.0, 3.0], 2),
         vec![None, Some(100.0), Some(100.0)]
