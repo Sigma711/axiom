@@ -148,11 +148,11 @@ async function enforceRust(records) {
       continue;
     }
     const result = ratio(lines); covered += result.covered; total += result.total;
-    if (result.percentage < threshold) failures.push(`Rust module ${relative(repoRoot, file)}: ${format(result)}`);
+    if (result.percentage <= threshold) failures.push(`Rust module ${relative(repoRoot, file)}: ${format(result)}`);
   }
   const result = { covered, total, percentage: total ? covered / total : 0 };
   console.log(`Rust executable-source line coverage: ${format(result)}`);
-  return failures.concat(result.percentage < threshold ? [`Rust aggregate: ${format(result)}`] : []);
+  return failures.concat(result.percentage <= threshold ? [`Rust aggregate: ${format(result)}`] : []);
 }
 
 async function enforceBrowser(records) {
@@ -168,12 +168,12 @@ async function enforceBrowser(records) {
       continue;
     }
     const result = ratio(lines); covered += result.covered; total += result.total;
-    if (result.percentage < threshold) failures.push(`Browser product file ${relative(repoRoot, file)}: ${format(result)}`);
+    if (result.percentage <= threshold) failures.push(`Browser product file ${relative(repoRoot, file)}: ${format(result)}`);
     if (file.endsWith('.tsx')) {
       const components = componentRanges(file, source);
       for (const component of components) {
         const componentResult = ratio(componentLines(component, components, lines));
-        if (componentResult.total === 0 || componentResult.percentage < threshold) {
+        if (componentResult.total === 0 || componentResult.percentage <= threshold) {
           failures.push(`React component ${relative(repoRoot, file)}#${component.name}: ${format(componentResult)}`);
         }
       }
@@ -181,7 +181,7 @@ async function enforceBrowser(records) {
   }
   const result = { covered, total, percentage: total ? covered / total : 0 };
   console.log(`Browser executable-source line coverage: ${format(result)}`);
-  return failures.concat(result.percentage < threshold ? [`Browser aggregate: ${format(result)}`] : []);
+  return failures.concat(result.percentage <= threshold ? [`Browser aggregate: ${format(result)}`] : []);
 }
 
 const rust = await collect(rustPath);
@@ -190,5 +190,5 @@ const failures = [...await enforceRust(rust), ...await enforceBrowser(browser)];
 if (failures.length) {
   console.error('\nCoverage gate failures:');
   for (const failure of failures) console.error(`- ${failure}`);
-  throw new Error(`${failures.length} independent coverage requirement(s) are below 95.00%`);
+  throw new Error(`${failures.length} independent coverage requirement(s) are at or below 95.00%`);
 }
