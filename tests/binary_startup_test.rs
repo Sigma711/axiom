@@ -57,13 +57,28 @@ fn start_and_request_strategy_catalog(offline: bool) {
         ) {
             Ok(mut stream) => {
                 stream
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .expect("set response timeout");
+                let attempted = stream
                     .write_all(b"GET /api/strategies HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
-                    .expect("write HTTP request");
-                let mut response = String::new();
-                stream
-                    .read_to_string(&mut response)
-                    .expect("read HTTP response");
-                break response;
+                    .and_then(|_| {
+                        let mut response = String::new();
+                        stream.read_to_string(&mut response).map(|_| response)
+                    });
+                match attempted {
+                    Ok(response) if response.starts_with("HTTP/1.1 200") => break response,
+                    Ok(_) | Err(_) if Instant::now() < deadline => {
+                        thread::sleep(Duration::from_millis(50));
+                    }
+                    Ok(response) => {
+                        terminate(&mut child);
+                        panic!("AXIOM did not serve a complete 200 response: {response}");
+                    }
+                    Err(error) => {
+                        terminate(&mut child);
+                        panic!("AXIOM did not serve a complete response: {error}");
+                    }
+                }
             }
             Err(_) if Instant::now() < deadline => thread::sleep(Duration::from_millis(50)),
             Err(error) => {
