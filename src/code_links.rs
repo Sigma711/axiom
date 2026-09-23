@@ -182,6 +182,8 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
                     id,
                     "book_block_height"
                         | "book_block_size"
+                        | "book_block_interval"
+                        | "book_transaction_rate"
                         | "book_transaction_fees"
                         | "book_transaction_bytes"
                 ) {

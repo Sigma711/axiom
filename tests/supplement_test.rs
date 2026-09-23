@@ -54,6 +54,8 @@ fn every_supplement_has_working_inputs_and_units() {
             concept.id.as_str(),
             "book_block_height"
                 | "book_block_size"
+                | "book_block_interval"
+                | "book_transaction_rate"
                 | "book_transaction_fees"
                 | "book_transaction_bytes"
         ) {

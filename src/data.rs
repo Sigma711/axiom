@@ -406,6 +406,9 @@ pub struct BitcoinBlock {
     pub previous_hash: String,
     pub timestamp: DateTime<Utc>,
     pub size_bytes: u64,
+    /// Count declared by the Esplora block header response. This includes the
+    /// coinbase transaction and is deliberately not inferred from a page.
+    pub tx_count: u64,
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct BitcoinBlockSnapshot {
@@ -450,6 +453,10 @@ fn parse_bitcoin_block_snapshot(raw: &serde_json::Value) -> Result<Vec<BitcoinBl
             .as_u64()
             .filter(|size| *size > 0)
             .context("Bitcoin block size must be positive bytes")?;
+        let tx_count = row["tx_count"]
+            .as_u64()
+            .filter(|count| *count > 0)
+            .context("Bitcoin block tx_count must be a positive unsigned integer")?;
         let seconds = row["timestamp"]
             .as_i64()
             .context("Bitcoin block timestamp must be Unix seconds")?;
@@ -473,6 +480,7 @@ fn parse_bitcoin_block_snapshot(raw: &serde_json::Value) -> Result<Vec<BitcoinBl
             previous_hash,
             timestamp,
             size_bytes,
+            tx_count,
         });
     }
     blocks.reverse();
@@ -2403,7 +2411,7 @@ mod bitcoin_block_snapshot_tests {
     fn rows() -> serde_json::Value {
         json!((0..10).map(|i| {
             let height = 1000 - i;
-            json!({"id":hash(height as u8),"height":height,"previousblockhash":hash((height-1) as u8),"timestamp":1700000000 + (i as i64 * 17),"size":1000+i})
+            json!({"id":hash(height as u8),"height":height,"previousblockhash":hash((height-1) as u8),"timestamp":1700000000 + (i as i64 * 17),"size":1000+i,"tx_count":100+i})
         }).collect::<Vec<_>>())
     }
     #[test]
@@ -2430,6 +2438,9 @@ mod bitcoin_block_snapshot_tests {
         let mut zero = rows();
         zero[0]["size"] = json!(0);
         cases.push(zero);
+        let mut zero_transactions = rows();
+        zero_transactions[0]["tx_count"] = json!(0);
+        cases.push(zero_transactions);
         let mut bad_hash = rows();
         bad_hash[0]["id"] = json!("bad");
         cases.push(bad_hash);
@@ -2453,6 +2464,7 @@ mod bitcoin_transaction_parser_tests {
             previous_hash: h(8),
             timestamp: Utc::now(),
             size_bytes: 1,
+            tx_count: 1,
         }
     }
     fn rows() -> serde_json::Value {

@@ -76,6 +76,8 @@ async fn data_practice_accepts_only_concepts_with_a_data_plan() {
                     | "book_pitfall_order_imbalance"
                     | "book_block_height"
                     | "book_block_size"
+                    | "book_block_interval"
+                    | "book_transaction_rate"
                     | "book_transaction_fees"
                     | "book_transaction_bytes"
             )
@@ -1909,7 +1911,7 @@ async fn recent_trade_practices_fetch_actual_trades_and_disclose_the_exact_windo
 async fn mock_bitcoin_blocks() -> Json<Value> {
     Json(json!((0..10).map(|i| {
         let height = 900_009 - i;
-        json!({"id":format!("{height:064x}"),"height":height,"previousblockhash":format!("{:064x}", height-1),"timestamp":1_700_000_000 + i * 7,"size":1000+i})
+        json!({"id":format!("{height:064x}"),"height":height,"previousblockhash":format!("{:064x}", height-1),"timestamp":1_700_000_000 + i * 7,"size":1000+i,"tx_count":100+i})
     }).collect::<Vec<_>>()))
 }
 #[tokio::test]
@@ -1931,7 +1933,12 @@ async fn bitcoin_block_practices_use_server_mainnet_snapshot_and_reject_client_d
     feed.bitcoin_mempool_url = format!("http://127.0.0.1:{port}");
     state.feed = Arc::new(feed);
     let app = api::router(Arc::new(state));
-    for id in ["book_block_height", "book_block_size"] {
+    for id in [
+        "book_block_height",
+        "book_block_size",
+        "book_block_interval",
+        "book_transaction_rate",
+    ] {
         let (status, body) = request(&app, "/api/practice", json!({"concept_id":id,"module":"data","source":"binance","symbol":"BTCUSDT","limit":10,"inputs":{}})).await;
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(body["provenance"], "server_fetched_bitcoin_block_snapshot");
@@ -1941,8 +1948,18 @@ async fn bitcoin_block_practices_use_server_mainnet_snapshot_and_reject_client_d
         assert_eq!(body["blocks"][0]["height"], 900_000);
         if id == "book_block_height" {
             assert_eq!(body["values"]["blocks_since_reference"], 9);
-        } else {
+        } else if id == "book_block_size" {
             assert_eq!(body["values"]["total_size_bytes"], 10045);
+        } else if id == "book_block_interval" {
+            assert_eq!(body["values"]["interval_count"], 9);
+            assert_eq!(body["values"]["total_declared_span_seconds"], -63);
+            assert_eq!(body["values"]["nonpositive_interval_count"], 9);
+            assert_eq!(body["intervals"].as_array().unwrap().len(), 9);
+        } else {
+            assert_eq!(body["status"], "undefined");
+            assert_eq!(body["values"]["confirmed_transaction_count"], 936);
+            assert!(body["values"]["transaction_rate"].is_null());
+            assert_eq!(body["anchor_block_excluded"], true);
         }
     }
     for bad in [
@@ -1961,7 +1978,7 @@ async fn bitcoin_block_practices_use_server_mainnet_snapshot_and_reject_client_d
 async fn mock_transaction_blocks() -> Json<Value> {
     Json(json!((0..10).map(|i| {
         let height = 900_009 - i;
-        json!({"id":format!("{height:064x}"),"height":height,"previousblockhash":format!("{:064x}",height-1),"timestamp":1_700_000_000+i*10,"size":1000})
+        json!({"id":format!("{height:064x}"),"height":height,"previousblockhash":format!("{:064x}",height-1),"timestamp":1_700_000_000+i*10,"size":1000,"tx_count":100+i})
     }).collect::<Vec<_>>()))
 }
 async fn mock_pinned_transactions(

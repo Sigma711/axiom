@@ -17,6 +17,8 @@ fn uses_bitcoin_block_snapshot(id: &str) -> bool {
         id,
         "book_block_height"
             | "book_block_size"
+            | "book_block_interval"
+            | "book_transaction_rate"
             | "book_transaction_fees"
             | "book_transaction_bytes"
     )
@@ -85,7 +87,7 @@ pub fn catalog() -> Vec<PracticeConcept> {
             })
             .collect(),
             notes: if uses_bitcoin_block_snapshot(d["id"].as_str().unwrap_or_default()) {
-                format!("原书 PDF 第{}页；服务器直接取得未缓存的10个连续Bitcoin主网区块，不接受客户端输入。{}", d["pdf_page"], text(d, "pitfalls"))
+                format!("原书 PDF 第{}页；服务器直接取得未缓存的10个连续Bitcoin主网区块及其 Esplora 声明的交易计数，不接受客户端输入。{}", d["pdf_page"], text(d, "pitfalls"))
             } else if uses_hourly_market_bars(d["id"].as_str().unwrap_or_default()) {
                 format!(
                     "原书 PDF 第{}页；仅从连续24根完整1小时加密市场OHLCV K线计算，不接受手填成交量。{}",

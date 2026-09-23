@@ -1501,8 +1501,11 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
         "book_transaction_fees" | "book_transaction_bytes"
     ) {
         json!({"markets":["crypto"],"modules":["data"],"required_datasets":["server_fetched_bitcoin_mainnet_pinned_block_transaction_first_page"],"source_policy":"real_required","goal":"服务器取得已验证主网区块窗口后固定其中一个具有六个更新观测区块的区块，只请求该哈希交易列表第一页并排除coinbase。校验确认状态和区块哈希、交易ID唯一、手续费为无符号sats、正序列化字节数；样本不代表整块或全网。"})
-    } else if matches!(concept.id.as_str(), "book_block_height" | "book_block_size") {
-        json!({"markets":["crypto"],"modules":["data"],"required_datasets":["server_fetched_bitcoin_mainnet_blocks"],"source_policy":"real_required","goal":"服务器从 Blockstream Esplora /api/blocks 取得未缓存的十个 Bitcoin 主网区块，主源失败时才使用 mempool Esplora。校验十个连续高度、哈希前序链接和正序列化字节数；不假设区块时间单调，不接受客户端K线或输入。高度差为最后高度减第一高度（9）；大小统计为十块总字节数和平均字节数，不构成价格预测或交易信号。"})
+    } else if matches!(
+        concept.id.as_str(),
+        "book_block_height" | "book_block_size" | "book_block_interval" | "book_transaction_rate"
+    ) {
+        json!({"markets":["crypto"],"modules":["data"],"required_datasets":["server_fetched_bitcoin_mainnet_blocks"],"source_policy":"real_required","goal":"服务器从 Blockstream Esplora /api/blocks 取得未缓存的十个 Bitcoin 主网区块，主源失败时才使用 mempool Esplora。校验十个连续高度、哈希前序链接、正序列化字节数和正 tx_count；不假设区块时间单调，不接受客户端K线或输入。区块间隔保留九个有符号头时间差；交易速率以最早区块作锚点，按后九个区块的声明 tx_count（含 coinbase）除以最早至最新的声明时间跨度，跨度非正时无定义。这些短窗口统计不构成价格预测或交易信号。"})
     } else if concept.id == "book_52w_range" {
         json!({"markets":["cn_equity","us_equity"],"modules":["data"],"required_datasets":["server_fetched_completed_daily_ohlcv_364_calendar_days","pre_window_daily_observation","at_least_180_window_observations"],"source_policy":"real_required","goal":"服务器固定取得400根股票日线，以最新已收盘日线为截止取前364自然日开区间；要求窗口前历史锚点及至少180根窗口内观测。显示提供者OHLC的高低与收盘位置，不宣称已核验复权口径或交易日完整性。拒绝客户端价格、K线及教学输入。"})
     } else if crate::book_technical::is_pair_practice(&concept.id) {
@@ -2237,7 +2240,10 @@ async fn post_practice(
         result["transactions"] = json!(sample.transactions);
         return Ok(Json(result));
     }
-    if matches!(concept.id.as_str(), "book_block_height" | "book_block_size") {
+    if matches!(
+        concept.id.as_str(),
+        "book_block_height" | "book_block_size" | "book_block_interval" | "book_transaction_rate"
+    ) {
         if source != "binance"
             || symbol != "BTCUSDT"
             || req.limit.is_some_and(|requested| requested != 10)
@@ -2281,7 +2287,7 @@ async fn post_practice(
             .iter()
             .map(|block| json!({
                 "height":block.height,"hash":block.hash,"previous_hash":block.previous_hash,
-                "timestamp":block.timestamp,"size_bytes":block.size_bytes
+                "timestamp":block.timestamp,"size_bytes":block.size_bytes,"tx_count":block.tx_count
             }))
             .collect::<Vec<_>>());
         return Ok(Json(result));

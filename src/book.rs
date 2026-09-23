@@ -2094,12 +2094,17 @@ fn unit(id: &str) -> &'static str {
 }
 
 /// Computes the blockchain snapshot practices from one validated, oldest-to-newest
-/// ten-block Bitcoin-mainnet observation window.
+/// ten-block Bitcoin-mainnet observation window. Header timestamps are kept as
+/// declared by Esplora: they are not normalized into a monotonic series.
 pub fn market_bitcoin_block_summary(
     concept_id: &str,
     blocks: &[crate::data::BitcoinBlock],
 ) -> Result<Value, String> {
-    if !matches!(concept_id, "book_block_height" | "book_block_size") || blocks.len() != 10 {
+    if !matches!(
+        concept_id,
+        "book_block_height" | "book_block_size" | "book_block_interval" | "book_transaction_rate"
+    ) || blocks.len() != 10
+    {
         return Err(
             "Bitcoin block practice requires a supported concept and exactly 10 blocks".into(),
         );
@@ -2109,12 +2114,108 @@ pub fn market_bitcoin_block_summary(
             || pair[1].previous_hash != pair[0].hash
             || pair[0].size_bytes == 0
             || pair[1].size_bytes == 0
+            || pair[0].tx_count == 0
+            || pair[1].tx_count == 0
         {
             return Err(
-                "Bitcoin blocks must be linked consecutive heights with positive serialized sizes"
+                "Bitcoin blocks must be linked consecutive heights with positive serialized sizes and transaction counts"
                     .into(),
             );
         }
+    }
+    let intervals = blocks
+        .windows(2)
+        .map(|pair| {
+            let seconds = pair[1]
+                .timestamp
+                .signed_duration_since(pair[0].timestamp)
+                .num_seconds();
+            json!({
+                "from_height": pair[0].height,
+                "to_height": pair[1].height,
+                "seconds": seconds,
+            })
+        })
+        .collect::<Vec<_>>();
+    let interval_seconds = intervals
+        .iter()
+        .map(|interval| interval["seconds"].as_i64().expect("interval seconds"))
+        .collect::<Vec<_>>();
+    let total_declared_span_seconds = interval_seconds
+        .iter()
+        .try_fold(0i64, |sum, seconds| sum.checked_add(*seconds))
+        .ok_or_else(|| "Bitcoin header timestamp span overflow".to_string())?;
+    let nonpositive_interval_count = interval_seconds
+        .iter()
+        .filter(|seconds| **seconds <= 0)
+        .count();
+    if concept_id == "book_block_interval" {
+        let mut sorted = interval_seconds.clone();
+        sorted.sort_unstable();
+        let middle = sorted.len() / 2;
+        let median = if sorted.len() % 2 == 1 {
+            sorted[middle] as f64
+        } else {
+            (sorted[middle - 1] as f64 + sorted[middle] as f64) / 2.0
+        };
+        let values = json!({
+            "interval_count": interval_seconds.len(),
+            "total_declared_span_seconds": total_declared_span_seconds,
+            "mean_block_interval_seconds": total_declared_span_seconds as f64 / interval_seconds.len() as f64,
+            "median_block_interval_seconds": median,
+            "nonpositive_interval_count": nonpositive_interval_count,
+        });
+        let units = json!({
+            "interval_count":"intervals",
+            "total_declared_span_seconds":"seconds",
+            "mean_block_interval_seconds":"seconds",
+            "median_block_interval_seconds":"seconds",
+            "nonpositive_interval_count":"intervals",
+        });
+        return Ok(json!({
+            "concept_id":concept_id,"input_kind":"market_bars","provenance":"server_fetched_bitcoin_block_snapshot",
+            "status":"computed","reason":null,"values":values,"units":units,"series":[],"intervals":intervals,"inputs":{},
+            "notes":["窗口是当前观察到的10个连续 Bitcoin 主网区块（最早到最新）。九个相邻区块头时间差按 Esplora 原样保留为有符号秒数，不假设时间单调。","均值、中位数和总声明跨度仅描述这个短窗口；非正间隔会计数，不会被修正，也不构成价格预测或交易信号。"],
+            "source_ids":["appendix_076"]
+        }));
+    }
+    if concept_id == "book_transaction_rate" {
+        let confirmed_transaction_count = blocks[1..]
+            .iter()
+            .try_fold(0u64, |sum, block| sum.checked_add(block.tx_count))
+            .ok_or_else(|| "Bitcoin declared transaction total overflow".to_string())?;
+        let status = if total_declared_span_seconds > 0 {
+            "computed"
+        } else {
+            "undefined"
+        };
+        let reason = if total_declared_span_seconds > 0 {
+            Value::Null
+        } else {
+            json!("首末区块头时间戳之差不大于零，无法计算本次交易速率。")
+        };
+        let transaction_rate = (total_declared_span_seconds > 0)
+            .then(|| confirmed_transaction_count as f64 / total_declared_span_seconds as f64);
+        let values = json!({
+            "confirmed_transaction_count": confirmed_transaction_count,
+            "elapsed_seconds": total_declared_span_seconds,
+            "transaction_rate": transaction_rate,
+            "included_block_count": blocks.len() - 1,
+            "nonpositive_interval_count": nonpositive_interval_count,
+        });
+        let units = json!({
+            "confirmed_transaction_count":"transactions",
+            "elapsed_seconds":"seconds",
+            "transaction_rate":"transactions/second",
+            "included_block_count":"blocks",
+            "nonpositive_interval_count":"intervals",
+        });
+        return Ok(json!({
+            "concept_id":concept_id,"input_kind":"market_bars","provenance":"server_fetched_bitcoin_block_snapshot",
+            "status":status,"reason":reason,"values":values,"units":units,"series":[],"intervals":intervals,"inputs":{},"anchor_block_excluded":true,
+            "notes":["窗口是当前观察到的10个连续 Bitcoin 主网区块（最早到最新）。交易数是 Esplora 对后九个区块声明的 tx_count，包含 coinbase；最早区块只作时间锚点而被排除。","分母是最早至最新区块头时间的有符号声明跨度；若它非正，交易速率无定义。该短窗口不代表全网吞吐率，也不构成价格预测或交易信号。"],
+            "source_ids":["appendix_087"]
+        }));
     }
     let total = blocks
         .iter()
@@ -2158,7 +2259,7 @@ pub fn market_bitcoin_transaction_summary(
             });
         }
         return Ok(
-            json!({"concept_id":id,"input_kind":"market_bars","provenance":"server_fetched_bitcoin_transaction_sample","status":"insufficient_data","reason":"pinned block page contains no ordinary transactions after coinbase exclusion","inputs":{},"series":[],"values":values,"units":units,"notes":["样本仅为已固定区块交易列表第一页中排除coinbase后的普通交易，不能代表整块、全网或费率预测。"],"source_ids":[if id == "book_transaction_fees" {"appendix_085"} else {"appendix_086"}]}),
+            json!({"concept_id":id,"input_kind":"market_bars","provenance":"server_fetched_bitcoin_transaction_sample","status":"insufficient_data","reason":"固定区块交易首页排除 coinbase 后，没有可分析的普通交易。","inputs":{},"series":[],"values":values,"units":units,"notes":["样本仅为已固定区块交易列表第一页中排除coinbase后的普通交易，不能代表整块、全网或费率预测。"],"source_ids":[if id == "book_transaction_fees" {"appendix_085"} else {"appendix_086"}]}),
         );
     }
     let nums: Vec<u64> = txs

@@ -1193,3 +1193,68 @@ test('Bitcoin transaction practices read a pinned block page and recompute fees 
     await expect(panel).toContainText('不是完整区块');
   }
 });
+
+test('Bitcoin block timing and transaction rate use exactly nine linked header-time intervals', async ({ page }) => {
+  test.setTimeout(120_000);
+  for (const conceptId of ['book_block_interval', 'book_transaction_rate']) {
+    await page.goto(`/data?concept=${conceptId}&source=binance`);
+    const panel = page.getByLabel('概念实践');
+    await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+    const requestPromise = page.waitForRequest(request => request.url().includes('/api/practice') && request.method() === 'POST');
+    const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+    await panel.getByRole('button', { name: '运行实践' }).click();
+    const [request, response] = await Promise.all([requestPromise, responsePromise]);
+    expect(request.postDataJSON()).toMatchObject({ concept_id: conceptId, module: 'data', source: 'binance', symbol: 'BTCUSDT', limit: 10, inputs: {} });
+    expect(request.postDataJSON().bars).toBeUndefined();
+    expect(response.ok(), await response.text()).toBe(true);
+    const result = await response.json();
+    expect(result.provenance).toBe('server_fetched_bitcoin_block_snapshot');
+    expect(result.block_snapshot.network).toBe('bitcoin_mainnet');
+    expect(result.block_snapshot.endpoint).toMatch(/^https:\/\/(blockstream\.info|mempool\.space)\/api\/blocks$/);
+    expect(result.blocks).toHaveLength(10);
+    expect(result.intervals).toHaveLength(9);
+    const deltas: number[] = [];
+    for (let index = 1; index < result.blocks.length; index++) {
+      const older = result.blocks[index - 1], newer = result.blocks[index];
+      expect(newer.height).toBe(older.height + 1);
+      expect(newer.previous_hash).toBe(older.hash);
+      expect(Number.isInteger(newer.tx_count) && newer.tx_count > 0).toBe(true);
+      const seconds = (Date.parse(newer.timestamp) - Date.parse(older.timestamp)) / 1000;
+      deltas.push(seconds);
+      expect(result.intervals[index - 1]).toMatchObject({ from_height: older.height, to_height: newer.height, seconds });
+    }
+    expect(Number.isInteger(result.blocks[0].tx_count) && result.blocks[0].tx_count > 0).toBe(true);
+    const total = deltas.reduce((sum, value) => sum + value, 0);
+    const ordered = [...deltas].sort((a, b) => a - b);
+    const median = ordered[4];
+    expect(result.values.nonpositive_interval_count).toBe(deltas.filter(value => value <= 0).length);
+    await expect(panel.locator('.ax-block-timing')).toBeVisible();
+    await expect(panel.locator('.ax-block-snapshot')).toHaveCount(0);
+    await expect(panel.locator('.ax-block-timing [data-value]')).toHaveCount(9);
+    if (conceptId === 'book_block_interval') {
+      expect(result.values.interval_count).toBe(9);
+      expect(result.values.total_declared_span_seconds).toBe(total);
+      expect(result.values.mean_block_interval_seconds).toBeCloseTo(total / 9, 9);
+      expect(result.values.median_block_interval_seconds).toBe(median);
+      for (let index = 0; index < 9; index++) await expect(panel.locator(`.ax-block-timing [data-height="${result.blocks[index + 1].height}"]`)).toHaveAttribute('data-value', String(deltas[index]));
+      await expect(panel).toContainText('不是实测出块耗时');
+    } else {
+      const count = result.blocks.slice(1).reduce((sum: number, block: { tx_count: number }) => sum + block.tx_count, 0);
+      expect(result.values.confirmed_transaction_count).toBe(count);
+      expect(result.values.elapsed_seconds).toBe(total);
+      expect(result.values.included_block_count).toBe(9);
+      expect(result.anchor_block_excluded).toBe(true);
+      expect(panel.locator(`.ax-block-timing [data-height="${result.blocks[0].height}"]`)).toHaveCount(0);
+      for (let index = 1; index < 10; index++) await expect(panel.locator(`.ax-block-timing [data-height="${result.blocks[index].height}"]`)).toHaveAttribute('data-value', String(result.blocks[index].tx_count));
+      if (total > 0) {
+        expect(result.status).toBe('computed');
+        expect(result.values.transaction_rate).toBeCloseTo(count / total, 9);
+      } else {
+        expect(result.status).toBe('undefined');
+        expect(result.values.transaction_rate).toBeNull();
+        await expect(panel).toContainText('本次速率无法定义');
+      }
+      await expect(panel).toContainText('交易数包含每块的 coinbase');
+    }
+  }
+});

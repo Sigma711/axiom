@@ -110,6 +110,8 @@ fn every_published_concept_resolves_to_an_actual_implementation_branch() {
                     e.id.as_str(),
                     "book_block_height"
                         | "book_block_size"
+                        | "book_block_interval"
+                        | "book_transaction_rate"
                         | "book_transaction_fees"
                         | "book_transaction_bytes"
                 ) {

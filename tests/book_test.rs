@@ -817,6 +817,7 @@ fn bitcoin_block_snapshot_summary_uses_ten_linked_blocks_and_correct_byte_math()
             previous_hash: format!("{:064x}", i),
             timestamp: DateTime::from_timestamp(1_700_000_000 + i as i64, 0).unwrap(),
             size_bytes: 1_000 + i,
+            tx_count: 100 + i,
         })
         .collect::<Vec<_>>();
     let height = book::market_bitcoin_block_summary("book_block_height", &blocks).unwrap();
@@ -828,6 +829,60 @@ fn bitcoin_block_snapshot_summary_uses_ten_linked_blocks_and_correct_byte_math()
     let mut broken = blocks.clone();
     broken[4].previous_hash = "wrong".into();
     assert!(book::market_bitcoin_block_summary("book_block_size", &broken).is_err());
+}
+
+#[test]
+fn bitcoin_interval_and_transaction_rate_preserve_signed_header_times_and_exclude_anchor() {
+    use axiom::data::BitcoinBlock;
+    let timestamps = [
+        1_000, 1_600, 1_500, 2_100, 2_700, 3_300, 3_900, 4_500, 5_100, 5_700,
+    ];
+    let blocks = (0..10)
+        .map(|i| BitcoinBlock {
+            height: 900_000 + i,
+            hash: format!("{:064x}", i + 1),
+            previous_hash: format!("{:064x}", i),
+            timestamp: DateTime::from_timestamp(timestamps[i as usize], 0).unwrap(),
+            size_bytes: 1_000,
+            tx_count: 100 + i,
+        })
+        .collect::<Vec<_>>();
+    let interval = book::market_bitcoin_block_summary("book_block_interval", &blocks).unwrap();
+    assert_eq!(interval["values"]["interval_count"], 9);
+    assert_eq!(interval["values"]["total_declared_span_seconds"], 4700);
+    assert_eq!(
+        interval["values"]["mean_block_interval_seconds"],
+        4700.0 / 9.0
+    );
+    assert_eq!(interval["values"]["median_block_interval_seconds"], 600.0);
+    assert_eq!(interval["values"]["nonpositive_interval_count"], 1);
+    assert_eq!(interval["intervals"][1]["seconds"], -100);
+    let rate = book::market_bitcoin_block_summary("book_transaction_rate", &blocks).unwrap();
+    assert_eq!(rate["values"]["confirmed_transaction_count"], 945);
+    assert_eq!(rate["values"]["elapsed_seconds"], 4700);
+    assert_eq!(rate["values"]["transaction_rate"], 945.0 / 4700.0);
+    assert_eq!(rate["values"]["included_block_count"], 9);
+    assert_eq!(rate["anchor_block_excluded"], true);
+    assert_eq!(rate["values"]["nonpositive_interval_count"], 1);
+}
+
+#[test]
+fn bitcoin_transaction_rate_is_undefined_when_declared_span_is_nonpositive() {
+    use axiom::data::BitcoinBlock;
+    let blocks = (0..10)
+        .map(|i| BitcoinBlock {
+            height: 900_000 + i,
+            hash: format!("{:064x}", i + 1),
+            previous_hash: format!("{:064x}", i),
+            timestamp: DateTime::from_timestamp(1_000 - i as i64, 0).unwrap(),
+            size_bytes: 1_000,
+            tx_count: 100,
+        })
+        .collect::<Vec<_>>();
+    let rate = book::market_bitcoin_block_summary("book_transaction_rate", &blocks).unwrap();
+    assert_eq!(rate["status"], "undefined");
+    assert!(rate["values"]["transaction_rate"].is_null());
+    assert_eq!(rate["values"]["elapsed_seconds"], -9);
 }
 
 #[test]

@@ -346,6 +346,59 @@ test('Bitcoin transaction practices navigate to a scoped sample chart in both th
   await expect(bytesPanel).toContainText('中位数 285 字节');
 });
 
+test('Bitcoin block timing and transaction rate preserve signed intervals and exclude the anchor block', async ({ page }) => {
+  const entries = [
+    { id: 'book_block_interval', name: 'Mean / Median block interval', category: '衍生品与链上', summary: '观察相邻区块头时间戳的差。' },
+    { id: 'book_transaction_rate', name: 'Transaction rate', category: '衍生品与链上', summary: '九块的确认交易数除以头时间戳跨度。' },
+  ];
+  const offsets = [0, 600, 1200, 1000, 1000, 1600, 2200, 2800, 3400, 4000];
+  const hash = (index: number) => index.toString(16).padStart(64, '0');
+  const blocks = offsets.map((offset, index) => ({ height: 100 + index, hash: hash(index + 1), previous_hash: hash(index), timestamp: new Date((1_700_000_000 + offset) * 1000).toISOString(), size_bytes: 1_000_000, tx_count: (index + 1) * 10 }));
+  const intervals = offsets.slice(1).map((offset, index) => ({ from_height: 100 + index, to_height: 101 + index, seconds: offset - offsets[index] }));
+  const snapshot = { network: 'bitcoin_mainnet', provider: 'Blockstream Esplora', endpoint: 'https://blockstream.info/api/blocks', fetched_at: '2026-09-23T01:00:00Z', first_height: 100, last_height: 109, observed_block_count: 10, first_hash: hash(1), last_hash: hash(10) };
+  const concepts = entries.map(entry => ({ ...entry, input_kind: 'market_bars', inputs: [], notes: '只读取已验证区块窗口', plan: { markets: ['crypto'], modules: ['data'], required_datasets: ['server_fetched_bitcoin_mainnet_blocks'], source_policy: 'real_required', goal: '核对十块、九段时间及真实交易数。' } }));
+  await page.route('**/api/knowledge', route => route.fulfill({ json: { total: entries.length, categories: { '衍生品与链上': entries.map(entry => ({ ...entry, formula: '只使用已确认区块窗口', meaning: entry.summary, example: '十块九段', signals: '观察样本', pitfalls: '头时间戳不等于实测耗时', related: [], code_url: 'https://example.test/src/book.rs', implementation: 'src/book.rs::market_bitcoin_block_summary' })) } } }));
+  await page.route('**/api/practice', route => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: { concepts, modules: ['data'], total: concepts.length } });
+    const request = route.request().postDataJSON();
+    expect(request).toMatchObject({ module: 'data', source: 'binance', symbol: 'BTCUSDT', limit: 10, inputs: {} });
+    expect(request.bars).toBeUndefined();
+    const timing = request.concept_id === 'book_block_interval';
+    return route.fulfill({ json: { concept_id: request.concept_id, input_kind: 'market_bars', status: 'computed', reason: null, provenance: 'server_fetched_bitcoin_block_snapshot', values: timing ? { interval_count: 9, total_declared_span_seconds: 4000, mean_block_interval_seconds: 4000 / 9, median_block_interval_seconds: 600, nonpositive_interval_count: 2 } : { confirmed_transaction_count: 540, elapsed_seconds: 4000, transaction_rate: 0.135, included_block_count: 9, nonpositive_interval_count: 2 }, anchor_block_excluded: !timing, units: {}, series: [], notes: [], module: 'data', source: 'binance', symbol: 'BTCUSDT', bars: [], block_snapshot: snapshot, blocks, intervals } });
+  });
+  await page.goto('/');
+  await page.locator('.ax-kb-card').filter({ hasText: entries[0].name }).getByRole('button', { name: '在数据探索中实践' }).click();
+  await expect(page).toHaveURL(/\/data\?concept=book_block_interval&source=binance/);
+  const panel = page.getByLabel('概念实践');
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  await expect(panel.locator('.ax-block-timing')).toBeVisible();
+  await expect(panel.locator('.ax-block-timing [data-value]')).toHaveCount(9);
+  await expect(panel.locator('.ax-block-timing [data-value="-200"]')).toBeVisible();
+  await expect(panel.locator('.ax-block-timing [data-value="0"]')).toBeVisible();
+  await expect(panel).toContainText('2 段不大于零');
+  await expect(panel.locator('.ax-block-snapshot')).toHaveCount(0);
+  await expect(panel.locator('.ax-block-timing')).toHaveScreenshot('block-timing-dark.png', { maxDiffPixelRatio: 0.02 });
+  await page.getByLabel('切换到浅色模式').click();
+  await expect(panel.locator('.ax-block-timing')).toHaveScreenshot('block-timing-light.png', { maxDiffPixelRatio: 0.02 });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => panel.locator('.ax-block-timing-scroll').evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+  await expect(panel.locator('.ax-block-timing')).toHaveScreenshot('block-timing-mobile.png', { maxDiffPixelRatio: 0.02 });
+  await page.goto('/data?concept=book_transaction_rate&source=binance');
+  const ratePanel = page.getByLabel('概念实践');
+  await ratePanel.getByRole('button', { name: '运行实践' }).click();
+  await expect(ratePanel.locator('.ax-block-timing [data-value]')).toHaveCount(9);
+  await expect(ratePanel.locator('.ax-block-timing [data-value="20"]')).toBeVisible();
+  await expect(ratePanel.locator('.ax-block-timing [data-value="10"]')).toHaveCount(0);
+  await expect(ratePanel).toContainText('样本速率 0.135 笔/秒');
+  await expect(ratePanel).toContainText('交易数包含每块的 coinbase');
+  await expect(ratePanel.locator('.ax-block-snapshot')).toHaveCount(0);
+  await expect(ratePanel.locator('.ax-block-timing')).toHaveScreenshot('block-rate-mobile.png', { maxDiffPixelRatio: 0.02 });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await expect(ratePanel.locator('.ax-block-timing')).toHaveScreenshot('block-rate-light.png', { maxDiffPixelRatio: 0.02 });
+  await page.getByLabel('切换到深色模式').click();
+  await expect(ratePanel.locator('.ax-block-timing')).toHaveScreenshot('block-rate-dark.png', { maxDiffPixelRatio: 0.02 });
+});
+
 test('changing the backtest market discards a delayed result from the previous market', async ({ page }) => {
   let releaseFirst: () => void = () => {};
   const firstHeld = new Promise<void>(resolve => { releaseFirst = resolve; });
