@@ -213,6 +213,14 @@ pub fn entries() -> Vec<KnowledgeEntry> {
                 .into();
         }
     }
+    if let Some(entry) = out.iter_mut().find(|entry| entry.id == "book_52w_range") {
+        entry.summary =
+            "使用所选股票已收盘日线的364自然日观测区间，返回最高、最低与最新收盘的相对位置。"
+                .into();
+
+        entry.code_ref = "src/book.rs::market_52w_range_summary".into();
+        entry.implementation = entry.code_ref.clone();
+    }
     out
 }
 
@@ -483,7 +491,7 @@ const EXTRA: &[(&str, &str, &str)] = &[
         "自由流通比例=自由流通股/总股本",
     ),
     ("book_float_market_cap", "流通市值", "流通股×价格"),
-    ("book_52w_range", "52周区间", "距高点=价格/52周高点-1"),
+    ("book_52w_range", "52周区间", "最近已收盘日线为截止，前364自然日开区间内：最高=最大high，最低=最小low；距高点=close/high−1；区间位置=(close−low)/(high−low)"),
     (
         "book_order_imbalance",
         "委比与委差",
@@ -550,11 +558,7 @@ fn extra_inputs(id: &str) -> Option<Vec<(&'static str, &'static str, f64)>> {
             ("total_shares", "总股本（股）", 1e9),
             ("float_shares", "流通股（股）", 6e8),
         ],
-        "book_52w_range" => vec![
-            ("price", "当前价格（元）", 80.),
-            ("high_52w", "52周最高价（元）", 100.),
-            ("low_52w", "52周最低价（元）", 50.),
-        ],
+        "book_52w_range" => vec![],
         "book_order_imbalance" => vec![],
         "book_order_flow" => vec![],
         "book_period" => vec![],
@@ -889,6 +893,7 @@ pub fn catalog() -> Vec<crate::practice::PracticeConcept> {
                 | "book_nonstandard_bar"
                 | "book_period"
                 | "book_trade_volume"
+                | "book_52w_range"
                 | "book_order_flow"
         );
         let fs = extra_inputs(id)
@@ -910,7 +915,9 @@ pub fn catalog() -> Vec<crate::practice::PracticeConcept> {
                 "independent_inputs".into()
             },
             inputs: fs,
-            notes: if *id == "book_order_flow" {
+            notes: if *id == "book_52w_range" {
+                "只使用服务器取得的A股或美股已收盘日线，以实际最后交易日为截止取前364自然日；要求至少180根窗口内观测和窗口之前的历史锚点，不把252根或不足一年历史冒称52周。提供者OHLC复权口径与交易日完整性未独立核验。".into()
+            } else if *id == "book_order_flow" {
                 "只使用 Binance USDT 现货最近24根连续已收盘1小时K线；服务器直接读取字段5、7、9、10计算主动买卖成交量、成交额及差额。这是 Binance taker 主动买卖分类，非A股内外盘或资本净流入；不接受手填或客户端K线。".into()
             } else if *id == "book_trade_volume" {
                 "只使用 Binance USDT 现货最近24根已收盘1小时K线；服务器直接读取字段5 base asset volume 与字段7 quote asset volume，不接受手填或客户端K线。".into()
@@ -1167,6 +1174,58 @@ pub fn market_binance_depth_summary(
         "concept_id":concept_id,"input_kind":"market_bars","provenance":"server_fetched_binance_spot_order_book",
         "status":"computed","reason":null,"values":values,"units":units,"series":[],"notes":notes,"inputs":{},
         "asset_units":{"base_asset":base,"quote_asset":"USDT"}
+    }))
+}
+
+/// Observed provider-OHLC range, anchored to the supplied last completed daily bar.
+/// A pre-window observation and 180 daily observations are a sufficiency gate,
+/// not a claim that the provider's exchange calendar or adjustments were audited.
+pub fn market_52w_range_summary(bars: &[Bar], source: &str) -> Result<Value, String> {
+    if !matches!(source, "a_share" | "us_stock") {
+        return Err("52周区间仅支持A股或美股日线".into());
+    }
+    crate::practice::validate_bars(bars)?;
+    if bars.is_empty()
+        || bars
+            .iter()
+            .any(|bar| bar.timestamp.timestamp() % 86400 != 0)
+    {
+        return Err("52周区间需要按UTC交易日标签对齐的有序日线".into());
+    }
+    let end = bars.last().unwrap().timestamp;
+    let close_after = chrono::Duration::hours(if source == "a_share" { 8 } else { 22 });
+    if end + close_after > chrono::Utc::now() {
+        return Err("52周区间不能使用未收盘或未来日线".into());
+    }
+    let start = end - chrono::Duration::days(364);
+    let anchor = bars
+        .iter()
+        .rev()
+        .find(|bar| bar.timestamp <= start)
+        .ok_or("历史未覆盖52周窗口之前，不能以短历史替代52周区间")?;
+    let window: Vec<_> = bars.iter().filter(|bar| bar.timestamp > start).collect();
+    if window.len() < 180 {
+        return Err("52周窗口内至少需要180根有效日线；不对缺失日期补值".into());
+    }
+    let high = window
+        .iter()
+        .map(|bar| bar.high)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let low = window
+        .iter()
+        .map(|bar| bar.low)
+        .fold(f64::INFINITY, f64::min);
+    let close = window.last().unwrap().close;
+    let position = (high > low).then(|| (close - low) / (high - low));
+    Ok(json!({
+        "concept_id":"book_52w_range","input_kind":"market_bars","status":"computed","reason":null,
+        "provenance":"server_fetched_completed_stock_daily_bars","inputs":{},
+        "values":{"latest_close":close,"high_52w":high,"low_52w":low,"distance_from_high":close/high-1.0,"position_in_range":position},
+        "units":{"latest_close":"price","high_52w":"price","low_52w":"price","distance_from_high":"fraction","position_in_range":"fraction"},
+        "series":[],"bars":window,
+        "year_range":{"window_start":start,"window_end":end,"as_of":end,"bar_count":window.len(),"price_basis":"provider_ohlc_adjustment_unverified","source":source,"pre_window_observation":anchor.timestamp,"window_start_inclusive":false},
+        "notes":["以最后已收盘日线为截止，窗口为(as_of−364自然日, as_of]；不把固定252行当52周。至少180根窗口内日线与一根窗口之前的观测仅用于历史充分性检查，不保证交易日完整。","采用提供者OHLC，复权口径未经独立核验；不是总回报区间，公司行动可能影响比较。区间位置在最高等于最低时为null，不能当成零。"],
+        "source_ids":["book_01_10"]
     }))
 }
 
@@ -1814,7 +1873,9 @@ pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String>
         }
         "book_share_counts" => ratio(n("free_float_shares")?, n("total_shares")?)?,
         "book_float_market_cap" => n("price")? * n("float_shares")?,
-        "book_52w_range" => ratio(n("price")?, n("high_52w")?)? - 1.0,
+        "book_52w_range" => {
+            return Err("52周区间必须由 API 使用服务器取得的股票已收盘日线计算".into())
+        }
         "book_order_imbalance" => ratio(
             n("bid_size")? - n("ask_size")?,
             n("bid_size")? + n("ask_size")?,

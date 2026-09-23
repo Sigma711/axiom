@@ -1490,7 +1490,9 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
                 | "book_second_order_greeks"
         );
     let performance = concept.category == "风险-绩效";
-    if crate::book_technical::is_pair_practice(&concept.id) {
+    if concept.id == "book_52w_range" {
+        json!({"markets":["cn_equity","us_equity"],"modules":["data"],"required_datasets":["server_fetched_completed_daily_ohlcv_364_calendar_days","pre_window_daily_observation","at_least_180_window_observations"],"source_policy":"real_required","goal":"服务器固定取得400根股票日线，以最新已收盘日线为截止取前364自然日开区间；要求窗口前历史锚点及至少180根窗口内观测。显示提供者OHLC的高低与收盘位置，不宣称已核验复权口径或交易日完整性。拒绝客户端价格、K线及教学输入。"})
+    } else if crate::book_technical::is_pair_practice(&concept.id) {
         json!({"markets":["crypto"],"modules":["data"],"required_datasets":["server_fetched_aligned_binance_usdt_spot_hourly_pair"],"source_policy":"real_required","goal":"服务器以同一交易所截止时刻取得两个不同USDT现货标的的已收盘小时线，精确匹配时间且拒绝匹配窗口内部缺口；展示双方标的、时间范围、匹配与舍弃数量。相对强弱不是RSI，价差不是套利保证，残差单位根统计量不能证明协整。"})
     } else if is_binance_spot_depth_practice(&concept.id) {
         json!({
@@ -2023,6 +2025,21 @@ fn validate_result_context(
     Ok(())
 }
 
+fn daily_range_response(
+    history: &[Bar],
+    symbol: &str,
+    source: &str,
+) -> Result<Json<Value>, ApiError> {
+    let mut result =
+        crate::book::market_52w_range_summary(history, source).map_err(validate::bad)?;
+    result["module"] = json!("data");
+    result["symbol"] = json!(symbol);
+    result["source"] = json!(source);
+    result["context"] = json!("selected_dataset");
+    result["bar_origin"] = json!("server_fetched_daily_52w_range");
+    Ok(Json(result))
+}
+
 async fn post_pair_practice(
     state: &AppState,
     req: &PracticeRequest,
@@ -2170,6 +2187,18 @@ async fn post_practice(
     }
     if crate::book_technical::is_pair_practice(&concept.id) {
         return post_pair_practice(&state, &req, &symbol, &source, limit).await;
+    }
+    if concept.id == "book_52w_range" {
+        if req.bars.is_some()
+            || !req
+                .inputs
+                .as_object()
+                .is_some_and(serde_json::Map::is_empty)
+        {
+            return Err(validate::bad("52-week range requires server-fetched daily bars and rejects caller-supplied bars or inputs"));
+        }
+        let history = market_bars(&state, &symbol, &source, 400).await?;
+        return daily_range_response(&history, &symbol, &source);
     }
     if concept.id == "book_period"
         && !req
@@ -2624,5 +2653,55 @@ mod binance_catalog_tests {
             select_binance_symbols(symbols, tickers),
             vec!["HIGHUSDT", "LOWUSDT", "NOLIQUSDT"]
         );
+    }
+}
+
+#[cfg(test)]
+mod daily_range_response_tests {
+    use super::*;
+    #[test]
+    fn daily_range_response_contract_is_source_bound_and_contains_only_window_observations() {
+        let end = Utc.with_ymd_and_hms(2025, 12, 31, 0, 0, 0).unwrap();
+        let history: Vec<_> = (0..401)
+            .map(|i| Bar {
+                timestamp: end - Duration::days(400 - i),
+                open: 100.0,
+                high: 120.0,
+                low: 80.0,
+                close: 100.0,
+                volume: 10.0,
+            })
+            .collect();
+        for (source, symbol) in [("a_share", "600519"), ("us_stock", "AAPL")] {
+            let Json(result) = daily_range_response(&history, symbol, source).unwrap();
+            assert_eq!(result["concept_id"], "book_52w_range");
+            assert_eq!(result["module"], "data");
+            assert_eq!(result["symbol"], symbol);
+            assert_eq!(result["source"], source);
+            assert_eq!(result["context"], "selected_dataset");
+            assert_eq!(
+                result["provenance"],
+                "server_fetched_completed_stock_daily_bars"
+            );
+            assert_eq!(result["bar_origin"], "server_fetched_daily_52w_range");
+            assert_eq!(result["year_range"]["source"], source);
+            assert_eq!(result["year_range"]["as_of"], json!(end));
+            assert_eq!(
+                result["year_range"]["window_start"],
+                json!(end - Duration::days(364))
+            );
+            assert_eq!(result["year_range"]["bar_count"], 364);
+            assert_eq!(
+                result["year_range"]["price_basis"],
+                "provider_ohlc_adjustment_unverified"
+            );
+            assert_eq!(
+                result["bars"][0]["timestamp"],
+                json!(end - Duration::days(363))
+            );
+            assert_eq!(result["values"]["position_in_range"], 0.5);
+        }
+        let error = daily_range_response(&history[100..], "AAPL", "us_stock").unwrap_err();
+        assert_eq!(error.0, StatusCode::BAD_REQUEST);
     }
 }

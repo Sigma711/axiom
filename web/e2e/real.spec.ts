@@ -1012,3 +1012,43 @@ test('relative-strength knowledge card previews the real paired series in both t
   expect(lightStroke).not.toBe(darkStroke);
   await expect(chart).toBeVisible();
 });
+
+test('52-week stock practice derives its range from real daily highs and lows in the browser', async ({ page }) => {
+  test.setTimeout(120_000);
+  for (const [source, symbol] of [['a_share', '600519'], ['us_stock', 'AAPL']] as const) {
+    await page.goto(`/data?concept=book_52w_range&source=${source}`);
+    const panel = page.getByLabel('概念实践');
+    await expect(panel).toContainText('52周区间');
+    await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+    const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+    const requestPromise = page.waitForRequest(request => request.url().includes('/api/practice') && request.method() === 'POST');
+    await panel.getByRole('button', { name: '运行实践' }).click();
+    const [request, response] = await Promise.all([requestPromise, responsePromise]);
+    expect(request.postDataJSON()).toMatchObject({ concept_id: 'book_52w_range', module: 'data', source, symbol, inputs: {} });
+    expect(request.postDataJSON().bars).toBeUndefined();
+    expect(response.ok(), await response.text()).toBe(true);
+    const result = await response.json();
+    expect(result.year_range.source).toBe(source);
+    expect(result.provenance).toBe('server_fetched_completed_stock_daily_bars');
+    expect(result.year_range.price_basis).toBe('provider_ohlc_adjustment_unverified');
+    expect(result.year_range.bar_count).toBe(result.bars.length);
+    expect(result.year_range.bar_count).toBeGreaterThanOrEqual(180);
+    expect(new Date(result.year_range.pre_window_observation).getTime()).toBeLessThanOrEqual(new Date(result.year_range.window_start).getTime());
+    expect(result.values.high_52w).toBe(Math.max(...result.bars.map((bar: { high: number }) => bar.high)));
+    expect(result.values.low_52w).toBe(Math.min(...result.bars.map((bar: { low: number }) => bar.low)));
+    expect(result.values.latest_close).toBe(result.bars.at(-1).close);
+    expect(result.values.distance_from_high).toBeCloseTo(result.values.latest_close / result.values.high_52w - 1, 10);
+    await expect(panel.locator('.ax-year-range')).toBeVisible();
+    await expect(panel).toContainText('复权口径未经统一核验');
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  const visual = page.locator('.ax-year-range');
+  expect(await visual.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+  expect(await visual.locator('.ax-year-range-prices span').evaluateAll(labels => labels.every(label => {
+    const box = label.getBoundingClientRect(), figure = label.closest('figure')!.getBoundingClientRect();
+    return box.left >= figure.left && box.right <= figure.right;
+  }))).toBe(true);
+  const dark = await visual.evaluate(node => getComputedStyle(node).backgroundColor);
+  await page.getByLabel('切换到浅色模式').click();
+  expect(await visual.evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(dark);
+});

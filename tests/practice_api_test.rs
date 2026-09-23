@@ -56,7 +56,8 @@ async fn data_practice_accepts_only_concepts_with_a_data_plan() {
         concept.input_kind == "market_bars"
             && !matches!(
                 concept.id.as_str(),
-                "book_relative_strength_line"
+                "book_52w_range"
+                    | "book_relative_strength_line"
                     | "book_pair_spread"
                     | "book_cointegration_diagnostic"
                     | "book_cdp"
@@ -1771,4 +1772,37 @@ async fn aligned_pair_practices_use_two_server_legs_and_reject_forged_evidence()
         StatusCode::BAD_GATEWAY
     );
     server.abort();
+}
+
+#[tokio::test]
+async fn year_range_catalog_and_api_reject_shortcuts_to_server_daily_evidence() {
+    let app = app();
+    for (source, symbol) in [("binance", "BTCUSDT"), ("synthetic", "BTCUSDT")] {
+        let (status, _) = request(
+            &app,
+            "/api/practice",
+            json!({"concept_id":"book_52w_range","module":"data","source":source,"symbol":symbol}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+    for patch in [
+        json!({"bars":[]}),
+        json!({"inputs":{"price":1}}),
+        json!({"inputs":[]}),
+        json!({"module":"backtest"}),
+    ] {
+        let mut req = json!({"concept_id":"book_52w_range","module":"data","source":"a_share","symbol":"600519"});
+        for (k, v) in patch.as_object().unwrap() {
+            req[k] = v.clone();
+        }
+        assert_eq!(
+            request(&app, "/api/practice", req).await.0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    let concepts = practice::catalog();
+    let concept = concepts.iter().find(|c| c.id == "book_52w_range").unwrap();
+    assert_eq!(concept.input_kind, "market_bars");
+    assert!(concept.inputs.is_empty());
 }

@@ -168,7 +168,11 @@ fn every_book_catalog_default_is_executable_and_all_inputs_are_described() {
         // through their dedicated market summaries and the API, not defaults.
         if matches!(
             concept.id.as_str(),
-            "book_period" | "book_trade_volume" | "book_order_flow" | "book_order_imbalance"
+            "book_period"
+                | "book_trade_volume"
+                | "book_order_flow"
+                | "book_order_imbalance"
+                | "book_52w_range"
         ) {
             continue;
         }
@@ -663,4 +667,79 @@ fn trade_volume_summary_uses_exchange_quote_notional_and_keeps_zero_trade_vwap_n
     inconsistent_count[0].trade_count = 0;
     assert!(book::market_trade_volume_summary(&inconsistent_count, "BTCUSDT").is_err());
     assert!(book::market_binance_aggressor_summary("cvd", &inconsistent_count, "BTCUSDT").is_err());
+}
+
+#[test]
+fn year_range_uses_calendar_window_and_observed_high_low_with_honest_boundaries() {
+    let entry = axiom::book::entries()
+        .into_iter()
+        .find(|entry| entry.id == "book_52w_range")
+        .unwrap();
+    assert!(entry.pitfalls.contains("未经独立核验"));
+    assert!(entry.meaning.contains("180"));
+    let end = chrono::Utc::now()
+        .date_naive()
+        .pred_opt()
+        .unwrap()
+        .and_hms_opt(0, 0, 0)
+        .unwrap()
+        .and_utc()
+        - chrono::Duration::days(2);
+    let bars: Vec<_> = (0..401)
+        .map(|i| axiom::types::Bar {
+            timestamp: end - chrono::Duration::days(400 - i),
+            open: 100.0,
+            high: 120.0,
+            low: 80.0,
+            close: 100.0,
+            volume: 1.0,
+        })
+        .collect();
+    for source in ["a_share", "us_stock"] {
+        let mut input = bars.clone();
+        input[36].high = 999.0;
+        input[36].low = 1.0;
+        let result = axiom::book::market_52w_range_summary(&input, source).unwrap();
+        assert_eq!(result["year_range"]["bar_count"], 364);
+        assert_eq!(result["values"]["high_52w"], 120.0);
+        assert_eq!(result["values"]["low_52w"], 80.0);
+        assert_eq!(result["values"]["position_in_range"], 0.5);
+        assert!(
+            (result["values"]["distance_from_high"].as_f64().unwrap() + 1.0 / 6.0).abs() < 1e-12
+        );
+        assert_eq!(result["bars"].as_array().unwrap().len(), 364);
+        assert_eq!(
+            result["year_range"]["pre_window_observation"],
+            serde_json::json!(input[36].timestamp)
+        );
+    }
+    let mut flat = bars.clone();
+    for b in &mut flat {
+        b.high = 100.0;
+        b.low = 100.0;
+    }
+    let result = axiom::book::market_52w_range_summary(&flat, "us_stock").unwrap();
+    assert!(result["values"]["position_in_range"].is_null());
+    assert_eq!(result["values"]["distance_from_high"], 0.0);
+    assert!(axiom::book::market_52w_range_summary(&bars, "binance").is_err());
+    assert!(axiom::book::market_52w_range_summary(&[], "a_share").is_err());
+    assert!(axiom::book::market_52w_range_summary(&bars[37..], "a_share").is_err());
+    let sparse: Vec<_> = bars.iter().step_by(3).copied().collect();
+    assert!(axiom::book::market_52w_range_summary(&sparse, "a_share").is_err());
+    let mut invalid = bars.clone();
+    invalid[1].low = 0.0;
+    assert!(axiom::book::market_52w_range_summary(&invalid, "a_share").is_err());
+    let mut hourly = bars.clone();
+    hourly[1].timestamp += chrono::Duration::hours(1);
+    assert!(axiom::book::market_52w_range_summary(&hourly, "a_share").is_err());
+    let mut future = bars.clone();
+    future.last_mut().unwrap().timestamp = chrono::Utc::now()
+        .date_naive()
+        .succ_opt()
+        .unwrap()
+        .and_hms_opt(0, 0, 0)
+        .unwrap()
+        .and_utc();
+    assert!(axiom::book::market_52w_range_summary(&future, "us_stock").is_err());
+    assert!(axiom::book::evaluate("book_52w_range", &bars, &serde_json::json!({})).is_err());
 }
