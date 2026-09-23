@@ -28,6 +28,12 @@ fn specs() -> &'static [Value] {
             .clone()
     })
 }
+pub fn is_pair_practice(id: &str) -> bool {
+    matches!(
+        id,
+        "book_relative_strength_line" | "book_pair_spread" | "book_cointegration_diagnostic"
+    )
+}
 pub fn catalog() -> Vec<PracticeConcept> {
     specs()
         .iter()
@@ -37,8 +43,12 @@ pub fn catalog() -> Vec<PracticeConcept> {
             id: s["id"].as_str().unwrap().into(),
             name: s["name"].as_str().unwrap().into(),
             category: "原书补充·技术实践".into(),
-            input_kind: if depth_snapshot { "market_bars" } else { s["input_kind"].as_str().unwrap() }.into(),
-            inputs: if depth_snapshot { Vec::new() } else { s["defaults"]
+            input_kind: if depth_snapshot || is_pair_practice(s["id"].as_str().unwrap()) { "market_bars" } else { s["input_kind"].as_str().unwrap() }.into(),
+            inputs: if is_pair_practice(s["id"].as_str().unwrap()) {
+                if s["id"] == "book_pair_spread" {
+                    vec![PracticeInput { key: "hedge_ratio".into(), label: "对冲比例（B单位/A单位）".into(), default: json!(1.0) }, PracticeInput { key: "period".into(), label: "Z-Score小时窗口".into(), default: json!(20) }]
+                } else { Vec::new() }
+            } else if depth_snapshot { Vec::new() } else { s["defaults"]
                 .as_object()
                 .unwrap()
                 .iter()
@@ -58,7 +68,7 @@ pub fn entries() -> Vec<KnowledgeEntry> {
         .map(|s| {
             let text = |key: &str| s[key].as_str().unwrap_or("").to_string();
             let depth_snapshot = s["id"] == "book_pitfall_order_imbalance";
-            let market_bars = s["input_kind"] == "market_bars" || depth_snapshot;
+            let market_bars = s["input_kind"] == "market_bars" || depth_snapshot || is_pair_practice(s["id"].as_str().unwrap());
             let formula_variant = s["id"] == "book_pitfall_formula_variant";
             let open_candle = s["id"] == "book_pitfall_open_candle";
             KnowledgeEntry {
@@ -111,6 +121,14 @@ fn evaluate_inner(
         .ok_or_else(|| format!("未知技术概念: {id}"))?;
     let mut v = s["defaults"].clone();
     let provided = inputs.as_object().ok_or("inputs必须为对象")?;
+    if is_pair_practice(id)
+        && v.as_object()
+            .unwrap()
+            .iter()
+            .any(|(key, value)| value.is_array() && !provided.contains_key(key))
+    {
+        return Err("配对实践必须显式提供两组观测，不使用教学默认数组".into());
+    }
     for (k, x) in provided {
         let d = v.get(k).ok_or_else(|| format!("{id}不支持参数{k}"))?;
         let ok = if d.is_number() {

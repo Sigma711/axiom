@@ -954,3 +954,61 @@ test('spot-depth practices read one live Binance order-book snapshot and keep qu
   expect(mobile.content).toBeGreaterThan(mobile.viewport);
   expect(mobile.svg).toBeGreaterThanOrEqual(650);
 });
+
+test('paired-market practices fetch and align real completed candles through the browser', async ({ page }) => {
+  test.setTimeout(180_000);
+  for (const conceptId of ['book_relative_strength_line', 'book_pair_spread', 'book_cointegration_diagnostic']) {
+    await page.goto(`/data?concept=${conceptId}&source=binance`);
+    const panel = page.getByLabel('概念实践');
+    await expect(panel.getByRole('button', { name: '比较标的' })).toBeVisible();
+    await expect(panel.locator('.ax-practice-inputs input')).toHaveCount(conceptId === 'book_pair_spread' ? 2 : 0);
+    const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+    const requestPromise = page.waitForRequest(request => request.url().includes('/api/practice') && request.method() === 'POST');
+    await panel.getByRole('button', { name: '运行实践' }).click();
+    const [request, response] = await Promise.all([requestPromise, responsePromise]);
+    const body = request.postDataJSON();
+    expect(body).toMatchObject({ concept_id: conceptId, module: 'data', symbol: 'BTCUSDT', second_symbol: 'ETHUSDT', source: 'binance' });
+    expect(body.bars).toBeUndefined();
+    expect(response.ok(), await response.text()).toBe(true);
+    const result = await response.json();
+    expect(result.pair).toMatchObject({ first_symbol: 'BTCUSDT', second_symbol: 'ETHUSDT', interval: '1h', quote_asset: 'USDT' });
+    expect(result.pair.matched_count).toBe(result.bars.length);
+    expect(result.second_bars).toHaveLength(result.bars.length);
+    expect(result.bars.length).toBeGreaterThanOrEqual(4);
+    for (let index = 0; index < result.bars.length; index++) {
+      expect(result.bars[index].timestamp).toBe(result.second_bars[index].timestamp);
+      if (index) expect(new Date(result.bars[index].timestamp).getTime() - new Date(result.bars[index - 1].timestamp).getTime()).toBe(3_600_000);
+    }
+    const series = Object.fromEntries(result.series.map((item: { name: string; values: Array<number | null> }) => [item.name, item.values])) as Record<string, Array<number | null>>;
+    if (conceptId === 'book_relative_strength_line') {
+      const last = result.bars.length - 1;
+      expect(series.relative_strength_line[last]).toBeCloseTo(result.bars[last].close / result.second_bars[last].close, 10);
+    }
+    if (conceptId === 'book_pair_spread') {
+      const last = result.bars.length - 1;
+      expect(series.spread[last]).toBeCloseTo(result.bars[last].close - body.inputs.hedge_ratio * result.second_bars[last].close, 8);
+    }
+    if (conceptId === 'book_cointegration_diagnostic') {
+      expect(result.values.cointegration_p_value).toBeNull();
+      await expect(panel).toContainText('不单凭该统计量认定协整');
+    }
+    await expect(panel.locator('.ax-series-illustration svg')).toBeVisible();
+    await expect(panel).toContainText('服务器获取并按相同时间戳对齐');
+  }
+});
+
+test('relative-strength knowledge card previews the real paired series in both themes', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto('/');
+  await page.getByRole('textbox', { name: '搜索 概念 / 公式 / 关键词' }).fill('相对强弱线 Relative Strength Line');
+  const card = page.locator('.ax-kb-card').filter({ hasText: '相对强弱线 Relative Strength Line' });
+  await card.locator('.ax-kb-details').click();
+  await expect(card).toContainText('BTCUSDT 与 ETHUSDT 同时刻的真实已收盘小时线');
+  const chart = card.locator('.ax-series-illustration svg');
+  await expect(chart).toBeVisible();
+  const darkStroke = await chart.locator('path[style*="stroke"]').first().evaluate(node => getComputedStyle(node).stroke);
+  await page.getByLabel('切换到浅色模式').click();
+  const lightStroke = await chart.locator('path[style*="stroke"]').first().evaluate(node => getComputedStyle(node).stroke);
+  expect(lightStroke).not.toBe(darkStroke);
+  await expect(chart).toBeVisible();
+});

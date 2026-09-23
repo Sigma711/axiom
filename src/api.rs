@@ -1490,7 +1490,9 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
                 | "book_second_order_greeks"
         );
     let performance = concept.category == "风险-绩效";
-    if is_binance_spot_depth_practice(&concept.id) {
+    if crate::book_technical::is_pair_practice(&concept.id) {
+        json!({"markets":["crypto"],"modules":["data"],"required_datasets":["server_fetched_aligned_binance_usdt_spot_hourly_pair"],"source_policy":"real_required","goal":"服务器以同一交易所截止时刻取得两个不同USDT现货标的的已收盘小时线，精确匹配时间且拒绝匹配窗口内部缺口；展示双方标的、时间范围、匹配与舍弃数量。相对强弱不是RSI，价差不是套利保证，残差单位根统计量不能证明协整。"})
+    } else if is_binance_spot_depth_practice(&concept.id) {
         json!({
             "markets":["crypto"], "modules":["data"],
             "required_datasets":["server_fetched_binance_usdt_spot_depth_snapshot"],
@@ -1706,6 +1708,7 @@ async fn get_practice() -> Json<Value> {
 #[derive(Deserialize)]
 struct PracticeRequest {
     concept_id: String,
+    second_symbol: Option<String>,
     module: String,
     symbol: Option<String>,
     source: Option<String>,
@@ -2020,14 +2023,131 @@ fn validate_result_context(
     Ok(())
 }
 
+async fn post_pair_practice(
+    state: &AppState,
+    req: &PracticeRequest,
+    first: &str,
+    source: &str,
+    limit: usize,
+) -> Result<Json<Value>, ApiError> {
+    let second = req
+        .second_symbol
+        .as_deref()
+        .ok_or_else(|| validate::bad("second_symbol is required"))?;
+    validate::market(second, source, limit, 1000)?;
+    if source != "binance"
+        || limit < 4
+        || first == second
+        || [first, second]
+            .iter()
+            .any(|symbol| symbol.strip_suffix("USDT").is_none_or(str::is_empty))
+    {
+        return Err(validate::bad("pair practice requires distinct Binance USDT spot symbols and 4..1000 hourly observations"));
+    }
+    if req.bars.is_some() {
+        return Err(validate::bad("pair practice rejects caller-supplied bars"));
+    }
+    let params = req
+        .inputs
+        .as_object()
+        .ok_or_else(|| validate::bad("inputs must be an object"))?;
+    let spread = req.concept_id == "book_pair_spread";
+    if params
+        .keys()
+        .any(|key| !spread || !matches!(key.as_str(), "hedge_ratio" | "period"))
+    {
+        return Err(validate::bad(
+            "pair practice rejects caller-supplied price arrays and unknown inputs",
+        ));
+    }
+    let hedge = params
+        .get("hedge_ratio")
+        .map_or(Some(1.0), Value::as_f64)
+        .filter(|x| x.is_finite())
+        .ok_or_else(|| validate::bad("hedge_ratio must be finite"))?;
+    let period = params
+        .get("period")
+        .map_or(Some(20), Value::as_u64)
+        .filter(|p| (2..=limit as u64).contains(p));
+    if spread && period.is_none() {
+        return Err(validate::bad(
+            "period must be an integer between 2 and limit",
+        ));
+    }
+    if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Live market data is disabled in offline mode".into(),
+        ));
+    }
+    let (cutoff, a, b) = state
+        .feed
+        .fetch_completed_spot_pair(first, second, limit)
+        .await
+        .map_err(|error| (StatusCode::BAD_GATEWAY, error.to_string()))?;
+    let second_by_time: std::collections::BTreeMap<_, _> =
+        b.iter().map(|bar| (bar.timestamp, *bar)).collect();
+    let aligned: Vec<_> = a
+        .iter()
+        .filter_map(|bar| {
+            second_by_time
+                .get(&bar.timestamp)
+                .map(|other| (*bar, *other))
+        })
+        .collect();
+    let needed = if spread { period.unwrap() as usize } else { 4 };
+    if aligned.len() < needed
+        || aligned
+            .windows(2)
+            .any(|w| w[1].0.timestamp - w[0].0.timestamp != Duration::hours(1))
+        || aligned
+            .iter()
+            .any(|(a, _)| a.timestamp.timestamp() % 3600 != 0)
+    {
+        return Err(validate::bad("pair practice needs sufficient exactly aligned consecutive completed hourly observations; gaps are not imputed"));
+    }
+    let a_prices: Vec<_> = aligned.iter().map(|(a, _)| a.close).collect();
+    let b_prices: Vec<_> = aligned.iter().map(|(_, b)| b.close).collect();
+    let inputs = match req.concept_id.as_str() {
+        "book_relative_strength_line" => {
+            json!({"asset_prices":a_prices,"benchmark_prices":b_prices})
+        }
+        "book_pair_spread" => {
+            json!({"asset_a":a_prices,"asset_b":b_prices,"hedge_ratio":hedge,"period":period.unwrap()})
+        }
+        _ => json!({"asset_x":a_prices,"asset_y":b_prices}),
+    };
+    let mut result =
+        crate::book_technical::evaluate(&req.concept_id, &[], &inputs).map_err(validate::bad)?;
+    result["module"] = json!("data");
+    result["symbol"] = json!(first);
+    result["source"] = json!(source);
+    result["input_kind"] = json!("market_bars");
+    result["context"] = json!("selected_dataset");
+    result["provenance"] = json!("provided_market_bars");
+    result["bar_origin"] = json!("server_fetched_aligned_binance_spot_pair");
+    result["bars"] = json!(aligned.iter().map(|(a, _)| a).collect::<Vec<_>>());
+    result["second_bars"] = json!(aligned.iter().map(|(_, b)| b).collect::<Vec<_>>());
+    result["pair"] = json!({"first_symbol":first,"second_symbol":second,"interval":"1h","quote_asset":"USDT","matched_count":aligned.len(),"dropped_first":a.len()-aligned.len(),"dropped_second":b.len()-aligned.len(),"start":aligned[0].0.timestamp,"end":aligned.last().unwrap().0.timestamp,"completion_cutoff":cutoff});
+    // The low-level calculator also supports teaching arrays. Its teaching-only note
+    // cannot describe this server-fetched path.
+    result["notes"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|note| !note.as_str().unwrap_or("").contains("默认两资产"));
+    result["notes"].as_array_mut().unwrap().push(json!("两标的使用同一Binance交易所截止时刻，精确匹配连续已收盘小时线，不补缺。相对强弱不等于RSI；指定对冲比例不是最优估计；协整诊断仅为全样本回顾统计，未校准p值或临界值，不能据此宣布协整或构造历史交易信号。"));
+    Ok(Json(result))
+}
+
 async fn post_practice(
     State(state): State<Arc<AppState>>,
     Json(req): Json<PracticeRequest>,
 ) -> Result<Json<Value>, ApiError> {
     let symbol = req
         .symbol
+        .clone()
         .unwrap_or_else(|| state.config.trading.symbol.clone());
-    let source = req.source.unwrap_or_else(|| "binance".into());
+    let source = req.source.clone().unwrap_or_else(|| "binance".into());
     let mut limit = req.limit.unwrap_or(200);
     let registry = crate::practice::catalog();
     let concept = registry
@@ -2047,6 +2167,9 @@ async fn post_practice(
         return Err(validate::bad(
             "practice source is not applicable to this concept",
         ));
+    }
+    if crate::book_technical::is_pair_practice(&concept.id) {
+        return post_pair_practice(&state, &req, &symbol, &source, limit).await;
     }
     if concept.id == "book_period"
         && !req

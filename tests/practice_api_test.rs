@@ -56,7 +56,10 @@ async fn data_practice_accepts_only_concepts_with_a_data_plan() {
         concept.input_kind == "market_bars"
             && !matches!(
                 concept.id.as_str(),
-                "book_cdp"
+                "book_relative_strength_line"
+                    | "book_pair_spread"
+                    | "book_cointegration_diagnostic"
+                    | "book_cdp"
                     | "book_pitfall_repainting"
                     | "book_pitfall_timeframe"
                     | "book_pitfall_formula_variant"
@@ -1636,4 +1639,136 @@ async fn rolling_correlation_uses_only_verified_current_result_returns_across_ma
         let (status, _) = request(&app, "/api/practice", body(missing)).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{source}");
     }
+}
+
+async fn mock_pair_klines(Query(q): Query<HashMap<String, String>>) -> (StatusCode, Json<Value>) {
+    if q["symbol"] == "FAILUSDT" {
+        return (StatusCode::BAD_GATEWAY, Json(json!({})));
+    }
+    let start = q["startTime"].parse::<i64>().unwrap();
+    let limit = q["limit"].parse::<usize>().unwrap();
+    let rows: Vec<_> = (0..limit)
+        .filter(|i| !(q["symbol"] == "GAPUSDT" && *i == 2 || q["symbol"] == "SHORTUSDT" && *i < 2))
+        .map(|i| {
+            let close = if q["symbol"] == "BTCUSDT" {
+                100.0 + i as f64
+            } else {
+                50.0 + i as f64 + (i as f64).sin()
+            };
+            let time =
+                start + i as i64 * 3_600_000 + if q["symbol"] == "ODDUSDT" { 1000 } else { 0 };
+            json!([
+                time,
+                close.to_string(),
+                (close + 1.0).to_string(),
+                (close - 1.0).to_string(),
+                close.to_string(),
+                "10",
+                time + 3_600_000 - 1
+            ])
+        })
+        .collect();
+    (StatusCode::OK, Json(json!(rows)))
+}
+
+#[tokio::test]
+async fn aligned_pair_practices_use_two_server_legs_and_reject_forged_evidence() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            axum::Router::new()
+                .route("/api/v3/klines", get(mock_pair_klines))
+                .route("/api/v3/time", get(mock_binance_time)),
+        )
+        .await
+        .unwrap();
+    });
+    let mut state = AppState::new(
+        default_config(),
+        PathBuf::from(format!("target/pair-test-{}", uuid::Uuid::new_v4())),
+    );
+    Arc::get_mut(&mut state.feed).unwrap().base_url = format!("http://127.0.0.1:{port}");
+    let app = api::router(Arc::new(state));
+    let base = json!({"concept_id":"book_relative_strength_line","module":"data","symbol":"BTCUSDT","second_symbol":"ETHUSDT","source":"binance","limit":30,"inputs":{}});
+    for id in [
+        "book_relative_strength_line",
+        "book_pair_spread",
+        "book_cointegration_diagnostic",
+    ] {
+        let mut req = base.clone();
+        req["concept_id"] = json!(id);
+        let (status, body) = request(&app, "/api/practice", req).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["provenance"], "provided_market_bars");
+        assert_eq!(
+            body["bar_origin"],
+            "server_fetched_aligned_binance_spot_pair"
+        );
+        assert_eq!(body["pair"]["matched_count"], 30);
+        assert_eq!(
+            body["bars"].as_array().unwrap().len(),
+            body["second_bars"].as_array().unwrap().len()
+        );
+        assert_eq!(body["pair"]["second_symbol"], "ETHUSDT");
+        assert_eq!(body["status"], "computed");
+        if id == "book_relative_strength_line" {
+            assert_eq!(body["series"][0]["values"][0], 2.0);
+        }
+        if id == "book_pair_spread" {
+            assert_eq!(body["series"][0]["values"][0], 50.0);
+        }
+        if id == "book_cointegration_diagnostic" {
+            assert!(body["values"]["cointegration_p_value"].is_null());
+        }
+    }
+    let mut short = base.clone();
+    short["second_symbol"] = json!("SHORTUSDT");
+    let (status, body) = request(&app, "/api/practice", short).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["pair"]["matched_count"], 28);
+    assert_eq!(body["pair"]["dropped_first"], 2);
+    for (key, value) in [
+        ("second_symbol", json!(null)),
+        ("second_symbol", json!("BTCUSDT")),
+        ("second_symbol", json!("ETHBTC")),
+        ("second_symbol", json!("GAPUSDT")),
+        ("second_symbol", json!("ODDUSDT")),
+        ("source", json!("real")),
+        ("source", json!("synthetic")),
+        ("module", json!("backtest")),
+        ("limit", json!(3)),
+        ("limit", json!(1001)),
+        ("bars", json!([])),
+        ("inputs", json!([])),
+        ("inputs", json!({"asset_prices":[1,2,3,4]})),
+    ] {
+        let mut req = base.clone();
+        req[key] = value;
+        let (status, body) = request(&app, "/api/practice", req).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{key}: {body}");
+    }
+    for inputs in [
+        json!({"period":1}),
+        json!({"period":31}),
+        json!({"period":2.5}),
+        json!({"hedge_ratio":"bad"}),
+        json!({"period":null}),
+    ] {
+        let mut req = base.clone();
+        req["concept_id"] = json!("book_pair_spread");
+        req["inputs"] = inputs;
+        assert_eq!(
+            request(&app, "/api/practice", req).await.0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    let mut req = base.clone();
+    req["second_symbol"] = json!("FAILUSDT");
+    assert_eq!(
+        request(&app, "/api/practice", req).await.0,
+        StatusCode::BAD_GATEWAY
+    );
+    server.abort();
 }

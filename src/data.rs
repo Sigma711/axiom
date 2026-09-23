@@ -734,6 +734,34 @@ impl HttpFeed {
         Ok(out)
     }
 
+    /// Both legs use one exchange cutoff and bypass the local teaching/cache files.
+    pub async fn fetch_completed_spot_pair(
+        &self,
+        first: &str,
+        second: &str,
+        limit: usize,
+    ) -> Result<(DateTime<Utc>, Vec<Bar>, Vec<Bar>)> {
+        let cutoff = self.binance_server_time().await?;
+        let since = cutoff
+            .with_minute(0)
+            .unwrap()
+            .with_second(0)
+            .unwrap()
+            .with_nanosecond(0)
+            .unwrap()
+            - Duration::hours(limit as i64);
+        let (mut a, mut b) = tokio::try_join!(
+            self.fetch_remote(first, since, limit),
+            self.fetch_remote(second, since, limit)
+        )?;
+        for bars in [&mut a, &mut b] {
+            bars.retain(|bar| {
+                bar.timestamp >= since && bar.timestamp + Duration::hours(1) <= cutoff
+            });
+        }
+        Ok((cutoff, a, b))
+    }
+
     async fn fetch_remote(
         &self,
         symbol: &str,

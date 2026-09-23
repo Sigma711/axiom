@@ -140,6 +140,8 @@ export interface PracticeResult {
   source: string;
   symbol: string;
   bars: Bar[];
+  second_bars?: Bar[];
+  pair?: { first_symbol: string; second_symbol: string; interval: string; quote_asset: string; matched_count: number; dropped_first: number; dropped_second: number; start: string; end: string; completion_cutoff: string };
   asset_units?: { base_asset: string; quote_asset: string };
   levels?: { bids: Array<{ price: number; quantity: number }>; asks: Array<{ price: number; quantity: number }> };
   depth_snapshot?: { source: string; endpoint: string; symbol: string; depth_limit: number; update_id: number; timestamp: null; timestamp_note: string };

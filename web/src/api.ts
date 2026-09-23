@@ -72,7 +72,7 @@ export const api = {
     call<{ status: string; source: SourceType; symbol: string; strategy: string }>('POST', '/api/paper/config', { source, symbol, strategy }),
   listPractice: () => call<{ concepts: PracticeConcept[]; modules: string[]; total: number }>('GET', '/api/practice'),
   runPractice: (req: {
-    concept_id: string; module: 'data' | 'backtest' | 'paper' | 'compare'; symbol: string; source: SourceType; limit: number;
+    concept_id: string; module: 'data' | 'backtest' | 'paper' | 'compare'; symbol: string; second_symbol?: string; source: SourceType; limit: number;
     inputs: Record<string, unknown>; bars?: Bar[];
   }) => call<PracticeResult>('POST', '/api/practice', req),
 };

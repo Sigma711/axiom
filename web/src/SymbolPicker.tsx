@@ -10,8 +10,8 @@ type Result = {
 const catalogPageCache = new Map<string, Result>();
 const cacheKey = (source: SourceType, query: string, page: number) => source + '|' + query.trim().toUpperCase() + '|' + page;
 
-export function SymbolPicker({ source, value, onChange }: {
-  source: SourceType; value: string; onChange: (symbol: string) => void;
+export function SymbolPicker({ source, value, onChange, label = '交易对' }: {
+  source: SourceType; value: string; onChange: (symbol: string) => void; label?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -75,13 +75,13 @@ export function SymbolPicker({ source, value, onChange }: {
 
   return (
     <div className={'ax-dropdown ax-symbol-picker' + (open ? ' open' : '')} ref={root}>
-      <button type="button" className="ax-dd-trigger" aria-label="交易对" aria-haspopup="listbox" aria-expanded={open}
+      <button type="button" className="ax-dd-trigger" aria-label={label} aria-haspopup="listbox" aria-expanded={open}
         onClick={() => setOpen(value => !value)}>
         <span>{value || '选择交易对…'}</span>
       </button>
       {open && (
-        <div className="ax-dd-menu ax-symbol-menu" role="listbox" aria-label="交易对搜索结果">
-          <input className="ax-dd-search" aria-label="搜索交易对" value={query} placeholder="搜索代码或名称"
+        <div className="ax-dd-menu ax-symbol-menu" role="listbox" aria-label={`${label}搜索结果`}>
+          <input className="ax-dd-search" aria-label={`搜索${label}`} value={query} placeholder="搜索代码或名称"
             autoFocus onChange={event => { setQuery(event.target.value); setPage(0); }}
             onKeyDown={submit} />
           <p className="ax-symbol-status">{error || state || '正在读取证券目录…'}</p>

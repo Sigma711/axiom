@@ -30,7 +30,18 @@ fn all_book_technical_cards_are_executable_and_have_real_examples() {
         } else {
             &bars
         };
-        let result = bt::evaluate(&c.id, selected_bars, &json!({}))
+        let inputs = match c.id.as_str() {
+            "book_relative_strength_line" => {
+                json!({"asset_prices":[1,2,3,4],"benchmark_prices":[2,3,4,5]})
+            }
+            "book_pair_spread" => json!({"asset_a":[1,2,3,4],"asset_b":[2,3,4,5]}),
+            "book_cointegration_diagnostic" => json!({"asset_x":[1,2,3,4],"asset_y":[2,3,4,5]}),
+            _ => json!({}),
+        };
+        if bt::is_pair_practice(&c.id) {
+            assert!(bt::evaluate(&c.id, selected_bars, &json!({})).is_err());
+        }
+        let result = bt::evaluate(&c.id, selected_bars, &inputs)
             .unwrap_or_else(|e| panic!("{}: {}", c.id, e));
         assert!(
             result["values"].as_object().is_some_and(|x| !x.is_empty()),
@@ -85,10 +96,11 @@ fn technical_series_do_not_rewrite_history_and_small_samples_do_not_panic() {
     for (index, bar) in daily_b.iter_mut().enumerate() {
         bar.timestamp = chrono::DateTime::from_timestamp(index as i64 * 86_400, 0).unwrap();
     }
-    for c in bt::catalog()
-        .into_iter()
-        .filter(|c| c.input_kind == "market_bars" && c.id != "book_pitfall_order_imbalance")
-    {
+    for c in bt::catalog().into_iter().filter(|c| {
+        c.input_kind == "market_bars"
+            && c.id != "book_pitfall_order_imbalance"
+            && !bt::is_pair_practice(&c.id)
+    }) {
         let selected_bars = if c.id == "book_cdp" { &daily_b } else { &b };
         assert_eq!(
             bt::evaluate(&c.id, &[], &json!({})).unwrap()["status"],
