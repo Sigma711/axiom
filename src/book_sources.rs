@@ -37,5 +37,5 @@ pub fn for_concept(id: &str) -> Vec<Value> {
 
 pub fn coverage() -> Value {
     let rows = records();
-    json!({"source_title":"股票交易软件专业指标全解_完整版.pdf","sha256":"1f630341266d05c743c1a6d2c8be9058af428ecb65664cfafcfe0eabbe245007","pdf_pages":83,"records":rows,"source_records":rows.len(),"mapped_records":rows.iter().filter(|r|!r["concept_ids"].as_array().unwrap().is_empty()).count(),"note":"章节与附录包含复合概念；清单含别名和重复行，源行数不等于独立知识概念数。"})
+    json!({"source_title":"股票交易软件专业指标全解_完整版.pdf","sha256":"1f630341266d05c743c1a6d2c8be9058af428ecb65664cfafcfe0eabbe245007","pdf_pages":83,"records":rows,"source_records":rows.len(),"mapped_records":rows.iter().filter(|r|!r["concept_ids"].as_array().unwrap().is_empty()).count(),"note":"章节与附录包含复合概念；清单含别名和重复行，源行数不等于独立知识概念数。已映射只证明有对应知识概念和实现入口，不证明已接入独立真实数据或完成实证练习；每个概念的数据要求和当前来源以 /api/practice 的 plan、实际实践响应为准。"})
 }

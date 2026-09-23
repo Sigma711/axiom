@@ -199,6 +199,9 @@ body {
 details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
 .ax-kb-header { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
 .ax-kb-header h4 { margin: 0; color: var(--text); font-weight: 600; font-size: 0.95rem; }
+.ax-knowledge-evidence { margin: 0 0 1rem; padding: .7rem .85rem; border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; background: var(--bg-elev); color: var(--text-dim); font-size: .81rem; line-height: 1.6; }
+.ax-evidence-badge { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 999px; padding: .08rem .42rem; color: var(--accent-2); background: var(--bg-elev); font-size: .68rem; line-height: 1.45; white-space: nowrap; }
+.ax-evidence-badge.pending { color: var(--accent); }
 .ax-kb-id { color: var(--text-dim); font-weight: 400; font-size: 0.78rem; }
 .ax-kb-summary { color: var(--text-dim); font-weight: 400; font-size: 0.83rem; margin-top: 0.2rem; font-style: italic; }
 .ax-kb-practice { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.55rem; }

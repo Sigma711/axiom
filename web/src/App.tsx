@@ -390,8 +390,15 @@ function KnowledgeView({ onPractice }: { onPractice: (conceptId: string, module:
   const pageSize = 24, pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount - 1);
   const visible = filtered.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
+  const policies = Array.from(practiceById.values()).reduce((counts, concept) => {
+    if (concept.plan?.source_policy === 'real_required') counts.real++;
+    else if (concept.plan?.source_policy === 'result_required') counts.result++;
+    else if (concept.plan?.source_policy === 'evidence_required') counts.pending++;
+    return counts;
+  }, { real: 0, result: 0, pending: 0 });
   return (
     <div>
+      {practiceById.size > 0 && <p className="ax-knowledge-evidence">实践数据要求：{policies.real} 个需要真实行情或链上数据，{policies.result} 个需要本页真实业绩结果；{policies.pending} 个目前仅提供明确标注的教学计算，独立证据尚未接入。这里统计的是数据要求，不是已完成实证的数量。</p>}
       <div className="ax-search-bar">
         <input
           type="text"
@@ -425,12 +432,13 @@ function KbCard({ e, plan, onPractice, open, onOpenChange }: { e: KnowledgeEntry
   const relatedTags = e.related?.map((related, index) => <span key={`${related}-${index}`} className="ax-tag">{related}</span>);
   const practiceModule = plan?.modules[0];
   const practiceSource: SourceType = plan?.markets[0] === 'cn_equity' ? 'a_share' : plan?.markets[0] === 'us_equity' ? 'us_stock' : 'binance';
+  const pendingEvidence = plan?.source_policy === 'evidence_required';
   return (
     <div className="ax-kb-card">
-      <div className="ax-kb-header"><h4>{e.name}</h4></div>
+      <div className="ax-kb-header"><h4>{e.name}</h4>{plan && <span className={pendingEvidence ? 'ax-evidence-badge pending' : 'ax-evidence-badge'}>{pendingEvidence ? '待接入独立证据' : plan.source_policy === 'result_required' ? '需真实业绩结果' : '需真实市场数据'}</span>}</div>
       <div className="ax-kb-summary">{e.summary}</div>
       <div className="ax-kb-practice" aria-label={`${e.name} 实践入口`}>
-        <button disabled={!practiceModule} onClick={() => { if (practiceModule) onPractice(e.id, practiceModule, practiceSource); }}>{practiceModule ? `在${PRACTICE_MODULE_LABELS[practiceModule]}中实践` : '正在核对实践入口…'}</button>
+        <button disabled={!practiceModule} onClick={() => { if (practiceModule) onPractice(e.id, practiceModule, practiceSource); }}>{practiceModule ? pendingEvidence ? `在${PRACTICE_MODULE_LABELS[practiceModule]}中查看教学示例` : `在${PRACTICE_MODULE_LABELS[practiceModule]}中实践` : '正在核对实践入口…'}</button>
       </div>
       <details key={open ? 'open' : 'closed'} open={open}>
         <summary className={`ax-kb-details${open ? ' is-open' : ''}`} aria-label={open ? `收起 ${e.name} 详情` : `展开 ${e.name} 详情`} onClick={event => { event.preventDefault(); onOpenChange(!open); }}>

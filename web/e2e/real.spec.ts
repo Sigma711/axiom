@@ -304,7 +304,8 @@ test('knowledge practice opens the applicable module and market instead of forci
   await page.goto('/');
   await search.fill('ROE 净资产收益率');
   const roe = page.locator('.ax-kb-card').filter({ has: page.getByRole('heading', { name: 'ROE 净资产收益率', exact: true }) });
-  await roe.getByRole('button', { name: '在数据探索中实践' }).click();
+  await expect(roe).toContainText('待接入独立证据');
+  await roe.getByRole('button', { name: '在数据探索中查看教学示例' }).click();
   await expect(page).toHaveURL(/\/data\?concept=roe&source=a_share/);
   await expect(page.getByRole('button', { name: '数据源', exact: true })).toContainText('A 股');
   await expect(page.getByRole('button', { name: '交易对' })).toContainText('600519');

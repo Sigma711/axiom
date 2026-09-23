@@ -66,6 +66,21 @@ test('knowledge card leads to an in-context practice result', async ({ page }) =
   await expect(page.getByLabel('概念实践')).toContainText('使用当前模块行情上下文');
 });
 
+test('knowledge cards distinguish evidence-pending teaching inputs from real-data requirements', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.ax-knowledge-evidence')).toContainText('1 个需要真实行情或链上数据');
+  await expect(page.locator('.ax-knowledge-evidence')).toContainText('1 个目前仅提供明确标注的教学计算');
+  await expect(page.locator('.ax-knowledge-evidence')).toContainText('不是已完成实证的数量');
+  const rsi = page.locator('.ax-kb-card').filter({ hasText: 'RSI' });
+  const eps = page.locator('.ax-kb-card').filter({ hasText: '每股收益（EPS）' });
+  await expect(rsi.locator('.ax-evidence-badge')).toContainText('需真实市场数据');
+  await expect(eps.locator('.ax-evidence-badge')).toContainText('待接入独立证据');
+  await expect(eps.getByRole('button', { name: '在数据探索中实践' })).toHaveCount(0);
+  await eps.getByRole('button', { name: '在数据探索中查看教学示例' }).click();
+  await expect(page).toHaveURL(/\/data\?concept=earnings_per_share&source=a_share/);
+  await expect(page.getByLabel('概念实践')).toContainText('教学示例');
+});
+
 test('CDP practice sends loaded A-share daily bars instead of editable HLC fields', async ({ page }) => {
   const cdp = {
     id: 'book_cdp', name: 'CDP', category: '原书补充·技术实践', input_kind: 'market_bars', inputs: [],

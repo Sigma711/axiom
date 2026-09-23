@@ -56,4 +56,8 @@ fn coverage_report_counts_and_preserves_the_auditable_source_manifest() {
             .count() as u64)
     );
     assert!(report["sha256"].as_str().unwrap().len() >= 32);
+    assert!(report["note"]
+        .as_str()
+        .unwrap()
+        .contains("不证明已接入独立真实数据"));
 }
