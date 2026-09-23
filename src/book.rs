@@ -1141,6 +1141,81 @@ pub fn market_timeframe_summary(bars: &[Bar], source: &str) -> Result<Value, Str
     Ok(result)
 }
 
+/// Shows a documented MACD histogram scaling convention from one completed,
+/// source-bound market series. The two lines are conventions, not provider feeds.
+pub fn market_formula_variant_summary(bars: &[Bar], source: &str) -> Result<Value, String> {
+    const FAST: usize = 12;
+    const SLOW: usize = 26;
+    const SIGNAL: usize = 9;
+    let mut result = market_period_summary(bars, source)?;
+    result["concept_id"] = json!("book_pitfall_formula_variant");
+    result["source_ids"] = json!(["book_28_16"]);
+    let macd = crate::indicators::trend::macd(
+        &bars.iter().map(|bar| bar.close).collect::<Vec<_>>(),
+        FAST,
+        SLOW,
+        SIGNAL,
+    );
+    let twice = macd
+        .hist
+        .iter()
+        .map(|value| value.map(|value| value * 2.0))
+        .collect::<Vec<_>>();
+    let values = result["values"]
+        .as_object_mut()
+        .expect("period values are an object");
+    let nominal = values
+        .remove("book_period")
+        .expect("period summary has a nominal cadence");
+    values.insert("source_bar_seconds".into(), nominal);
+    let latest_histogram = macd.hist.iter().rev().flatten().next().copied();
+    for (key, value) in [
+        ("fast_period", FAST as f64),
+        ("slow_period", SLOW as f64),
+        ("signal_period", SIGNAL as f64),
+        ("first_histogram_scale", 1.0),
+        ("second_histogram_scale", 2.0),
+    ] {
+        values.insert(key.into(), json!(value));
+    }
+    values.insert("latest_histogram_x1".into(), json!(latest_histogram));
+    values.insert(
+        "latest_histogram_x2".into(),
+        json!(latest_histogram.map(|value| value * 2.0)),
+    );
+    values.insert(
+        "latest_histogram_difference".into(),
+        json!(latest_histogram),
+    );
+    let units = result["units"]
+        .as_object_mut()
+        .expect("period units are an object");
+    units.remove("book_period");
+    for (key, unit) in [
+        ("source_bar_seconds", "秒"),
+        ("fast_period", "根 K 线"),
+        ("slow_period", "根 K 线"),
+        ("signal_period", "根 K 线"),
+        ("first_histogram_scale", "倍"),
+        ("second_histogram_scale", "倍"),
+        ("latest_histogram_x1", "macd_price"),
+        ("latest_histogram_x2", "macd_price"),
+        ("latest_histogram_difference", "macd_price"),
+        ("macd_histogram_x1", "macd_price"),
+        ("macd_histogram_x2", "macd_price"),
+    ] {
+        units.insert(key.into(), json!(unit));
+    }
+    result["series"] = json!([
+        {"name":"macd_histogram_x1","values":macd.hist},
+        {"name":"macd_histogram_x2","values":twice}
+    ]);
+    result["notes"].as_array_mut().expect("period notes are an array").push(json!(
+        "MACD 使用本项目公开实现：DIF=EMA(12)-EMA(26)，DEA=signal 的 EMA(9)，柱体= DIF-DEA。图中 x1 与 x2 仅是同一柱体的两种倍数展示约定；它们不是两家供应商的实测输出，也不能用来判断某家供应商对错。"
+    ));
+    Ok(result)
+}
+
 pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String> {
     let supplied = inputs.as_object().ok_or("inputs 必须是对象")?;
     let definition = catalog()

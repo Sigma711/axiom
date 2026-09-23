@@ -750,3 +750,40 @@ test('timeframe practice uses one completed real series and visualizes both hori
   await expect(panel).toContainText('同一根已收盘 K 线为截止');
   await expect(panel.locator('.ax-series-illustration svg')).toBeVisible();
 });
+
+
+test('formula convention practice server-fetches one real MACD series and draws both scales', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/');
+  await page.getByRole('textbox', { name: '搜索 概念 / 公式 / 关键词' }).fill('数据供应商公式可能不同');
+  const card = page.locator('.ax-kb-card').filter({ hasText: '数据供应商公式可能不同' });
+  await expect(card).toHaveCount(1, { timeout: 30_000 });
+  await card.getByRole('button', { name: '在数据探索中实践' }).click();
+  const panel = page.getByLabel('概念实践');
+  await expect(panel).toContainText('不是命名供应商的实测输出');
+  await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+  const requestPromise = page.waitForRequest(request => request.url().includes('/api/practice') && request.method() === 'POST');
+  const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  const [request, response] = await Promise.all([requestPromise, responsePromise]);
+  const body = request.postDataJSON() as { concept_id: string; source: string; bars?: unknown; inputs: unknown };
+  expect(body).toMatchObject({ concept_id: 'book_pitfall_formula_variant', source: 'binance', inputs: {} });
+  expect(body.bars).toBeUndefined();
+  expect(response.ok(), await response.text()).toBe(true);
+  const payload = await response.json();
+  expect(payload.context).toBe('selected_dataset');
+  expect(payload.bar_origin).toBe('server_fetched_completed_source_bars');
+  expect(payload.values.source_bar_seconds).toBe(3600);
+  expect(payload.values.fast_period).toBe(12);
+  expect(payload.values.slow_period).toBe(26);
+  expect(payload.values.signal_period).toBe(9);
+  const series = Object.fromEntries(payload.series.map((item: { name: string; values: Array<number | null> }) => [item.name, item.values]));
+  expect(Object.keys(series)).toEqual(['macd_histogram_x1', 'macd_histogram_x2']);
+  for (let index = 0; index < series.macd_histogram_x1.length; index += 1) {
+    const one = series.macd_histogram_x1[index]; const two = series.macd_histogram_x2[index];
+    if (one == null) expect(two).toBeNull();
+    else expect(two).toBeCloseTo(2 * one, 12);
+  }
+  await expect(panel).toContainText('最新两种柱体约定之差');
+  await expect(panel.locator('.ax-series-illustration svg')).toBeVisible();
+});

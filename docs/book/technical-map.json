@@ -1003,22 +1003,11 @@
     {
       "id": "book_pitfall_formula_variant",
       "name": "数据供应商公式可能不同",
-      "summary": "对比提供的两家供应商结果，显示差值而不宣称某一方必错。",
-      "example": "MACD柱体1倍与2倍口径不同，不能直接比较数值。",
-      "formula": "",
-      "input_kind": "independent_inputs",
-      "defaults": {
-        "provider_a": [
-          1,
-          2,
-          3
-        ],
-        "provider_b": [
-          2,
-          4,
-          6
-        ]
-      },
+      "summary": "用同一段已收盘真实行情计算 MACD 柱体，并列画出 x1 与 x2 两种展示缩放约定，最新差值单列为数值。",
+      "example": "同一 MACD 柱体的 x1 与 x2 幅度不同；这不是两家供应商的实测输出。",
+      "formula": "MACD柱体 = DIF − DEA；图示同时显示柱体×1 与柱体×2。",
+      "input_kind": "market_bars",
+      "defaults": {},
       "source_ids": [
         "book_28_16"
       ]

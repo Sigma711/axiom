@@ -56,13 +56,14 @@ pub fn entries() -> Vec<KnowledgeEntry> {
         .map(|s| {
             let text = |key: &str| s[key].as_str().unwrap_or("").to_string();
             let market_bars = s["input_kind"] == "market_bars";
+            let formula_variant = s["id"] == "book_pitfall_formula_variant";
             KnowledgeEntry {
                 id: text("id"),
                 summary: text("summary"),
                 example: text("example"),
                 related: vec![],
-                code_url: "https://github.com/Sigma711/axiom/blob/main/src/book_technical.rs#symbol-evaluate".into(),
-                code_ref: "src/book_technical.rs::evaluate".into(),
+                code_url: if formula_variant { "https://github.com/Sigma711/axiom/blob/main/src/book.rs#market_formula_variant_summary" } else { "https://github.com/Sigma711/axiom/blob/main/src/book_technical.rs#symbol-evaluate" }.into(),
+                code_ref: if formula_variant { "src/book.rs::market_formula_variant_summary" } else { "src/book_technical.rs::evaluate" }.into(),
                 category: "原书补充·技术实践".into(),
                 name: text("name"),
                 formula: if text("formula").is_empty() {
@@ -77,7 +78,7 @@ pub fn entries() -> Vec<KnowledgeEntry> {
                     "用可编辑教学输入理解公式；真实练习须按适用模块和数据口径提供证据，结果不自动等于交易指令。".into()
                 },
                 pitfalls: "独立输入为可编辑教学数据；市场序列只在确认时点可用。专有指标仅核验用户导入信号，不声称复制未公开算法。".into(),
-                implementation: format!("src/book_technical.rs::evaluate; 来源 {}", s["source_ids"]),
+                implementation: if formula_variant { format!("src/book.rs::market_formula_variant_summary; MACD 12/26/9; 来源 {}", s["source_ids"]) } else { format!("src/book_technical.rs::evaluate; 来源 {}", s["source_ids"]) },
                 diagram: None,
             }
         })

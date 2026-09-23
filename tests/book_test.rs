@@ -398,6 +398,70 @@ fn timeframe_practice_compares_real_source_horizons_at_one_completed_cutoff() {
 }
 
 #[test]
+fn formula_variant_practice_uses_one_real_macd_calculation_and_two_labeled_scales() {
+    let start = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+    let mut bars = closed_bars(
+        &(0..45)
+            .map(|i| 100.0 + (i as f64 / 3.0).sin() * 5.0)
+            .collect::<Vec<_>>(),
+    );
+    for (index, bar) in bars.iter_mut().enumerate() {
+        bar.timestamp = start + Duration::hours(index as i64);
+    }
+    let result = book::market_formula_variant_summary(&bars, "binance").unwrap();
+    assert_eq!(result["concept_id"], "book_pitfall_formula_variant");
+    assert_eq!(result["values"]["fast_period"], 12.0);
+    assert_eq!(result["values"]["slow_period"], 26.0);
+    assert_eq!(result["values"]["signal_period"], 9.0);
+    assert_eq!(result["values"]["first_histogram_scale"], 1.0);
+    assert_eq!(result["values"]["second_histogram_scale"], 2.0);
+    assert_eq!(result["values"]["source_bar_seconds"], 3600);
+    let series = result["series"].as_array().unwrap();
+    let one = series
+        .iter()
+        .find(|item| item["name"] == "macd_histogram_x1")
+        .unwrap()["values"]
+        .as_array()
+        .unwrap();
+    let two = series
+        .iter()
+        .find(|item| item["name"] == "macd_histogram_x2")
+        .unwrap()["values"]
+        .as_array()
+        .unwrap();
+    assert_eq!(series.len(), 2);
+    assert_eq!(result["units"]["macd_histogram_x1"], "macd_price");
+    assert_eq!(result["units"]["macd_histogram_x2"], "macd_price");
+    assert_eq!(result["units"]["latest_histogram_difference"], "macd_price");
+    for (a, b) in one.iter().zip(two) {
+        assert_eq!(a.is_null(), b.is_null(), "scale warmup must match");
+        if let Some(value) = a.as_f64() {
+            assert!((b.as_f64().unwrap() - 2.0 * value).abs() < 1e-12);
+        }
+    }
+    let latest = one
+        .iter()
+        .rev()
+        .find_map(serde_json::Value::as_f64)
+        .unwrap();
+    assert!((result["values"]["latest_histogram_x1"].as_f64().unwrap() - latest).abs() < 1e-12);
+    assert!(
+        (result["values"]["latest_histogram_x2"].as_f64().unwrap() - 2.0 * latest).abs() < 1e-12
+    );
+    assert!(
+        (result["values"]["latest_histogram_difference"]
+            .as_f64()
+            .unwrap()
+            - latest)
+            .abs()
+            < 1e-12
+    );
+    assert!(result["notes"]
+        .to_string()
+        .contains("不是两家供应商的实测输出"));
+}
+
+#[test]
 fn period_summary_rejects_untrusted_source_empty_disordered_or_future_bars() {
     assert!(book::market_period_summary(&[], "binance").is_err());
     let mut bars = closed_bars(&[100.0, 101.0]);

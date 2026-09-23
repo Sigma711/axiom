@@ -70,6 +70,12 @@ fn every_published_concept_resolves_to_an_actual_implementation_branch() {
                 } else if e.id == "book_pitfall_timeframe" {
                     assert_eq!(location.kind, "function");
                     assert_eq!(location.code_ref, "src/book.rs::market_timeframe_summary");
+                } else if e.id == "book_pitfall_formula_variant" {
+                    assert_eq!(location.kind, "function");
+                    assert_eq!(
+                        location.code_ref,
+                        "src/book.rs::market_formula_variant_summary"
+                    );
                 } else {
                     assert!(
                         matches!(location.kind.as_str(), "match_arm" | "conditional"),

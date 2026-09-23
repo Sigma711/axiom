@@ -1490,7 +1490,14 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
                 | "book_second_order_greeks"
         );
     let performance = concept.category == "风险-绩效";
-    if concept.id == "book_pitfall_timeframe" {
+    if concept.id == "book_pitfall_formula_variant" {
+        json!({
+            "markets":["crypto","cn_equity","us_equity"], "modules":["data"],
+            "required_datasets":["server_fetched_completed_ohlcv_with_source_cadence"],
+            "source_policy":"real_required",
+            "goal":"由服务器从所选真实来源重新获取已收盘K线，按 MACD 12/26/9 的公开公式计算同一柱体，并列画出 x1 与 x2 两种柱体缩放约定，并将最新差值作为数值。两条线不是命名供应商的实测输出或独立证据；它们只说明展示公式不同会令数值幅度不同。当前接入使用 Binance 1小时线、A股日线或美股日线。"
+        })
+    } else if concept.id == "book_pitfall_timeframe" {
         json!({
             "markets":["crypto","cn_equity","us_equity"], "modules":["data"],
             "required_datasets":["server_fetched_completed_ohlcv_with_source_cadence"],
@@ -2020,7 +2027,7 @@ async fn post_practice(
     }
     if matches!(
         concept.id.as_str(),
-        "book_pitfall_repainting" | "book_pitfall_timeframe"
+        "book_pitfall_repainting" | "book_pitfall_timeframe" | "book_pitfall_formula_variant"
     ) && req.bars.is_some()
     {
         return Err(validate::bad(
@@ -2046,6 +2053,11 @@ async fn post_practice(
     if concept.id == "book_relative_volume_at_time" {
         relative_volume_requires_continuous_binance_hours(&bars, &source)?;
     }
+    let formula_variant_summary = if concept.id == "book_pitfall_formula_variant" {
+        Some(crate::book::market_formula_variant_summary(&bars, &source).map_err(validate::bad)?)
+    } else {
+        None
+    };
     let timeframe_summary = if concept.id == "book_pitfall_timeframe" {
         Some(crate::book::market_timeframe_summary(&bars, &source).map_err(validate::bad)?)
     } else {
@@ -2105,20 +2117,23 @@ async fn post_practice(
             }
         }
     }
-    let mut result = match timeframe_summary {
+    let mut result = match formula_variant_summary {
         Some(summary) => summary,
-        None => match period_summary {
+        None => match timeframe_summary {
             Some(summary) => summary,
-            None => match annualization {
-                Some(annualization) => crate::practice::evaluate_with_annualization(
-                    &req.concept_id,
-                    &bars,
-                    &evaluator_inputs,
-                    annualization,
-                ),
-                None => crate::practice::evaluate(&req.concept_id, &bars, &evaluator_inputs),
-            }
-            .map_err(validate::bad)?,
+            None => match period_summary {
+                Some(summary) => summary,
+                None => match annualization {
+                    Some(annualization) => crate::practice::evaluate_with_annualization(
+                        &req.concept_id,
+                        &bars,
+                        &evaluator_inputs,
+                        annualization,
+                    ),
+                    None => crate::practice::evaluate(&req.concept_id, &bars, &evaluator_inputs),
+                }
+                .map_err(validate::bad)?,
+            },
         },
     };
     result["module"] = json!(req.module);
@@ -2127,7 +2142,7 @@ async fn post_practice(
     result["context"] = json!(context);
     if matches!(
         concept.id.as_str(),
-        "book_pitfall_repainting" | "book_pitfall_timeframe"
+        "book_pitfall_repainting" | "book_pitfall_timeframe" | "book_pitfall_formula_variant"
     ) {
         result["bar_origin"] = json!("server_fetched_completed_source_bars");
         if let Some(notes) = result["notes"].as_array_mut() {

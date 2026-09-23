@@ -24,7 +24,7 @@ const CHINESE_FIELDS: Record<string, string> = {
   price: '价格', close: '收盘价', open: '开盘价', high: '最高价', low: '最低价', volume: '成交量', hourly_volume: '每小时成交量', rolling_24h_volume: '滚动 24 小时成交量', book_log_return: '最近一根 K 线对数收益率',
   book_relative_volume_at_time: '同一时点相对成交量', current_cumulative_volume: '当日截至该小时累计量', historical_sample_count: '历史完整日样本数',
   book_nonstandard_bar: 'OHLC4 合成展示价', actual_close: '真实收盘价', synthetic_minus_close: '合成价与真实收盘价之差', book_period: '来源约定的名义周期', last_observed_interval_seconds: '最近相邻观测间隔', bar_count: 'K线数', missing_expected_intervals: '缺失的预期小时数', calendar_gap_count: '股票日期空档数',
-  source_bar_seconds: '来源 K 线周期', same_completed_asof: '短长窗口使用同一已收盘截止点', short_horizon_bars: '短期窗口 K 线数', long_horizon_bars: '长期窗口 K 线数', short_horizon_return: '短期窗口收盘价变化', long_horizon_return: '长期窗口收盘价变化', horizon_direction_differs: '短长窗口方向不同', close_price: '收盘价', short_horizon_start: '短期窗口起点（5 根）', long_horizon_start: '长期窗口起点（20 根）',
+  source_bar_seconds: '来源 K 线周期', same_completed_asof: '短长窗口使用同一已收盘截止点', short_horizon_bars: '短期窗口 K 线数', long_horizon_bars: '长期窗口 K 线数', short_horizon_return: '短期窗口收盘价变化', long_horizon_return: '长期窗口收盘价变化', horizon_direction_differs: '短长窗口方向不同', close_price: '收盘价', short_horizon_start: '短期窗口起点（5 根）', long_horizon_start: '长期窗口起点（20 根）', macd_histogram_x1: 'MACD 柱体（x1 约定）', macd_histogram_x2: 'MACD 柱体（x2 约定）', latest_histogram_difference: '最新两种柱体约定之差', latest_histogram_x1: '最新 MACD 柱体（x1）', latest_histogram_x2: '最新 MACD 柱体（x2）', fast_period: '快线 EMA 周期', slow_period: '慢线 EMA 周期', signal_period: '信号 EMA 周期', first_histogram_scale: '第一种柱体缩放', second_histogram_scale: '第二种柱体缩放',
   period: '周期', fast: '快线周期', slow: '慢线周期', signal: '信号周期', multiplier: '倍数',
   returns: '收益率序列', equity: '净值序列', elapsed_days: '经过天数', periods_per_year: '每年期数', annualized_volatility: '年化波动率',
   rsi: '相对强弱指标', value: '计算值', mean: '均值', stddev: '标准差', correlation: '相关系数',
@@ -32,7 +32,7 @@ const CHINESE_FIELDS: Record<string, string> = {
   confirmation_delay_bars: '确认延迟', confirmed_pivot_count: '已确认枢轴数', confirmed_pivot_high: '确认的局部高点价', confirmed_pivot_low: '确认的局部低点价', pivot_high_occurrence: '回看的局部高点价', pivot_low_occurrence: '回看的局部低点价', right_confirmation_bars: '右侧确认所需 K 线数',
   eps: '每股收益', net_income: '净利润', preferred_dividends: '优先股股息', shares: '普通股股数', weighted_shares: '加权平均普通股股数', weighted_average_shares: '加权平均普通股股数',
 };
-const CHINESE_UNITS: Record<string, string> = { fraction: '比例（小数）', annualized_ratio: '年化比率', 'annual fraction': '年化比例（小数）', 'periods per year': '每年期数', price: '价格', currency: '元', share: '股', shares: '股', 'currency/share': '元/股', '元/股': '元/股', 'confirmed pivot events': '个已确认枢轴', percent: '%', ratio: '比率', days: '天', bars: '根 K 线' };
+const CHINESE_UNITS: Record<string, string> = { fraction: '比例（小数）', annualized_ratio: '年化比率', 'annual fraction': '年化比例（小数）', 'periods per year': '每年期数', price: '价格', currency: '元', share: '股', shares: '股', 'currency/share': '元/股', '元/股': '元/股', 'confirmed pivot events': '个已确认枢轴', macd_price: '价格差', percent: '%', ratio: '比率', days: '天', bars: '根 K 线' };
 function chineseUnit(unit?: string) { return unit ? (CHINESE_UNITS[unit] || unit) : ''; }
 function chineseField(key: string, label?: string) {
   if (label && !/^[a-z_]+$/i.test(label)) return label;
@@ -572,7 +572,7 @@ function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}
       if (concept.plan.required_datasets.some(dataset => dataset.startsWith('same_period_benchmark')) && !Array.isArray(contextInputs.benchmark_returns)) { setError('当前结果缺少与净值同区间的真实标的基准，不能用默认数组代替。'); return; }
       if (!usePageContext) { setError('绩效实践必须使用本页真实结果；请切回本页上下文。'); return; }
     }
-    if (concept.input_kind === 'market_bars' && !bars?.length && !['book_pitfall_repainting', 'book_pitfall_timeframe'].includes(concept.id)) {
+    if (concept.input_kind === 'market_bars' && !bars?.length && !['book_pitfall_repainting', 'book_pitfall_timeframe', 'book_pitfall_formula_variant'].includes(concept.id)) {
       setError('当前模块还没有可用行情上下文。请先加载数据、运行回测或等待模拟盘产生数据。');
       return;
     }
@@ -597,7 +597,7 @@ function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}
     setLoading(true);
     setError('');
     try {
-      setResult(await api.runPractice({ concept_id: concept.id, module, symbol, source, limit, inputs: parsed, bars: ['book_pitfall_repainting', 'book_pitfall_timeframe'].includes(concept.id) ? undefined : bars?.length ? bars : undefined }));
+      setResult(await api.runPractice({ concept_id: concept.id, module, symbol, source, limit, inputs: parsed, bars: ['book_pitfall_repainting', 'book_pitfall_timeframe', 'book_pitfall_formula_variant'].includes(concept.id) ? undefined : bars?.length ? bars : undefined }));
     } catch (e) {
       setError(String(e));
       setResult(null);
@@ -626,7 +626,7 @@ function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}
         <p className={result.status === 'computed' ? 'positive' : 'negative'}>{result.status === 'computed' ? '已计算' : '无法计算'} · {result.bar_origin === 'server_fetched_completed_source_bars' ? '服务器重新获取并过滤已收盘行情，实际时间戳见结果数据' : result.provenance === 'provided_market_bars' ? '使用当前模块行情上下文' : result.provenance === 'provided_result_context' ? '使用当前模块真实结果' : '使用可编辑教学输入'}</p>
         {result.reason && <p>{result.reason}</p>}
         {Object.keys(result.values).length > 0 && <dl>{Object.entries(result.values).map(([key, value]) => <div key={key}><dt>{chineseField(key, key === conceptId ? concept?.name : undefined)}{result.units?.[key] ? `（${chineseUnit(result.units[key])}）` : ''}</dt><dd>{value == null ? '—' : fmtNum(value, 6)}</dd></div>)}</dl>}
-        <p className="ax-practice-reading">{conceptId === 'book_pitfall_repainting' ? `在 ${result.bars?.length ?? 0} 根已收盘 K 线里确认了 ${fmtNum(result.values.confirmed_pivot_count ?? 0, 0)} 个局部高低点。空心点标在枢轴发生的 K 线上，只供事后回看；实心点标在两根右侧 K 线收盘后的确认位置，才是当时可知的信息。` : conceptId === 'book_pitfall_timeframe' ? `同一根已收盘 K 线为截止，近 5 根变化 ${result.values.short_horizon_return == null ? '—' : `${fmtNum(result.values.short_horizon_return * 100, 2)}%`}，近 20 根变化 ${result.values.long_horizon_return == null ? '—' : `${fmtNum(result.values.long_horizon_return * 100, 2)}%`}。图上的两点是各自的起算价；窗口来自同一行情，不能当作相互独立的确认。` : resultSentence(concept?.name || '该概念', result.values, result.units, !result.chart && result.series.length > 0, result.provenance)}</p>
+        <p className="ax-practice-reading">{conceptId === 'book_pitfall_repainting' ? `在 ${result.bars?.length ?? 0} 根已收盘 K 线里确认了 ${fmtNum(result.values.confirmed_pivot_count ?? 0, 0)} 个局部高低点。空心点标在枢轴发生的 K 线上，只供事后回看；实心点标在两根右侧 K 线收盘后的确认位置，才是当时可知的信息。` : conceptId === 'book_pitfall_timeframe' ? `同一根已收盘 K 线为截止，近 5 根变化 ${result.values.short_horizon_return == null ? '—' : `${fmtNum(result.values.short_horizon_return * 100, 2)}%`}，近 20 根变化 ${result.values.long_horizon_return == null ? '—' : `${fmtNum(result.values.long_horizon_return * 100, 2)}%`}。图上的两点是各自的起算价；窗口来自同一行情，不能当作相互独立的确认。` : conceptId === 'book_pitfall_formula_variant' ? `同一段已收盘行情按 MACD(12, 26, 9) 只计算一次柱体：x2 曲线恒为 x1 的两倍。最新 x1 ${result.values.latest_histogram_x1 == null ? '—' : fmtNum(result.values.latest_histogram_x1, 6)}，x2 ${result.values.latest_histogram_x2 == null ? '—' : fmtNum(result.values.latest_histogram_x2, 6)}，两种约定之差 ${result.values.latest_histogram_difference == null ? '—' : fmtNum(result.values.latest_histogram_difference, 6)}；这不是两家供应商的独立实测输出。` : resultSentence(concept?.name || '该概念', result.values, result.units, !result.chart && result.series.length > 0, result.provenance)}</p>
         {result.notes.map((note, index) => <p className="ax-practice-note" key={index}>{note}</p>)}
       </div>}
     </aside>

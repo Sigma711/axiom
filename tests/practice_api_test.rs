@@ -2,16 +2,19 @@ use axiom::{
     api,
     app_state::AppState,
     config::default_config,
-    data::{DataFeed, SyntheticFeed},
+    data::{DataFeed, HttpFeed, SyntheticFeed},
     practice,
 };
 use axum::{
     body::{to_bytes, Body},
+    extract::Query,
     http::{Request, StatusCode},
+    routing::get,
+    Json,
 };
 use chrono::{TimeZone, Timelike, Utc};
 use serde_json::{json, Value};
-use std::{path::PathBuf, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tower::ServiceExt;
 
 fn app() -> axum::Router {
@@ -53,7 +56,10 @@ async fn data_practice_accepts_only_concepts_with_a_data_plan() {
         concept.input_kind == "market_bars"
             && !matches!(
                 concept.id.as_str(),
-                "book_cdp" | "book_pitfall_repainting" | "book_pitfall_timeframe"
+                "book_cdp"
+                    | "book_pitfall_repainting"
+                    | "book_pitfall_timeframe"
+                    | "book_pitfall_formula_variant"
             )
     }) {
         let mut first: Option<Value> = None;
@@ -256,6 +262,104 @@ async fn timeframe_practice_requires_server_fetched_real_source_bars() {
     assert!(body
         .to_string()
         .contains("server-fetched completed source bars"));
+}
+
+#[tokio::test]
+async fn formula_variant_practice_requires_server_fetched_completed_market_bars() {
+    let app = app();
+    let response = app
+        .clone()
+        .oneshot(Request::get("/api/practice").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let catalog: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), 10_000_000).await.unwrap()).unwrap();
+    let concept = catalog["concepts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == "book_pitfall_formula_variant")
+        .unwrap();
+    assert_eq!(concept["input_kind"], "market_bars");
+    assert_eq!(concept["inputs"], json!([]));
+    assert_eq!(concept["plan"]["modules"], json!(["data"]));
+    assert_eq!(concept["plan"]["source_policy"], "real_required");
+    assert!(concept["plan"]["goal"].as_str().unwrap().contains("MACD"));
+    let bars = SyntheticFeed::new(31)
+        .fetch_historical(
+            "BTCUSDT",
+            Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+            45,
+        )
+        .unwrap();
+    let (status, body) = request(&app, "/api/practice", json!({"concept_id":"book_pitfall_formula_variant","module":"data","symbol":"BTCUSDT","source":"binance","bars":bars,"inputs":{}})).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(body
+        .to_string()
+        .contains("server-fetched completed source bars"));
+}
+
+async fn mock_completed_klines(Query(q): Query<HashMap<String, String>>) -> Json<Value> {
+    let start = q["startTime"].parse::<i64>().unwrap();
+    let limit = q["limit"].parse::<usize>().unwrap();
+    Json(Value::Array(
+        (0..limit)
+            .map(|index| {
+                let close = 100.0 + index as f64 * 0.1 + (index as f64 / 5.0).sin();
+                json!([
+                    start + index as i64 * 3_600_000,
+                    format!("{close}"),
+                    format!("{}", close + 2.0),
+                    format!("{}", close - 2.0),
+                    format!("{close}"),
+                    "10",
+                    start + (index as i64 + 1) * 3_600_000 - 1
+                ])
+            })
+            .collect(),
+    ))
+}
+
+#[tokio::test]
+async fn server_fetched_knowledge_practices_execute_against_completed_mock_market() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            axum::Router::new().route("/api/v3/klines", get(mock_completed_klines)),
+        )
+        .await
+        .unwrap()
+    });
+    let dir = PathBuf::from(format!("target/practice-real-{}", uuid::Uuid::new_v4()));
+    let mut state = AppState::new(default_config(), dir.clone());
+    let mut feed = HttpFeed::new(&dir);
+    feed.base_url = format!("http://127.0.0.1:{port}");
+    state.feed = Arc::new(feed);
+    let app = api::router(Arc::new(state));
+    for concept_id in [
+        "book_pitfall_repainting",
+        "book_pitfall_timeframe",
+        "book_pitfall_formula_variant",
+    ] {
+        let (status, body) = request(
+            &app,
+            "/api/practice",
+            json!({
+                "concept_id": concept_id, "module": "data", "symbol": "BTCUSDT",
+                "source": "binance", "limit": 200, "inputs": {}
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{concept_id}: {body}");
+        assert_eq!(body["status"], "computed");
+        assert_eq!(body["bar_origin"], "server_fetched_completed_source_bars");
+        assert_eq!(body["bars"].as_array().unwrap().len(), 200);
+        assert_eq!(body["context"], "selected_dataset");
+    }
+    server.abort();
+    let _ = std::fs::remove_dir_all(dir);
 }
 
 #[tokio::test]

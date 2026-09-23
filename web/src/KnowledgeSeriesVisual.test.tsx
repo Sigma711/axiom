@@ -50,3 +50,18 @@ it('labels both real-market timeframe windows and keeps sparse starts visible', 
   expect(html).toContain('2026-09-21 00:00 UTC');
   expect((html.match(/data-series-marker=/g) || [])).toHaveLength(2);
 });
+
+it('explains the real MACD histogram scaling conventions on one price-unit axis', () => {
+  const result = { series: [
+    { name: 'macd_histogram_x1', values: [null, 1, 2] },
+    { name: 'macd_histogram_x2', values: [null, 2, 4] },
+  ], units: { macd_histogram_x1: 'macd_price', macd_histogram_x2: 'macd_price' } } as unknown as PracticeResult;
+  const html = renderToStaticMarkup(<KnowledgeSeriesVisual name="公式口径" result={result} />);
+  expect(html).toContain('ax-wide-series-chart');
+  expect(html).toContain('MACD 柱体（价格单位）');
+  expect(html).toContain('MACD 柱体 ×1');
+  expect(html).toContain('MACD 柱体 ×2');
+  expect(html).toContain('不同单位分图');
+  expect(html).not.toContain('两种口径差值');
+  expect((html.match(/transform="translate/g) || [])).toHaveLength(1);
+});

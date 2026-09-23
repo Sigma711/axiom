@@ -22,6 +22,17 @@ pub(super) fn evaluate(
         };
     }
     match id {
+        "pitfall_formula_variant" => {
+            let m = trend::macd(&c, 12, 26, 9);
+            let twice = m
+                .hist
+                .iter()
+                .map(|value| value.map(|value| value * 2.0))
+                .collect();
+            ser!("macd_histogram_x1", m.hist, "macd_price");
+            ser!("macd_histogram_x2", twice, "macd_price");
+            o.note("离线计算以传入K线按 MACD 12/26/9 得到柱体，再展示 x1 与 x2 两种倍数约定；不是两家供应商的实测输出。实际实践由API重新获取已收盘行情并绑定来源周期。");
+        }
         "pitfall_timeframe" => {
             const SHORT_BARS: usize = 5;
             const LONG_BARS: usize = 20;

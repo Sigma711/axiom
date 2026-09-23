@@ -460,16 +460,6 @@ pub(super) fn evaluate(id: &str, v: &Value, o: &mut Output) -> Result<(), String
                 "fraction",
             );
         }
-        "pitfall_formula_variant" => {
-            let a = a("provider_a")?;
-            let b = arr(v, "provider_b")?;
-            pair(&a, &b)?;
-            o.series(
-                "provider_difference",
-                a.iter().zip(b).map(|(a, b)| Some(b - a)).collect(),
-                "provider units",
-            );
-        }
         "backtest_data_audit" => {
             let obs = a("observation_times")?;
             let avail = a("available_times")?;
