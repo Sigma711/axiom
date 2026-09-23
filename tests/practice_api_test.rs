@@ -49,10 +49,10 @@ async fn data_practice_accepts_only_concepts_with_a_data_plan() {
             300,
         )
         .unwrap();
-    for concept in practice::catalog()
-        .into_iter()
-        .filter(|concept| concept.input_kind == "market_bars" && concept.id != "book_cdp")
-    {
+    for concept in practice::catalog().into_iter().filter(|concept| {
+        concept.input_kind == "market_bars"
+            && !matches!(concept.id.as_str(), "book_cdp" | "book_pitfall_repainting")
+    }) {
         let mut first: Option<Value> = None;
         for module in ["data"] {
             let(status,out)=request(&app,"/api/practice",json!({"concept_id":concept.id,"module":module,"symbol":"BTCUSDT","source":"binance","bars":bars,"inputs":{}})).await;
@@ -156,6 +156,55 @@ async fn teaching_and_result_practice_contexts_are_explicit_and_validated() {
         json!({"concept_id":"rsi","module":"data","bars":[]}),
     )
     .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn repainting_practice_has_no_manual_event_or_bar_override() {
+    let app = app();
+    let response = app
+        .clone()
+        .oneshot(Request::get("/api/practice").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let catalog: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), 10_000_000).await.unwrap()).unwrap();
+    let concept = catalog["concepts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == "book_pitfall_repainting")
+        .unwrap();
+    assert_eq!(concept["input_kind"], "market_bars");
+    assert_eq!(concept["inputs"], json!([]));
+    assert_eq!(concept["plan"]["modules"], json!(["data"]));
+    assert_eq!(concept["plan"]["source_policy"], "real_required");
+    assert!(concept["plan"]["goal"].as_str().unwrap().contains("t+2"));
+
+    let bars = SyntheticFeed::new(31)
+        .fetch_historical(
+            "BTCUSDT",
+            Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+            8,
+        )
+        .unwrap();
+    let (status, body) = request(
+        &app,
+        "/api/practice",
+        json!({
+            "concept_id":"book_pitfall_repainting", "module":"data", "symbol":"BTCUSDT",
+            "source":"binance", "bars":bars, "inputs":{"pivot_index":0}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(body
+        .to_string()
+        .contains("does not accept caller-supplied bars"));
+
+    let (status, _) = request(&app, "/api/practice", json!({
+        "concept_id":"book_pitfall_repainting", "module":"data", "symbol":"BTCUSDT", "source":"synthetic"
+    })).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 

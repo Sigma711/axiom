@@ -1506,6 +1506,14 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
             "source_policy":"real_required",
             "goal":"使用所选市场的已收盘K线计算相邻收盘价简单收益率样本标准差；加密1小时线按8760小时/年，A股和美股日线按252个交易日/年惯例。年化口径由已验证数据源决定，不接受手填。"
         })
+    } else if concept.id == "book_pitfall_repainting" {
+        json!({
+            "markets":["crypto","cn_equity","us_equity"],
+            "modules":["data"],
+            "required_datasets":["server_fetched_completed_ohlcv","two_right_side_completed_bars"],
+            "source_policy":"real_required",
+            "goal":"由服务器从所选真实来源取得已收盘 K 线，以固定两根右侧 K 线确认局部高低点。结果分别显示回看的枢轴发生位置和 t+2 的确认位置；不接收手填 K 线或事件索引，不能把 t 时点的标签当作当时已知信息。这只演示该五根 K 线分形的确认延迟，不复制所有 ZigZag 或自动形态的专有规则。"
+        })
     } else if concept.id == "rolling_correlation" {
         json!({
             "markets":["crypto","cn_equity","us_equity"],
@@ -2003,6 +2011,11 @@ async fn post_practice(
             "real_required practice does not accept synthetic market bars",
         ));
     }
+    if concept.id == "book_pitfall_repainting" && req.bars.is_some() {
+        return Err(validate::bad(
+            "repainting practice fetches completed source bars on the server and does not accept caller-supplied bars",
+        ));
+    }
     let independent = concept.input_kind != "market_bars";
     let provided_bars = req.bars.is_some();
     let bars = if let Some(bars) = req.bars {
@@ -2093,6 +2106,12 @@ async fn post_practice(
     result["symbol"] = json!(symbol);
     result["source"] = json!(source);
     result["context"] = json!(context);
+    if concept.id == "book_pitfall_repainting" {
+        result["bar_origin"] = json!("server_fetched_completed_source_bars");
+        if let Some(notes) = result["notes"].as_array_mut() {
+            notes.push(json!("本次练习由服务器从所选来源重新获取并过滤已收盘 K 线；响应 bars 含实际使用的时间戳，可能比页面图表更新。"));
+        }
+    }
     if result_required {
         result["provenance"] = json!("provided_result_context");
     }

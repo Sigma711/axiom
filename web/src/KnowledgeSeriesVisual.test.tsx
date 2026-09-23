@@ -15,3 +15,19 @@ it('keeps unit panels distinct and leaves an internal null gap disconnected', ()
   const paths = [...html.matchAll(/<path d="([^"]*)"/g)].map(m => m[1]);
   expect(paths[0].match(/M/g)).toHaveLength(2); expect(paths[0]).not.toContain('L');
 });
+it('groups repainting prices, labels retrospective markers, and renders every isolated event', () => {
+  const result = {series:[
+    {name:'pivot_high_occurrence',values:[null,10,null,null,12,null]},
+    {name:'pivot_low_occurrence',values:[null,null,8,null,null,7]},
+    {name:'confirmed_pivot_high',values:[null,null,null,10,null,null]},
+    {name:'confirmed_pivot_low',values:[null,null,null,null,8,null]},
+    {name:'confirmation_delay_bars',values:[null,null,null,2,2,null]},
+  ], units:{pivot_high_occurrence:'price',pivot_low_occurrence:'price',confirmed_pivot_high:'price',confirmed_pivot_low:'price',confirmation_delay_bars:'bars'}} as unknown as PracticeResult;
+  const html = renderToStaticMarkup(<KnowledgeSeriesVisual name="重画" result={result} />);
+  expect(html).toContain('局部高点发生位置（仅回看）');
+  expect(html).toContain('局部低点确认价（t+2）');
+  expect(html).toContain('根 K 线');
+  expect((html.match(/data-series-marker=/g) || [])).toHaveLength(6);
+  expect(html).toContain('fill="var(--bg)"');
+  expect((html.match(/transform="translate/g) || [])).toHaveLength(2);
+});

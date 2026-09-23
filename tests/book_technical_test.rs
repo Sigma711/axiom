@@ -106,6 +106,13 @@ fn technical_series_do_not_rewrite_history_and_small_samples_do_not_panic() {
             .iter()
             .zip(full["series"].as_array().unwrap())
         {
+            if c.id == "book_pitfall_repainting"
+                && a["name"].as_str().unwrap().ends_with("occurrence")
+            {
+                // This is deliberately a retrospective display. The separate
+                // confirmation series is the no-lookahead signal.
+                continue;
+            }
             assert_eq!(
                 a["values"],
                 json!(z["values"].as_array().unwrap()[..120]),
@@ -115,6 +122,89 @@ fn technical_series_do_not_rewrite_history_and_small_samples_do_not_panic() {
             );
         }
     }
+}
+#[test]
+fn repainting_practice_separates_retroactive_pivot_location_from_confirmation() {
+    let highs = [3.0, 4.0, 10.0, 5.0, 4.0, 7.0, 3.0];
+    let bars: Vec<_> = highs
+        .into_iter()
+        .enumerate()
+        .map(|(index, high)| Bar {
+            timestamp: chrono::DateTime::from_timestamp(index as i64 * 3600, 0).unwrap(),
+            open: 2.0,
+            high,
+            low: 1.0,
+            close: 2.0,
+            volume: 1.0,
+        })
+        .collect();
+    let early = bt::evaluate("book_pitfall_repainting", &bars[..4], &json!({})).unwrap();
+    assert!(early["series"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|series| series["values"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(serde_json::Value::is_null)));
+
+    let result = bt::evaluate("book_pitfall_repainting", &bars, &json!({})).unwrap();
+    assert_eq!(result["input_kind"], "market_bars");
+    assert_eq!(result["provenance"], "provided_market_bars");
+    assert_eq!(result["inputs"], json!({}));
+    assert_eq!(result["values"]["right_confirmation_bars"], 2.0);
+    let series = result["series"].as_array().unwrap();
+    let occurrence = series
+        .iter()
+        .find(|item| item["name"] == "pivot_high_occurrence")
+        .unwrap();
+    let confirmed = series
+        .iter()
+        .find(|item| item["name"] == "confirmed_pivot_high")
+        .unwrap();
+    let delay = series
+        .iter()
+        .find(|item| item["name"] == "confirmation_delay_bars")
+        .unwrap();
+    assert_eq!(occurrence["values"][2], 10.0);
+    assert!(confirmed["values"][2].is_null());
+    assert_eq!(confirmed["values"][4], 10.0);
+    assert_eq!(delay["values"][4], 2.0);
+    assert!(result["notes"].as_array().unwrap().iter().any(|note| note
+        .as_str()
+        .is_some_and(|text| text.contains("绝不是可执行信号"))));
+
+    let mut outside = bars.clone();
+    outside[2].low = 0.1;
+    let outside_result = bt::evaluate("book_pitfall_repainting", &outside, &json!({})).unwrap();
+    let outside_series = outside_result["series"].as_array().unwrap();
+    let low_occurrence = outside_series
+        .iter()
+        .find(|item| item["name"] == "pivot_low_occurrence")
+        .unwrap();
+    let low_confirmed = outside_series
+        .iter()
+        .find(|item| item["name"] == "confirmed_pivot_low")
+        .unwrap();
+    assert_eq!(low_occurrence["values"][2], 0.1);
+    assert_eq!(low_confirmed["values"][4], 0.1);
+
+    let flat: Vec<_> = (0..4)
+        .map(|index| Bar {
+            timestamp: chrono::DateTime::from_timestamp(index * 3600, 0).unwrap(),
+            open: 2.0,
+            high: 2.0,
+            low: 2.0,
+            close: 2.0,
+            volume: 1.0,
+        })
+        .collect();
+    let empty = bt::evaluate("book_pitfall_repainting", &flat, &json!({})).unwrap();
+    assert_eq!(empty["values"]["confirmed_pivot_count"], 0.0);
+    assert!(empty["notes"].as_array().unwrap().iter().any(|note| note
+        .as_str()
+        .is_some_and(|text| text.contains("不是加载失败"))));
 }
 #[test]
 fn constant_prices_and_rank_oracles() {

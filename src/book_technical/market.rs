@@ -22,6 +22,45 @@ pub(super) fn evaluate(
         };
     }
     match id {
+        "pitfall_repainting" => {
+            // A five-bar fractal is only observable when the second bar to the
+            // right has closed.  Keep the retrospective occurrence marker and
+            // the usable confirmation marker on distinct bars so callers cannot
+            // mistake a later label for information available at the pivot.
+            const RIGHT_BARS: usize = 2;
+            let mut high_occurred = vec![None; n];
+            let mut low_occurred = vec![None; n];
+            let mut high_confirmed = vec![None; n];
+            let mut low_confirmed = vec![None; n];
+            let mut delay = vec![None; n];
+            let mut confirmed_count = 0usize;
+            for (when, pivot, sign) in confirmed_pivots(b, RIGHT_BARS) {
+                if sign > 0 {
+                    high_occurred[pivot] = Some(b[pivot].high);
+                    high_confirmed[when] = Some(b[pivot].high);
+                } else {
+                    low_occurred[pivot] = Some(b[pivot].low);
+                    low_confirmed[when] = Some(b[pivot].low);
+                }
+                delay[when] = Some(RIGHT_BARS as f64);
+                confirmed_count += 1;
+            }
+            ser!("pivot_high_occurrence", high_occurred, "price");
+            ser!("pivot_low_occurrence", low_occurred, "price");
+            ser!("confirmed_pivot_high", high_confirmed, "price");
+            ser!("confirmed_pivot_low", low_confirmed, "price");
+            ser!("confirmation_delay_bars", delay, "bars");
+            o.number("right_confirmation_bars", RIGHT_BARS as f64, "bars");
+            o.number(
+                "confirmed_pivot_count",
+                confirmed_count as f64,
+                "confirmed pivot events",
+            );
+            if confirmed_count == 0 {
+                o.note("这段已收盘行情没有满足固定五根 K 线分形规则的已确认枢轴；空白事件序列不是加载失败。");
+            }
+            o.note("pivot_high_occurrence 和 pivot_low_occurrence 仅用于回看，绝不是可执行信号：第 t 根的标记必须等到第 t+2 根已收盘才确认。在 t 或 t+1 不可将它作为已知信息；confirmed_pivot_high 和 confirmed_pivot_low 只在确认 K 线的位置出现。外包 K 线可同时是局部高点和低点，因此两个方向保留在独立序列中。");
+        }
         "relative_volume_at_time" => {
             let end = b.last().ok_or("需要已收盘1小时K线")?;
             let cutoff = end.timestamp.hour();

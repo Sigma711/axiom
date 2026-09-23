@@ -140,4 +140,6 @@ export interface PracticeResult {
   source: string;
   symbol: string;
   bars: Bar[];
+  context?: 'module_snapshot' | 'selected_dataset' | 'editable_teaching_inputs' | 'provided_result_context';
+  bar_origin?: 'server_fetched_completed_source_bars';
 }

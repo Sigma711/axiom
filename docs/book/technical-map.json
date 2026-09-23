@@ -979,15 +979,11 @@
     {
       "id": "book_pitfall_repainting",
       "name": "ZigZag、分形和部分自动形态会重画或延迟确认",
-      "summary": "区分形态发生时点与确认可用时点。",
-      "example": "峰值在第10根，右侧2根确认，则最早第12根才可用。",
+      "summary": "用所选真实市场的已收盘 K 线演示固定五根 K 线分形：区分枢轴发生位置与两根右侧 K 线后的确认位置。它不声称复制所有 ZigZag 或自动形态的专有确认规则。",
+      "example": "某个峰值显示在第10根，但只有第12根收盘后，才知道第10根是已确认的局部高点。",
       "formula": "",
-      "input_kind": "independent_inputs",
-      "defaults": {
-        "pivot_index": 10.0,
-        "confirmation_index": 12.0,
-        "decision_index": 11.0
-      },
+      "input_kind": "market_bars",
+      "defaults": {},
       "source_ids": [
         "book_28_14"
       ]

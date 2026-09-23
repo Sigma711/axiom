@@ -15,6 +15,8 @@ test('real Rust service supports the four-module learning journey', async ({ pag
   await expect(page.getByLabel('概念实践')).toBeVisible();
   await page.getByRole('button', { name: '数据源', exact: true }).click();
   await page.getByRole('option', { name: '加密货币 · Binance' }).click();
+  await expect(page.locator('.ax-chart svg.main-svg').first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('.ax-summary')).toContainText('BTCUSDT');
   await page.getByRole('button', { name: '加载数据' }).click();
   await expect(page.locator('.ax-chart svg.main-svg').first()).toBeVisible({ timeout: 20_000 });
   await page.getByRole('button', {name:'运行实践'}).click();
@@ -83,6 +85,62 @@ test('real Rust service supports the four-module learning journey', async ({ pag
     }
   }
   expect(errors).toEqual([]);
+});
+
+test('repainting practice fetches completed real bars and keeps confirmation after the pivot', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/');
+  await page.getByRole('textbox', { name: '搜索 概念 / 公式 / 关键词' }).fill('重画');
+  const card = page.locator('.ax-kb-card').filter({ hasText: 'ZigZag、分形和部分自动形态会重画或延迟确认' });
+  await expect(card).toHaveCount(1, { timeout: 30_000 });
+  await card.getByRole('button', { name: '在数据探索中实践' }).click();
+  await expect(page.getByRole('heading', { name: '数据探索' })).toBeVisible();
+  await expect(page.getByLabel('概念实践')).toContainText('ZigZag、分形和部分自动形态会重画或延迟确认');
+  await expect(page.locator('.ax-practice-inputs')).toHaveCount(0);
+
+  await page.getByRole('button', { name: '数据源', exact: true }).click();
+  await page.getByRole('option', { name: '加密货币 · Binance' }).click();
+  const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+  const requestPromise = page.waitForRequest(request => request.url().includes('/api/practice') && request.method() === 'POST');
+  await page.getByRole('button', { name: '运行实践' }).click();
+  const [request, response] = await Promise.all([requestPromise, responsePromise]);
+  const body = request.postDataJSON() as { concept_id: string; source: string; bars?: unknown; inputs: unknown };
+  expect(body.concept_id).toBe('book_pitfall_repainting');
+  expect(body.source).toBe('binance');
+  expect(body.bars).toBeUndefined();
+  expect(body.inputs).toEqual({});
+  expect(response.ok(), await response.text()).toBe(true);
+  const payload = await response.json();
+  expect(payload.provenance).toBe('provided_market_bars');
+  expect(payload.context).toBe('selected_dataset');
+  expect(payload.bar_origin).toBe('server_fetched_completed_source_bars');
+  expect(payload.bars.length).toBeGreaterThan(40);
+  expect(payload.bars.every((bar: { timestamp: string }) => new Date(bar.timestamp).getTime() <= Date.now())).toBe(true);
+  const series = Object.fromEntries(payload.series.map((item: { name: string; values: Array<number | null> }) => [item.name, item.values]));
+  const confirmedHigh = series.confirmed_pivot_high as Array<number | null>;
+  const confirmedLow = series.confirmed_pivot_low as Array<number | null>;
+  const occurrenceHigh = series.pivot_high_occurrence as Array<number | null>;
+  const occurrenceLow = series.pivot_low_occurrence as Array<number | null>;
+  const delay = series.confirmation_delay_bars as Array<number | null>;
+  const confirmations = [
+    { confirmed: confirmedHigh, occurrence: occurrenceHigh },
+    { confirmed: confirmedLow, occurrence: occurrenceLow },
+  ];
+  let confirmationCount = 0;
+  for (const { confirmed, occurrence } of confirmations) {
+    for (const index of confirmed.map((value, index) => value == null ? -1 : index).filter(index => index >= 0)) {
+      confirmationCount += 1;
+      expect(index).toBeGreaterThanOrEqual(2);
+      expect(occurrence[index - 2]).not.toBeNull();
+      expect(confirmed[index - 2]).toBeNull();
+      expect(delay[index]).toBe(2);
+    }
+  }
+  expect(confirmationCount).toBeGreaterThan(0);
+  await expect(page.locator('.ax-practice-result')).toContainText('服务器重新获取并过滤已收盘行情');
+  await expect.poll(() => page.locator('.ax-practice-result circle[data-series-marker]').count()).toBeGreaterThan(0);
+  await expect.poll(() => page.locator('.ax-practice-result circle[data-series-marker="pivot_high_occurrence"], .ax-practice-result circle[data-series-marker="pivot_low_occurrence"]').count()).toBeGreaterThan(0);
+  await expect(page.locator('.ax-practice-result')).toContainText('t+2');
 });
 
 test('every rendered knowledge card opens one meaningful SVG illustration without retaining hidden charts', async ({ page }) => {

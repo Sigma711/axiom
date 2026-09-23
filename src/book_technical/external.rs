@@ -458,16 +458,6 @@ pub(super) fn evaluate(id: &str, v: &Value, o: &mut Output) -> Result<(), String
                 boolean(v, "is_closed")?,
             );
         }
-        "pitfall_repainting" => {
-            let pivot = index(v, "pivot_index")?;
-            let confirmed = index(v, "confirmation_index")?;
-            let decision = index(v, "decision_index")?;
-            if confirmed < pivot {
-                return Err("确认不能早于事件".into());
-            }
-            o.number("confirmation_delay", (confirmed - pivot) as f64, "bars");
-            o.flag("known_at_decision", confirmed <= decision);
-        }
         "pitfall_adjustment" => {
             let p = positive(v, "previous_price")?;
             let c = positive(v, "current_price")?;
