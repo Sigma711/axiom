@@ -434,3 +434,63 @@ test('annualized volatility binds its calculation and annualization to the selec
     await expect(panel).toContainText('年化比例（小数）');
   }
 });
+
+
+test('RVAT uses completed Binance UTC-hour prefixes without editable observations', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto('/data?concept=book_relative_volume_at_time&source=binance');
+  await page.getByRole('button', { name: '加载数据' }).click();
+  const panel = page.getByLabel('概念实践');
+  await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+  const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  const response = await responsePromise;
+  expect(response.ok(), await response.text()).toBe(true);
+  const request = response.request().postDataJSON();
+  const payload = await response.json();
+  expect(payload.provenance).toBe('provided_market_bars');
+  expect(payload.values.historical_sample_count).toBe(7);
+  expect(payload.notes.join(' ')).toContain('Binance 1小时已收盘K线');
+  const bars = request.bars as { timestamp: string; volume: number }[];
+  const cutoff = new Date(bars.at(-1)!.timestamp).getUTCHours();
+  const needed = 7 * 24 + cutoff + 1;
+  const observed = bars.slice(-needed);
+  expect(observed).toHaveLength(needed);
+  for (let index = 1; index < observed.length; index += 1) {
+    expect(Date.parse(observed[index].timestamp) - Date.parse(observed[index - 1].timestamp)).toBe(3_600_000);
+  }
+  const history = Array.from({ length: 7 }, (_, day) =>
+    observed.slice(day * 24, day * 24 + cutoff + 1).reduce((sum, bar) => sum + bar.volume, 0));
+  const current = observed.slice(7 * 24).reduce((sum, bar) => sum + bar.volume, 0);
+  const expected = current / (history.reduce((sum, value) => sum + value, 0) / 7);
+  expect(payload.values.current_cumulative_volume).toBeCloseTo(current, 10);
+  expect(payload.values.relative_volume_at_time).toBeCloseTo(expected, 10);
+  expect(request.inputs).toEqual({});
+});
+
+
+test('nonstandard OHLC4 practice uses observed candles and separates synthetic from executable price', async ({ page }) => {
+  test.setTimeout(120_000);
+  for (const source of ['binance', 'a_share', 'us_stock']) {
+    await page.goto(`/data?concept=book_nonstandard_bar&source=${source}`);
+    await page.getByRole('button', { name: '加载数据' }).click();
+    await expect(page.locator('.ax-chart svg.main-svg').first()).toBeVisible({ timeout: 30_000 });
+    const panel = page.getByLabel('概念实践');
+    await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+    const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+    await panel.getByRole('button', { name: '运行实践' }).click();
+    const response = await responsePromise;
+    expect(response.ok(), await response.text()).toBe(true);
+    const request = response.request().postDataJSON();
+    expect(request.source).toBe(source);
+    expect(request.inputs).toEqual({});
+    const last = (request.bars as Array<{ open: number; high: number; low: number; close: number }>).at(-1)!;
+    const expected = (last.open + last.high + last.low + last.close) / 4;
+    const payload = await response.json();
+    expect(payload.provenance).toBe('provided_market_bars');
+    expect(payload.values.book_nonstandard_bar).toBeCloseTo(expected, 10);
+    expect(payload.values.actual_close).toBeCloseTo(last.close, 10);
+    expect(payload.values.synthetic_minus_close).toBeCloseTo(expected - last.close, 10);
+    expect(JSON.stringify(payload.notes)).toContain('不可作为成交价');
+  }
+});

@@ -1,4 +1,5 @@
 use super::*;
+use chrono::Timelike;
 pub(super) fn evaluate(
     id: &str,
     b: &[Bar],
@@ -21,6 +22,38 @@ pub(super) fn evaluate(
         };
     }
     match id {
+        "relative_volume_at_time" => {
+            let end = b.last().ok_or("需要已收盘1小时K线")?;
+            let cutoff = end.timestamp.hour();
+            let day = end.timestamp.date_naive();
+            let mut sums = std::collections::BTreeMap::<chrono::NaiveDate, f64>::new();
+            for bar in b
+                .iter()
+                .filter(|bar| bar.timestamp.date_naive() <= day && bar.timestamp.hour() <= cutoff)
+            {
+                *sums.entry(bar.timestamp.date_naive()).or_default() += bar.volume;
+            }
+            let current = sums.remove(&day).unwrap_or(0.0);
+            let history: Vec<_> = sums.into_iter().filter(|(date, _)| *date < day).collect();
+            if history.len() < 7 {
+                o.value(id, None, "ratio", "需要过去7个完整UTC日的同截止小时累计量");
+                return Ok(());
+            }
+            let samples = &history[history.len() - 7..];
+            let average = samples.iter().map(|(_, sum)| sum).sum::<f64>() / samples.len() as f64;
+            let ratio = div(current, average);
+            o.value(id, ratio, "ratio", "历史同期累计量均值为零");
+            if ratio.is_some() {
+                o.number("current_cumulative_volume", current, "volume");
+                o.number("historical_sample_count", samples.len() as f64, "days");
+            }
+            let dates = samples
+                .iter()
+                .map(|(date, _)| date.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            o.note(&format!("Binance 1小时已收盘K线；累计窗口UTC {} 00:00至{}（含最后一根 {:02}:00 开盘小时K线）；当前累计量 ÷ 历史完整日 [{}] 同窗口累计量均值（7日）。", day, end.timestamp + chrono::Duration::hours(1), cutoff, dates));
+        }
         "annualized_volatility" => {
             let Some(basis) = annualization else {
                 o.value(id, None, "annual fraction", "需要已验证市场来源的年化口径");

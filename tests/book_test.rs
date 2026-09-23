@@ -107,7 +107,10 @@ fn every_book_catalog_default_is_executable_and_all_inputs_are_described() {
                 input.key
             );
         }
-        let bars = if concept.id == "book_log_return" {
+        let bars = if matches!(
+            concept.id.as_str(),
+            "book_log_return" | "book_nonstandard_bar"
+        ) {
             closed_bars(&[100.0, 110.0])
         } else {
             Vec::new()
@@ -262,4 +265,56 @@ fn all_foundation_lessons_have_specific_examples_and_matching_catalog_entries() 
             entry.id
         );
     }
+}
+
+#[test]
+fn nonstandard_bar_ohlc4_is_a_synthetic_display_price_not_an_execution_price() {
+    // Worked independently: (100 + 109 + 99 + 106) / 4 = 103.5.
+    let synthetic = book::nonstandard_bar_ohlc4(100.0, 109.0, 99.0, 106.0).unwrap();
+    assert!((synthetic - 103.5).abs() < 1e-12);
+    assert_ne!(
+        synthetic, 106.0,
+        "OHLC4 must not be presented as the actual close"
+    );
+}
+
+#[test]
+fn nonstandard_bar_ohlc4_rejects_invalid_ohlc_before_computing() {
+    for (open, high, low, close) in [
+        (100.0, 99.0, 98.0, 101.0),   // high is below close
+        (100.0, 110.0, 101.0, 105.0), // low is above open
+        (0.0, 10.0, 1.0, 5.0),        // non-positive open
+        (100.0, f64::NAN, 99.0, 105.0),
+        (100.0, f64::INFINITY, 99.0, 105.0),
+        (f64::MAX, f64::MAX, f64::MAX, f64::MAX), // would overflow the sum
+    ] {
+        assert!(
+            book::nonstandard_bar_ohlc4(open, high, low, close).is_err(),
+            "invalid OHLC was accepted: {open}, {high}, {low}, {close}"
+        );
+    }
+}
+
+#[test]
+fn nonstandard_bar_practice_reuses_the_validated_ohlc4_calculation() {
+    let mut bars = closed_bars(&[90.0, 106.0]);
+    bars[1].open = 100.0;
+    bars[1].high = 109.0;
+    bars[1].low = 99.0;
+    let result = book::evaluate("book_nonstandard_bar", &bars, &json!({})).unwrap();
+    assert_eq!(result["input_kind"], "market_bars");
+    assert_eq!(result["provenance"], "provided_market_bars");
+    assert_eq!(
+        result["values"]["book_nonstandard_bar"].as_f64(),
+        Some(103.5)
+    );
+    assert_eq!(result["values"]["actual_close"].as_f64(), Some(106.0));
+    assert_eq!(
+        result["values"]["synthetic_minus_close"].as_f64(),
+        Some(-2.5)
+    );
+    assert!(book::evaluate("book_nonstandard_bar", &[], &json!({})).is_err());
+    assert!(book::evaluate("book_nonstandard_bar", &bars, &json!({"open":100.0})).is_err());
+    bars[1].high = 101.0;
+    assert!(book::evaluate("book_nonstandard_bar", &bars, &json!({})).is_err());
 }

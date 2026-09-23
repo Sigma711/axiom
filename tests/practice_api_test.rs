@@ -801,3 +801,98 @@ async fn book_r_squared_uses_verified_same_period_equity_and_market_returns() {
         assert_eq!(status, StatusCode::BAD_REQUEST);
     }
 }
+
+#[tokio::test]
+async fn relative_volume_at_time_uses_only_matching_utc_hour_prefixes() {
+    use axiom::types::Bar;
+    let app = app();
+    let start = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+    let bars: Vec<Bar> = (0..8 * 24)
+        .map(|index| Bar {
+            timestamp: start + chrono::Duration::hours(index),
+            open: 100.0,
+            high: 100.0,
+            low: 100.0,
+            close: 100.0,
+            volume: (index / 24 + 1) as f64,
+        })
+        .collect();
+    let body = |bars: Vec<Bar>| json!({"concept_id":"book_relative_volume_at_time","module":"data","symbol":"BTCUSDT","source":"binance","bars":bars,"inputs":{}});
+    let (status, out) = request(&app, "/api/practice", body(bars.clone())).await;
+    assert_eq!(status, StatusCode::OK, "{out}");
+    assert_eq!(out["provenance"], "provided_market_bars");
+    assert_eq!(out["values"]["historical_sample_count"], 7.0);
+    assert_eq!(out["values"]["relative_volume_at_time"], 2.0);
+    assert!(out["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(
+            |note| note.as_str().is_some_and(|text| text.contains("2024-01-01")
+                && text.contains("2024-01-07")
+                && text.contains("2024-01-09"))
+        ));
+    let mut older_gap = vec![
+        Bar {
+            timestamp: start - chrono::Duration::hours(10),
+            ..bars[0]
+        },
+        Bar {
+            timestamp: start - chrono::Duration::hours(8),
+            ..bars[0]
+        },
+    ];
+    older_gap.extend(bars.clone());
+    let (status, out) = request(&app, "/api/practice", body(older_gap)).await;
+    assert_eq!(status, StatusCode::OK, "{out}");
+    assert_eq!(out["values"]["relative_volume_at_time"], 2.0);
+    let mut no_history_volume = bars.clone();
+    for bar in &mut no_history_volume[..7 * 24] {
+        bar.volume = 0.0;
+    }
+    let (status, undefined) = request(&app, "/api/practice", body(no_history_volume)).await;
+    assert_eq!(status, StatusCode::OK, "{undefined}");
+    assert_eq!(undefined["status"], "undefined");
+    assert!(undefined["values"]["relative_volume_at_time"].is_null());
+    assert!(undefined["reason"].as_str().unwrap().contains("均值为零"));
+    let mut manual = body(bars.clone());
+    manual["inputs"] = json!({"current_cumulative_volume": 999.0});
+    let (status, _) = request(&app, "/api/practice", manual).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let mut wrong_market = body(bars.clone());
+    wrong_market["source"] = json!("a_share");
+    wrong_market["symbol"] = json!("600519");
+    let (status, _) = request(&app, "/api/practice", wrong_market).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let mut missing = bars;
+    missing.remove(24 * 3 + 5);
+    let (status, _) = request(&app, "/api/practice", body(missing)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn nonstandard_bar_compares_observed_ohlc4_with_actual_close_without_manual_prices() {
+    use axiom::types::Bar;
+    let app = app();
+    let bars = vec![Bar {
+        timestamp: Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+        open: 100.0,
+        high: 109.0,
+        low: 99.0,
+        close: 106.0,
+        volume: 10.0,
+    }];
+    let body = |inputs: Value| json!({"concept_id":"book_nonstandard_bar","module":"data","symbol":"BTCUSDT","source":"binance","bars":bars,"inputs":inputs});
+    let (status, output) = request(&app, "/api/practice", body(json!({}))).await;
+    assert_eq!(status, StatusCode::OK, "{output}");
+    assert_eq!(output["provenance"], "provided_market_bars");
+    assert_eq!(output["values"]["book_nonstandard_bar"], 103.5);
+    assert_eq!(output["units"]["book_nonstandard_bar"], "price");
+    assert_eq!(output["values"]["actual_close"], 106.0);
+    assert_eq!(output["values"]["synthetic_minus_close"], -2.5);
+    assert!(output["notes"].as_array().unwrap().iter().any(|note| note
+        .as_str()
+        .is_some_and(|text| text.contains("不可作为成交价"))));
+    let (status, _) = request(&app, "/api/practice", body(json!({"open":100.0}))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}

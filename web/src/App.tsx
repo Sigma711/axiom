@@ -22,6 +22,8 @@ const PRACTICE_MODULE_LABELS: Record<PracticeModule, string> = { data: '数据�
 
 const CHINESE_FIELDS: Record<string, string> = {
   price: '价格', close: '收盘价', open: '开盘价', high: '最高价', low: '最低价', volume: '成交量', hourly_volume: '每小时成交量', rolling_24h_volume: '滚动 24 小时成交量', book_log_return: '最近一根 K 线对数收益率',
+  book_relative_volume_at_time: '同一时点相对成交量', current_cumulative_volume: '当日截至该小时累计量', historical_sample_count: '历史完整日样本数',
+  book_nonstandard_bar: 'OHLC4 合成展示价', actual_close: '真实收盘价', synthetic_minus_close: '合成价与真实收盘价之差',
   period: '周期', fast: '快线周期', slow: '慢线周期', signal: '信号周期', multiplier: '倍数',
   returns: '收益率序列', equity: '净值序列', elapsed_days: '经过天数', periods_per_year: '每年期数', annualized_volatility: '年化波动率',
   rsi: '相对强弱指标', value: '计算值', mean: '均值', stddev: '标准差', correlation: '相关系数',

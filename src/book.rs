@@ -560,12 +560,7 @@ fn extra_inputs(id: &str) -> Option<Vec<(&'static str, &'static str, f64)>> {
             ("adjustment_factor", "复权因子", 1.2),
         ],
         "book_log_return" => vec![],
-        "book_nonstandard_bar" => vec![
-            ("open", "开盘价（元）", 100.),
-            ("high", "最高价（元）", 109.),
-            ("low", "最低价（元）", 99.),
-            ("close", "收盘价（元）", 106.),
-        ],
+        "book_nonstandard_bar" => vec![],
         "book_dcf" => vec![
             ("year1_fcf", "第1年自由现金流（元）", 100.),
             ("year2_fcf", "第2年自由现金流（元）", 110.),
@@ -885,7 +880,7 @@ pub fn catalog() -> Vec<crate::practice::PracticeConcept> {
         })
         .collect();
     for (id, name, formula) in EXTRA {
-        let market_bars = *id == "book_log_return";
+        let market_bars = matches!(*id, "book_log_return" | "book_nonstandard_bar");
         let fs = extra_inputs(id)
             .expect("registered extra inputs")
             .into_iter()
@@ -905,7 +900,9 @@ pub fn catalog() -> Vec<crate::practice::PracticeConcept> {
                 "independent_inputs".into()
             },
             inputs: fs,
-            notes: if market_bars {
+            notes: if *id == "book_nonstandard_bar" {
+                format!("{}；使用最近一根已收盘真实K线的OHLC计算合成展示价；实际收盘价单独给出，合成价不可作为成交价。", formula)
+            } else if market_bars {
                 format!(
                     "{}；使用最近两根有序、已收盘OHLCV K线的收盘价计算。",
                     formula
@@ -952,6 +949,31 @@ fn log_return_bars(bars: &[Bar]) -> Result<&[Bar], String> {
     }
     Ok(bars)
 }
+/// Computes the OHLC4 synthetic display price used by non-standard charts.
+///
+/// The result is `(open + high + low + close) / 4`. It is not a tradable
+/// quote or a replacement for the bar's actual close. Callers that need a
+/// market observation must first choose a completed source bar.
+pub fn nonstandard_bar_ohlc4(open: f64, high: f64, low: f64, close: f64) -> Result<f64, String> {
+    if ![open, high, low, close]
+        .iter()
+        .all(|value| value.is_finite())
+    {
+        return Err("OHLC 必须都是有限数值".into());
+    }
+    if open <= 0.0 || low <= 0.0 || close <= 0.0 {
+        return Err("OHLC 的开盘、最低和收盘价必须为正数".into());
+    }
+    if high < open.max(close) || low > open.min(close) {
+        return Err("OHLC 不满足 low ≤ open/close ≤ high".into());
+    }
+    let value = (open + high + low + close) / 4.0;
+    value
+        .is_finite()
+        .then_some(value)
+        .ok_or_else(|| "OHLC4 合成值超出可表示范围".into())
+}
+
 pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String> {
     let supplied = inputs.as_object().ok_or("inputs 必须是对象")?;
     let definition = catalog()
@@ -1120,7 +1142,14 @@ pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String>
             let bars = log_return_bars(bars)?;
             (bars[bars.len() - 1].close / bars[bars.len() - 2].close).ln()
         }
-        "book_nonstandard_bar" => (n("open")? + n("high")? + n("low")? + n("close")?) / 4.0,
+        "book_nonstandard_bar" => {
+            crate::practice::validate_bars(bars)?;
+            let bar = bars.last().ok_or("需要至少一根已收盘的真实OHLCV K线")?;
+            if bar.timestamp > Utc::now() {
+                return Err("K线时间在未来，不能视为已收盘".into());
+            }
+            nonstandard_bar_ohlc4(bar.open, bar.high, bar.low, bar.close)?
+        }
         "book_dcf" => {
             let r = n("discount_rate")?;
             if r <= -1.0 {
@@ -1155,9 +1184,16 @@ pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String>
     if !value.is_finite() {
         return Err("结果超出有限数值范围，请检查输入量级".into());
     }
-    Ok(
-        json!({"concept_id":id,"input_kind":if id == "book_log_return" {"market_bars"} else {"independent_inputs"},"provenance":if id == "book_log_return" {"provided_market_bars"} else {"explicit_inputs"},"status":"computed","reason":null,"values":{id:value},"units":{id:unit(id)},"series":[],"notes":[if id == "book_log_return" {"仅使用最近两根有序、已收盘OHLCV K线的收盘价；不使用手填价格或未来K线。"} else {"同一报告期口径；分母为零时拒绝计算。"}],"inputs":merged}),
-    )
+    let market_bars = matches!(id, "book_log_return" | "book_nonstandard_bar");
+    let mut result = json!({"concept_id":id,"input_kind":if market_bars {"market_bars"} else {"independent_inputs"},"provenance":if market_bars {"provided_market_bars"} else {"explicit_inputs"},"status":"computed","reason":null,"values":{id:value},"units":{id:unit(id)},"series":[],"notes":[if id == "book_log_return" {"仅使用最近两根有序、已收盘OHLCV K线的收盘价；不使用手填价格或未来K线。"} else if id == "book_nonstandard_bar" {"OHLC4 是已收盘真实K线的合成展示价；同时列出实际收盘价，合成价不可作为成交价。"} else {"同一报告期口径；分母为零时拒绝计算。"}],"inputs":merged});
+    if id == "book_nonstandard_bar" {
+        let actual_close = bars.last().unwrap().close;
+        result["values"]["actual_close"] = json!(actual_close);
+        result["values"]["synthetic_minus_close"] = json!(value - actual_close);
+        result["units"]["actual_close"] = json!(unit(id));
+        result["units"]["synthetic_minus_close"] = json!(unit(id));
+    }
+    Ok(result)
 }
 
 fn unit(id: &str) -> &'static str {
@@ -1194,7 +1230,8 @@ fn unit(id: &str) -> &'static str {
         | "book_platform_gmv"
         | "book_industrial_backlog" => "元",
         "book_period" => "秒",
-        "book_adjustment" | "book_nonstandard_bar" | "book_diluted_shares" => "元/股",
+        "book_nonstandard_bar" => "price",
+        "book_adjustment" | "book_diluted_shares" => "元/股",
         "book_internet_arpu" | "book_telecom_arpu" => "元/用户",
         "book_semiconductor_asp" => "元/颗",
         "book_energy_lifting_cost" => "元/产量单位",

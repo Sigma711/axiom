@@ -61,12 +61,17 @@ fn every_published_concept_resolves_to_an_actual_implementation_branch() {
         match code_links::for_concept(&e.id) {
             Some(location) => {
                 assert!(location.line > 0 && location.end_line >= location.line);
-                assert!(
-                    matches!(location.kind.as_str(), "match_arm" | "conditional"),
-                    "{} {:?}",
-                    e.id,
-                    location
-                );
+                if e.id == "book_nonstandard_bar" {
+                    assert_eq!(location.kind, "function");
+                    assert_eq!(location.code_ref, "src/book.rs::nonstandard_bar_ohlc4");
+                } else {
+                    assert!(
+                        matches!(location.kind.as_str(), "match_arm" | "conditional"),
+                        "{} {:?}",
+                        e.id,
+                        location
+                    );
+                }
                 let text = code_links::excerpt(&location).unwrap();
                 assert!(!text.trim().is_empty());
                 if location.dirty {

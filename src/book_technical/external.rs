@@ -556,16 +556,6 @@ pub(super) fn evaluate(id: &str, v: &Value, o: &mut Output) -> Result<(), String
                 "volume",
             );
         }
-        "relative_volume_at_time" => {
-            let current = nonnegative(v, "current_cumulative_volume")?;
-            let hist = a("historical_same_time_volume")?;
-            o.value(
-                id,
-                mean(&hist).and_then(|m| div(current, m)),
-                "ratio",
-                "同期历史均量为零或无样本",
-            );
-        }
         "rob_booker_adx" | "knoxville" | "missed_pivots" | "booker_reversal" | "ghost_pivots" => {
             let signal = a("signal_indices")?;
             let confirm = a("confirmed_indices")?;

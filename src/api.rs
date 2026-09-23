@@ -1481,6 +1481,8 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
             "source_policy":"real_required",
             "goal":"只用所选A股中有序的最近两根已收盘日线：以前一根日线高低收计算最后一根已收盘日线所属交易时段的CDP、AH、AL、NH、NL；不把它标为当前自然日，不接受手填价格或小时K线。"
         })
+    } else if concept.id == "book_relative_volume_at_time" {
+        json!({"markets":["crypto"],"modules":["data"],"required_datasets":["continuous_completed_binance_1h_ohlcv","seven_complete_utc_history_days"],"source_policy":"real_required","goal":"以最后完整UTC小时为截止，累计当日量并与过去7个完整UTC日同一截止小时累计量均值比较；不接受手填观测量。"})
     } else if concept.id == "book_volume_24h" {
         json!({
             "markets":["crypto"],
@@ -1633,6 +1635,33 @@ fn practice_bars_are_closed(bars: &[Bar], source: &str) -> Result<(), ApiError> 
     {
         return Err(validate::bad(
             "practice bars include an unfinished or future market candle",
+        ));
+    }
+    Ok(())
+}
+
+fn relative_volume_requires_continuous_binance_hours(
+    bars: &[Bar],
+    source: &str,
+) -> Result<(), ApiError> {
+    if !matches!(source, "binance" | "real") {
+        return Err(validate::bad("RVAT requires Binance 1-hour bars"));
+    }
+    let end = bars
+        .last()
+        .ok_or_else(|| validate::bad("RVAT needs bars"))?;
+    let needed = 7 * 24 + end.timestamp.hour() as usize + 1;
+    if bars.len() < needed {
+        return Err(validate::bad("RVAT needs seven complete UTC history days plus the current UTC day through its cutoff hour"));
+    }
+    let suffix = &bars[bars.len() - needed..];
+    if suffix[0].timestamp != end.timestamp - Duration::hours((needed - 1) as i64)
+        || suffix
+            .windows(2)
+            .any(|p| p[1].timestamp - p[0].timestamp != Duration::hours(1))
+    {
+        return Err(validate::bad(
+            "RVAT requires continuous Binance 1-hour bars in its seven-day UTC comparison window",
         ));
     }
     Ok(())
@@ -1911,6 +1940,9 @@ async fn post_practice(
     }
     if concept.id == "book_cdp" {
         cdp_requires_daily_a_share_bars(&bars)?;
+    }
+    if concept.id == "book_relative_volume_at_time" {
+        relative_volume_requires_continuous_binance_hours(&bars, &source)?;
     }
     let annualization = if concept.id == "book_annualized_volatility" {
         annualized_volatility_requires_source_cadence(&bars, &source)?;

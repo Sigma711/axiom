@@ -1458,18 +1458,11 @@
     {
       "id": "book_relative_volume_at_time",
       "name": "Relative Volume at Time",
-      "summary": "只比较相同交易时刻的累计量，避免把早盘和全天混比。",
+      "summary": "Binance 已收盘1小时线：从UTC 00:00累计至最后完整小时，与过去7个完整日同一截止小时的累计量均值比较。",
       "example": "今天10点量250、历日同刻均量100，RVAT=2.5。",
       "formula": "",
-      "input_kind": "independent_inputs",
-      "defaults": {
-        "current_cumulative_volume": 250.0,
-        "historical_same_time_volume": [
-          90,
-          100,
-          110
-        ]
-      },
+      "input_kind": "market_bars",
+      "defaults": {},
       "source_ids": [
         "appendix_028"
       ]
