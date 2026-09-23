@@ -855,3 +855,51 @@ test('trade-volume practice keeps exact Binance base and quote volumes in separa
   expect(mobileChart.content).toBeGreaterThan(mobileChart.viewport);
   expect(mobileChart.svg).toBeGreaterThanOrEqual(700);
 });
+
+test('aggressor-side and CVD practices preserve exact Binance classifications and their 24-hour window', async ({ page }) => {
+  test.setTimeout(180_000);
+  for (const [name, conceptId] of [
+    ['内盘 / 外盘', 'inside_outside'],
+    ['订单流分类', 'book_order_flow'],
+    ['CVD 累计成交量差', 'cvd'],
+  ] as const) {
+    await page.goto('/');
+    await page.getByRole('textbox', { name: '搜索 概念 / 公式 / 关键词' }).fill(name);
+    const card = page.locator('.ax-kb-card').filter({ hasText: name });
+    await expect(card).toHaveCount(1, { timeout: 30_000 });
+    await card.getByRole('button', { name: '在数据探索中实践' }).click();
+    const panel = page.getByLabel('概念实践');
+    await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+    const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+    const requestPromise = page.waitForRequest(request => request.url().includes('/api/practice') && request.method() === 'POST');
+    await panel.getByRole('button', { name: '运行实践' }).click();
+    const [request, response] = await Promise.all([requestPromise, responsePromise]);
+    expect(request.postDataJSON()).toMatchObject({ concept_id: conceptId, source: 'binance', inputs: {} });
+    expect(request.postDataJSON().bars).toBeUndefined();
+    expect(response.ok(), await response.text()).toBe(true);
+    const result = await response.json();
+    expect(result.bar_origin).toBe('server_fetched_completed_binance_usdt_spot_1h_klines');
+    expect(result.asset_units).toEqual({ base_asset: 'BTC', quote_asset: 'USDT' });
+    expect(result.bars).toHaveLength(24);
+    for (const bar of result.bars) {
+      expect(bar.taker_buy_base_volume + bar.taker_sell_base_volume).toBeCloseTo(bar.total_base_volume, 8);
+      expect(bar.taker_buy_quote_volume + bar.taker_sell_quote_volume).toBeCloseTo(bar.total_quote_volume, 6);
+      expect(bar.total_base_volume).toBe(bar.volume);
+    }
+    await expect(panel.locator('.ax-flow-chart svg')).toBeVisible();
+    if (conceptId !== 'cvd') await expect(panel).toContainText('这不是 A 股内外盘的等价数据');
+    if (conceptId === 'cvd') {
+      const cumulative = result.series.find((series: { name: string }) => series.name === 'cvd_base').values;
+      let prefix = 0;
+      result.bars.forEach((bar: { taker_buy_base_volume: number; taker_sell_base_volume: number }, index: number) => {
+        prefix += bar.taker_buy_base_volume - bar.taker_sell_base_volume;
+        expect(cumulative[index]).toBeCloseTo(prefix, 8);
+      });
+      await expect(panel).toContainText('不能把这里的数值称为全市场历史 CVD');
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobile = await page.locator('.ax-flow-chart').evaluate(element => ({ viewport: element.clientWidth, content: element.scrollWidth, svg: element.querySelector('svg')?.getBoundingClientRect().width || 0 }));
+  expect(mobile.content).toBeGreaterThan(mobile.viewport);
+  expect(mobile.svg).toBeGreaterThanOrEqual(700);
+});

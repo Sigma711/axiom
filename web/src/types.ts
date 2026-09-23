@@ -130,10 +130,10 @@ export interface PracticeResult {
   status: 'computed' | 'undefined';
   reason: string | null;
   input_kind: PracticeConcept['input_kind'];
-  provenance: 'provided_market_bars' | 'provided_result_context' | 'editable_teaching_inputs' | 'server_fetched_provisional_snapshot';
+  provenance: 'provided_market_bars' | 'provided_result_context' | 'editable_teaching_inputs' | 'server_fetched_provisional_snapshot' | 'server_fetched_completed_binance_usdt_spot_1h_klines';
   values: Record<string, number | null>;
   units?: Record<string, string>;
-  series: Array<{ name: string; values: Array<number | null> }>;
+  series: Array<{ name: string; unit?: string; values: Array<number | null> }>;
   chart?: { kind: string; source?: string; input?: string; source_price?: 'close' | 'ohlc'; source_bar_count?: number; bars: Array<{ open: number; high: number; low: number; close: number; direction?: number; column?: number; line_style?: 'neutral' | 'yin' | 'yang'; switch_price?: number | null }> };
   notes: string[];
   module: string;
@@ -143,5 +143,5 @@ export interface PracticeResult {
   asset_units?: { base_asset: string; quote_asset: string };
   provisional_snapshot?: { candle: Bar; is_closed: false; fetched_at: string; expected_close_at: string; completion_evidence: string };
   context?: 'module_snapshot' | 'selected_dataset' | 'editable_teaching_inputs' | 'provided_result_context';
-  bar_origin?: 'server_fetched_completed_source_bars' | 'server_fetched_completed_binance_usdt_spot_bars' | 'server_fetched_binance_provisional_snapshot';
+  bar_origin?: 'server_fetched_completed_source_bars' | 'server_fetched_completed_binance_usdt_spot_bars' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_provisional_snapshot';
 }

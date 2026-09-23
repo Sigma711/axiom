@@ -109,10 +109,14 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
     ROUTES.get_or_init(|| {
         let mut out = BTreeMap::new();
         for c in crate::practice::base_catalog() {
-            let candidates = [
-                format!("src/practice/market.rs::evaluate::{}", c.id),
-                format!("src/practice/independent.rs::evaluate::{}", c.id),
-            ];
+            let candidates = if matches!(c.id.as_str(), "inside_outside" | "cvd") {
+                vec!["src/book.rs::market_binance_aggressor_summary".to_string()]
+            } else {
+                vec![
+                    format!("src/practice/market.rs::evaluate::{}", c.id),
+                    format!("src/practice/independent.rs::evaluate::{}", c.id),
+                ]
+            };
             if let Some(r) = first_existing(candidates) {
                 out.insert(c.id, r);
             }
@@ -146,6 +150,9 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
                 "book_period" => vec!["src/book.rs::market_period_summary".to_string()],
                 "book_trade_volume" => {
                     vec!["src/book.rs::market_trade_volume_summary".to_string()]
+                }
+                "book_order_flow" => {
+                    vec!["src/book.rs::market_binance_aggressor_summary".to_string()]
                 }
                 _ => vec![format!("src/book.rs::evaluate::{}", c.id)],
             };

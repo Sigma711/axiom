@@ -489,7 +489,11 @@ const EXTRA: &[(&str, &str, &str)] = &[
         "委比与委差",
         "委比=(买量-卖量)/(买量+卖量)",
     ),
-    ("book_order_flow", "订单流分类", "净流入=主动买入-主动卖出"),
+    (
+        "book_order_flow",
+        "订单流分类",
+        "主动成交额差=主动买入成交额-主动卖出成交额",
+    ),
     (
         "book_period",
         "K线周期",
@@ -555,10 +559,7 @@ fn extra_inputs(id: &str) -> Option<Vec<(&'static str, &'static str, f64)>> {
             ("bid_size", "委买数量（手）", 8000.),
             ("ask_size", "委卖数量（手）", 5000.),
         ],
-        "book_order_flow" => vec![
-            ("aggressive_buy_value", "主动买入额（元）", 60000.),
-            ("aggressive_sell_value", "主动卖出额（元）", 40000.),
-        ],
+        "book_order_flow" => vec![],
         "book_period" => vec![],
         "book_adjustment" => vec![
             ("raw_price", "原始价格（元）", 10.),
@@ -887,7 +888,11 @@ pub fn catalog() -> Vec<crate::practice::PracticeConcept> {
     for (id, name, formula) in EXTRA {
         let market_bars = matches!(
             *id,
-            "book_log_return" | "book_nonstandard_bar" | "book_period" | "book_trade_volume"
+            "book_log_return"
+                | "book_nonstandard_bar"
+                | "book_period"
+                | "book_trade_volume"
+                | "book_order_flow"
         );
         let fs = extra_inputs(id)
             .expect("registered extra inputs")
@@ -908,7 +913,9 @@ pub fn catalog() -> Vec<crate::practice::PracticeConcept> {
                 "independent_inputs".into()
             },
             inputs: fs,
-            notes: if *id == "book_trade_volume" {
+            notes: if *id == "book_order_flow" {
+                "只使用 Binance USDT 现货最近24根连续已收盘1小时K线；服务器直接读取字段5、7、9、10计算主动买卖成交量、成交额及差额。这是 Binance taker 主动买卖分类，非A股内外盘或资本净流入；不接受手填或客户端K线。".into()
+            } else if *id == "book_trade_volume" {
                 "只使用 Binance USDT 现货最近24根已收盘1小时K线；服务器直接读取字段5 base asset volume 与字段7 quote asset volume，不接受手填或客户端K线。".into()
             } else if *id == "book_nonstandard_bar" {
                 format!("{}；使用最近一根已收盘真实K线的OHLC计算合成展示价；实际收盘价单独给出，合成价不可作为成交价。", formula)
@@ -1101,6 +1108,7 @@ pub fn market_trade_volume_summary(
             || bar.volume < 0.0
             || trade_bar.quote_volume < 0.0
             || (bar.volume == 0.0) != (trade_bar.quote_volume == 0.0)
+            || (trade_bar.trade_count == 0) != (bar.volume == 0.0)
             || (index > 0 && bars[index - 1].bar.timestamp >= bar.timestamp)
             || (index > 0
                 && bars[index - 1].bar.timestamp + chrono::Duration::hours(1) != bar.timestamp)
@@ -1117,6 +1125,229 @@ pub fn market_trade_volume_summary(
     Ok(
         json!({"concept_id":"book_trade_volume","input_kind":"market_bars","provenance":"server_fetched_completed_source_bars","status":"computed","reason":null,"values":{"base_volume":base_values.last(),"quote_volume":quote_values.last(),"vwap":vwap},"asset_units":{"base_asset":base,"quote_asset":"USDT"},"units":{"base_volume":"base_asset","quote_volume":"quote_asset","vwap":"quote_asset_per_base","base_volume_series":"base_asset","quote_volume_series":"quote_asset"},"series":[{"name":"base_volume_series","values":base_values},{"name":"quote_volume_series","values":quote_values}],"notes":["Binance 现货1小时已收盘K线：成交量取字段5（base asset volume），成交额取字段7（quote asset volume），未用收盘价乘成交量替代。"],"inputs":{},"source_ids":["book_01_04","book_01_05"]}),
     )
+}
+
+/// Builds the three crypto order-flow lessons from one completed Binance Kline
+/// response. Binance calls fields 9 and 10 "taker buy"; their complements are
+/// seller-taker quantities, not A-share inside/outside volume or capital flow.
+pub fn market_binance_aggressor_summary(
+    concept_id: &str,
+    bars: &[crate::data::BinanceTradeBar],
+    symbol: &str,
+) -> Result<Value, String> {
+    let base = symbol
+        .strip_suffix("USDT")
+        .filter(|base| !base.is_empty())
+        .ok_or("仅支持USDT现货交易对")?;
+    if !matches!(concept_id, "inside_outside" | "book_order_flow" | "cvd") {
+        return Err("未知的 Binance 主动成交练习".into());
+    }
+    if bars.len() != 24 {
+        return Err("需要恰好24根连续已收盘1小时K线".into());
+    }
+
+    let mut buy_base = Vec::with_capacity(bars.len());
+    let mut sell_base = Vec::with_capacity(bars.len());
+    let mut buy_quote = Vec::with_capacity(bars.len());
+    let mut sell_quote = Vec::with_capacity(bars.len());
+    let mut rendered_bars = Vec::with_capacity(bars.len());
+    for (index, trade) in bars.iter().enumerate() {
+        let bar = &trade.bar;
+        if ![
+            bar.open,
+            bar.high,
+            bar.low,
+            bar.close,
+            bar.volume,
+            trade.quote_volume,
+            trade.taker_buy_base_volume,
+            trade.taker_buy_quote_volume,
+        ]
+        .iter()
+        .all(|value| value.is_finite())
+            || bar.open <= 0.0
+            || bar.high < bar.open.max(bar.close)
+            || bar.low <= 0.0
+            || bar.low > bar.open.min(bar.close)
+            || bar.volume < 0.0
+            || trade.quote_volume < 0.0
+            || trade.taker_buy_base_volume < 0.0
+            || trade.taker_buy_quote_volume < 0.0
+            || trade.taker_buy_base_volume > bar.volume
+            || trade.taker_buy_quote_volume > trade.quote_volume
+            || (bar.volume == 0.0) != (trade.quote_volume == 0.0)
+            || (trade.trade_count == 0) != (bar.volume == 0.0)
+            || (index > 0
+                && bars[index - 1].bar.timestamp + chrono::Duration::hours(1) != bar.timestamp)
+        {
+            return Err("Binance主动成交K线包含无效字段、超总量或非连续小时".into());
+        }
+        let seller_base = bar.volume - trade.taker_buy_base_volume;
+        let seller_quote = trade.quote_volume - trade.taker_buy_quote_volume;
+        if seller_base < 0.0 || seller_quote < 0.0 {
+            return Err("Binance主动成交互补量不能为负数".into());
+        }
+        buy_base.push(trade.taker_buy_base_volume);
+        sell_base.push(seller_base);
+        buy_quote.push(trade.taker_buy_quote_volume);
+        sell_quote.push(seller_quote);
+        rendered_bars.push(json!({
+            "timestamp":bar.timestamp, "open":bar.open, "high":bar.high, "low":bar.low,
+            "close":bar.close, "volume":bar.volume,
+            "total_base_volume":bar.volume, "total_quote_volume":trade.quote_volume,
+            "taker_buy_base_volume":trade.taker_buy_base_volume,
+            "taker_buy_quote_volume":trade.taker_buy_quote_volume,
+            "taker_sell_base_volume":seller_base,
+            "taker_sell_quote_volume":seller_quote
+        }));
+    }
+    let base_delta: Vec<f64> = buy_base
+        .iter()
+        .zip(&sell_base)
+        .map(|(buy, sell)| buy - sell)
+        .collect();
+    let quote_delta: Vec<f64> = buy_quote
+        .iter()
+        .zip(&sell_quote)
+        .map(|(buy, sell)| buy - sell)
+        .collect();
+    let checked_sum = |values: &[f64]| -> Result<f64, String> {
+        values.iter().try_fold(0.0, |sum, value| {
+            let total = sum + value;
+            total
+                .is_finite()
+                .then_some(total)
+                .ok_or_else(|| "成交量累计超出可表示范围".into())
+        })
+    };
+    let cumulative = |values: &[f64]| -> Result<Vec<f64>, String> {
+        let mut total = 0.0;
+        values
+            .iter()
+            .map(|value| {
+                total += value;
+                total
+                    .is_finite()
+                    .then_some(total)
+                    .ok_or_else(|| "CVD累计超出可表示范围".into())
+            })
+            .collect()
+    };
+    let latest = |values: &[f64]| {
+        values
+            .last()
+            .copied()
+            .ok_or_else(|| "缺少已收盘K线".to_string())
+    };
+    let notes = vec![
+        "数据来自 Binance USDT 现货最近24根连续已收盘1小时K线：字段5为总base成交量、字段7为总quote成交额、字段9/10为taker-buy成交量/额。".to_string(),
+        "主动卖出量/额按同单位总量减 taker-buy 计算；这是 Binance 主动买卖成交分类，非A股内外盘或资本净流入。".to_string(),
+    ];
+    let common = json!({
+        "concept_id":concept_id, "input_kind":"market_bars",
+        "provenance":"server_fetched_completed_binance_usdt_spot_1h_klines",
+        "status":"computed", "reason":null, "asset_units":{"base_asset":base,"quote_asset":"USDT"},
+        "bars":rendered_bars, "inputs":{}, "source_ids":["book_01_04","book_01_05"]
+    });
+    let mut out = common.as_object().cloned().expect("JSON object");
+    match concept_id {
+        "inside_outside" => {
+            out.insert(
+                "concept_scope".into(),
+                json!("cross_market_comparison_not_a_share_inside_outside"),
+            );
+            let mut values = serde_json::Map::new();
+            let mut units = serde_json::Map::new();
+            for (key, values_for_key, unit) in [
+                ("taker_buy_base_volume", &buy_base, "base units / 1h"),
+                ("taker_sell_base_volume", &sell_base, "base units / 1h"),
+                ("taker_buy_quote_volume", &buy_quote, "USDT / 1h"),
+                ("taker_sell_quote_volume", &sell_quote, "USDT / 1h"),
+                ("taker_base_imbalance", &base_delta, "base units / 1h"),
+                ("taker_quote_imbalance", &quote_delta, "USDT / 1h"),
+            ] {
+                values.insert(format!("latest_{key}"), json!(latest(values_for_key)?));
+                values.insert(format!("window_{key}"), json!(checked_sum(values_for_key)?));
+                units.insert(format!("latest_{key}"), json!(unit));
+                units.insert(format!("window_{key}"), json!(unit));
+            }
+            out.insert("values".into(), Value::Object(values));
+            out.insert("units".into(), Value::Object(units));
+            out.insert(
+                "series".into(),
+                json!([
+                    {"name":"taker_buy_base_volume","unit":"base units / 1h","values":buy_base},
+                    {"name":"taker_sell_base_volume","unit":"base units / 1h","values":sell_base},
+                    {"name":"taker_buy_quote_volume","unit":"USDT / 1h","values":buy_quote},
+                    {"name":"taker_sell_quote_volume","unit":"USDT / 1h","values":sell_quote},
+                    {"name":"taker_base_imbalance","unit":"base units / 1h","values":base_delta},
+                    {"name":"taker_quote_imbalance","unit":"USDT / 1h","values":quote_delta}
+                ]),
+            );
+            let mut comparison_notes = notes;
+            comparison_notes.push("本练习只将 Binance 的 taker 主动成交分类与原书内外盘概念作跨市场对照：它不使用买一/卖一成交价规则，不能声称复现A股内外盘。".into());
+            out.insert("notes".into(), json!(comparison_notes));
+        }
+        "book_order_flow" => {
+            let mut values = serde_json::Map::new();
+            let mut units = serde_json::Map::new();
+            for (key, values_for_key, unit) in [
+                ("aggressive_buy_base_volume", &buy_base, "base units / 1h"),
+                ("aggressive_sell_base_volume", &sell_base, "base units / 1h"),
+                ("aggressive_buy_quote_volume", &buy_quote, "USDT / 1h"),
+                ("aggressive_sell_quote_volume", &sell_quote, "USDT / 1h"),
+                ("aggressive_base_delta", &base_delta, "base units / 1h"),
+                ("aggressive_quote_delta", &quote_delta, "USDT / 1h"),
+            ] {
+                values.insert(format!("latest_{key}"), json!(latest(values_for_key)?));
+                values.insert(format!("window_{key}"), json!(checked_sum(values_for_key)?));
+                units.insert(format!("latest_{key}"), json!(unit));
+                units.insert(format!("window_{key}"), json!(unit));
+            }
+            out.insert("values".into(), Value::Object(values));
+            out.insert("units".into(), Value::Object(units));
+            out.insert("series".into(), json!([
+                {"name":"aggressive_buy_base_volume","unit":"base units / 1h","values":buy_base},
+                {"name":"aggressive_sell_base_volume","unit":"base units / 1h","values":sell_base},
+                {"name":"aggressive_buy_quote_volume","unit":"USDT / 1h","values":buy_quote},
+                {"name":"aggressive_sell_quote_volume","unit":"USDT / 1h","values":sell_quote},
+                {"name":"aggressive_base_delta","unit":"base units / 1h","values":base_delta},
+                {"name":"aggressive_quote_delta","unit":"USDT / 1h","values":quote_delta}
+            ]));
+            out.insert("notes".into(), json!(notes));
+        }
+        "cvd" => {
+            let cvd_base = cumulative(&base_delta)?;
+            let cvd_quote = cumulative(&quote_delta)?;
+            out.insert("values".into(), json!({
+                "latest_cvd_base":latest(&cvd_base)?, "latest_cvd_quote":latest(&cvd_quote)?,
+                "window_base_delta":checked_sum(&base_delta)?, "window_quote_delta":checked_sum(&quote_delta)?
+            }));
+            out.insert("units".into(), json!({
+                "latest_cvd_base":"base units (cumulative from 24h window start)",
+                "latest_cvd_quote":"USDT (cumulative from 24h window start)",
+                "window_base_delta":"base units / 24h window", "window_quote_delta":"USDT / 24h window"
+            }));
+            out.insert("series".into(), json!([
+                {"name":"base_delta","unit":"base units / 1h","values":base_delta},
+                {"name":"quote_delta","unit":"USDT / 1h","values":quote_delta},
+                {"name":"cvd_base","unit":"base units (cumulative from 24h window start)","values":cvd_base},
+                {"name":"cvd_quote","unit":"USDT (cumulative from 24h window start)","values":cvd_quote}
+            ]));
+            let mut cvd_notes = notes;
+            cvd_notes.push(
+                "CVD 从本24根窗口开始前的0累计；它不是历史全量CVD，也不能跨窗口直接比较绝对值。"
+                    .into(),
+            );
+            cvd_notes.push(
+                "价格横盘而CVD上升也可能是上方限价卖单吸收或成交分类误差；应结合后续价格与数据质量，不能单独作为交易结论。"
+                    .into(),
+            );
+            out.insert("notes".into(), json!(cvd_notes));
+        }
+        _ => unreachable!("validated concept id"),
+    }
+    Ok(Value::Object(out))
 }
 
 pub fn market_open_candle_summary(
@@ -1494,7 +1725,9 @@ pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String>
             n("bid_size")? - n("ask_size")?,
             n("bid_size")? + n("ask_size")?,
         )?,
-        "book_order_flow" => n("aggressive_buy_value")? - n("aggressive_sell_value")?,
+        "book_order_flow" => {
+            return Err("订单流必须由 API 使用 Binance 已收盘现货K线的主动成交字段计算".into())
+        }
         "book_period" => return Err("K线周期必须由 API 根据已验证真实来源和已收盘K线计算".into()),
         "book_adjustment" => n("raw_price")? * n("adjustment_factor")?,
         "book_log_return" => {

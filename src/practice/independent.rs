@@ -4,9 +4,6 @@ pub(super) fn defaults(id: &str) -> Option<Value> {
     Some(match id {
         "turnover_rate" => json!({"volume_shares":500000.0,"float_shares":10000000.0}),
         "bid_ask_spread" => json!({"bid":99.9,"ask":100.1}),
-        "inside_outside" => {
-            json!({"buyer_initiated_volume":6000.0,"seller_initiated_volume":4000.0})
-        }
         "eps" => {
             json!({"net_income":3000000.0,"preferred_dividends":0.0,"weighted_average_shares":1000000.0})
         }
@@ -67,7 +64,6 @@ pub(super) fn defaults(id: &str) -> Option<Value> {
         "elliott_wave" => {
             json!({"annotated_prices":[100.0,110.0,105.0,125.0,115.0,135.0],"direction":1.0})
         }
-        "cvd" => json!({"buy_volume":[100.0,150.0,90.0],"sell_volume":[80.0,100.0,110.0]}),
         "volume_profile" => {
             json!({"prices":[98.0,99.0,100.0,101.0,102.0],"volumes":[50.0,100.0,300.0,150.0,80.0],"value_area_fraction":0.7})
         }
@@ -189,14 +185,6 @@ pub(super) fn evaluate(id: &str, v: &Value, o: &mut Output) -> Result<(), String
             }
             o.number("spread", ask - bid, "price");
             ratio!("relative_spread", ask - bid, (ask + bid) / 2.0, "fraction");
-        }
-        "inside_outside" => {
-            let buy = nonnegative(v, "buyer_initiated_volume")?;
-            let sell = nonnegative(v, "seller_initiated_volume")?;
-            o.number("outside_buy_volume", buy, "shares/units");
-            o.number("inside_sell_volume", sell, "shares/units");
-            ratio!("aggressor_imbalance", buy - sell, buy + sell, "fraction");
-            o.note("必须使用逐笔主动成交分类，K 线涨跌不能替代内外盘。");
         }
         "eps" => ratio!(
             id,
@@ -625,25 +613,6 @@ pub(super) fn evaluate(id: &str, v: &Value, o: &mut Output) -> Result<(), String
             );
             o.flag("wave4_no_wave1_overlap", w[4] > w[1]);
             o.note("只校验用户人工标注的普通推动浪基本约束；不自动识别、不保证唯一数浪，终结楔形等例外不适用。");
-        }
-        "cvd" => {
-            let buy = a("buy_volume")?;
-            let sell = a("sell_volume")?;
-            paired(&buy, &sell)?;
-            nonnegative_array(&buy)?;
-            nonnegative_array(&sell)?;
-            let mut total = 0.0;
-            o.series(
-                id,
-                buy.iter()
-                    .zip(sell)
-                    .map(|(b, s)| {
-                        total += b - s;
-                        Some(total)
-                    })
-                    .collect(),
-                "aggressor volume",
-            );
         }
         "volume_profile" | "tpo" => {
             let prices = a("prices")?;

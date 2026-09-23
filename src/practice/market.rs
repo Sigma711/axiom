@@ -5,7 +5,9 @@ use crate::indicators::{
 pub(super) fn is_market(id: &str) -> bool {
     matches!(
         id,
-        "latest_price"
+        "inside_outside"
+            | "cvd"
+            | "latest_price"
             | "ohlc"
             | "amplitude"
             | "vwap_price"
@@ -111,6 +113,7 @@ pub(super) fn defaults(id: &str) -> Value {
         "pitfall_rsi" => json!({"period":14,"overbought":70.0,"oversold":30.0}),
         "pitfall_golden_cross" => json!({"fast":5,"slow":20}),
         "fibonacci_extension" => json!({"period":30,"extension_ratio":1.618}),
+        "inside_outside" | "cvd" => json!({}),
         "latest_price"
         | "ohlc"
         | "amplitude"
@@ -162,6 +165,9 @@ pub(super) fn evaluate(id: &str, b: &[Bar], v: &Value, o: &mut Output) -> Result
         };
     }
     match id {
+        "inside_outside" | "cvd" => {
+            return Err("该概念必须由 API 使用 Binance 已收盘现货K线的主动成交字段计算".into())
+        }
         "latest_price" => {
             o.number("latest_close", last.close, "price");
             let prev = b.get(n.wrapping_sub(2)).map(|x| x.close);

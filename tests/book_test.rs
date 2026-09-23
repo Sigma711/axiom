@@ -91,7 +91,10 @@ fn every_book_catalog_default_is_executable_and_all_inputs_are_described() {
     for concept in book::catalog() {
         // These concepts are source-bound: their contracts are exercised
         // through their dedicated market summaries and the API, not defaults.
-        if matches!(concept.id.as_str(), "book_period" | "book_trade_volume") {
+        if matches!(
+            concept.id.as_str(),
+            "book_period" | "book_trade_volume" | "book_order_flow"
+        ) {
             continue;
         }
         assert!(
@@ -525,6 +528,9 @@ fn trade_volume_summary_uses_exchange_quote_notional_and_keeps_zero_trade_vwap_n
                 volume: 10.0,
             },
             quote_volume: 1_017.0,
+            trade_count: 10,
+            taker_buy_base_volume: 6.0,
+            taker_buy_quote_volume: 610.2,
         },
         axiom::data::BinanceTradeBar {
             bar: Bar {
@@ -536,6 +542,9 @@ fn trade_volume_summary_uses_exchange_quote_notional_and_keeps_zero_trade_vwap_n
                 volume: 0.0,
             },
             quote_volume: 0.0,
+            trade_count: 0,
+            taker_buy_base_volume: 0.0,
+            taker_buy_quote_volume: 0.0,
         },
     ];
     let mut bars = bars;
@@ -551,6 +560,9 @@ fn trade_volume_summary_uses_exchange_quote_notional_and_keeps_zero_trade_vwap_n
                 volume: if zero_trade { 0.0 } else { 10.0 },
             },
             quote_volume: if zero_trade { 0.0 } else { 1_000.0 },
+            trade_count: if zero_trade { 0 } else { 10 },
+            taker_buy_base_volume: if zero_trade { 0.0 } else { 6.0 },
+            taker_buy_quote_volume: if zero_trade { 0.0 } else { 600.0 },
         });
     }
     let result = book::market_trade_volume_summary(&bars, "BTCUSDT").unwrap();
@@ -572,4 +584,8 @@ fn trade_volume_summary_uses_exchange_quote_notional_and_keeps_zero_trade_vwap_n
     let mut gapped = bars.clone();
     gapped[1].bar.timestamp += Duration::hours(1);
     assert!(book::market_trade_volume_summary(&gapped, "BTCUSDT").is_err());
+    let mut inconsistent_count = bars.clone();
+    inconsistent_count[0].trade_count = 0;
+    assert!(book::market_trade_volume_summary(&inconsistent_count, "BTCUSDT").is_err());
+    assert!(book::market_binance_aggressor_summary("cvd", &inconsistent_count, "BTCUSDT").is_err());
 }

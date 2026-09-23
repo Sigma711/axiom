@@ -1490,7 +1490,17 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
                 | "book_second_order_greeks"
         );
     let performance = concept.category == "风险-绩效";
-    if concept.id == "book_trade_volume" {
+    if matches!(
+        concept.id.as_str(),
+        "inside_outside" | "book_order_flow" | "cvd"
+    ) {
+        json!({
+            "markets":["crypto"], "modules":["data"],
+            "required_datasets":["24_completed_binance_usdt_spot_1h_klines_with_total_and_taker_buy_volumes"],
+            "source_policy":"real_required",
+            "goal":"服务器从 Binance USDT 现货一次未缓存K线响应读取最近24根连续已收盘1小时K线：字段5/7为总base成交量/quote成交额，字段9/10为taker-buy成交量/额，主动卖出按同单位总量减taker-buy计算。订单流与CVD使用 Binance 主动买卖成交分类，非A股内外盘或资本净流入；inside_outside 仅作跨市场对照，不能复现A股按买一/卖一价格分类的内外盘。拒绝客户端K线和手填输入。CVD 仅从本次24根窗口起点累计，不是历史全量。"
+        })
+    } else if concept.id == "book_trade_volume" {
         json!({
             "markets":["crypto"], "modules":["data"],
             "required_datasets":["24_completed_binance_usdt_spot_1h_klines_with_quote_asset_volume"],
@@ -2044,20 +2054,24 @@ async fn post_practice(
             "open-candle practice requires the Binance 1-hour source",
         ));
     }
-    if concept.id == "book_trade_volume" {
+    let binance_aggressor_practice = matches!(
+        concept.id.as_str(),
+        "inside_outside" | "book_order_flow" | "cvd"
+    );
+    if concept.id == "book_trade_volume" || binance_aggressor_practice {
         if source != "binance" {
             return Err(validate::bad(
-                "trade-volume practice requires the Binance USDT spot source",
+                "this practice requires the Binance USDT spot source",
             ));
         }
         if symbol.strip_suffix("USDT").is_none_or(str::is_empty) {
             return Err(validate::bad(
-                "trade-volume practice requires a Binance USDT spot symbol",
+                "this practice requires a Binance USDT spot symbol",
             ));
         }
         if req.bars.is_some() {
             return Err(validate::bad(
-                "trade-volume practice fetches Binance bars on the server and does not accept caller-supplied bars",
+                "this practice fetches Binance bars on the server and does not accept caller-supplied bars",
             ));
         }
         if !req
@@ -2066,7 +2080,7 @@ async fn post_practice(
             .is_some_and(serde_json::Map::is_empty)
         {
             return Err(validate::bad(
-                "trade-volume practice does not accept caller-supplied inputs",
+                "this practice does not accept caller-supplied inputs",
             ));
         }
     }
@@ -2086,7 +2100,7 @@ async fn post_practice(
     }
     let independent = concept.input_kind != "market_bars";
     let provided_bars = req.bars.is_some();
-    let trade_volume_bars = if concept.id == "book_trade_volume" {
+    let trade_volume_bars = if concept.id == "book_trade_volume" || binance_aggressor_practice {
         Some(
             state
                 .feed
@@ -2103,6 +2117,7 @@ async fn post_practice(
     } else if independent
         || concept.id == "book_pitfall_open_candle"
         || concept.id == "book_trade_volume"
+        || binance_aggressor_practice
     {
         Vec::new()
     } else {
@@ -2204,9 +2219,14 @@ async fn post_practice(
         }
     }
     let mut result = match trade_volume_bars.as_ref() {
-        Some(trade_bars) => {
+        Some(trade_bars) if concept.id == "book_trade_volume" => {
             crate::book::market_trade_volume_summary(trade_bars, &symbol).map_err(validate::bad)?
         }
+        Some(trade_bars) if binance_aggressor_practice => {
+            crate::book::market_binance_aggressor_summary(&concept.id, trade_bars, &symbol)
+                .map_err(validate::bad)?
+        }
+        Some(_) => unreachable!("only Binance trade-field practices fetch trade bars"),
         None => match open_candle_summary {
             Some(summary) => summary,
             None => match formula_variant_summary {
@@ -2262,8 +2282,14 @@ async fn post_practice(
         result["provenance"] = json!("provided_result_context");
     }
     if let Some(trade_bars) = trade_volume_bars.as_ref() {
-        result["bar_origin"] = json!("server_fetched_completed_binance_usdt_spot_bars");
-        result["bars"] = json!(trade_bars.iter().map(|bar| &bar.bar).collect::<Vec<_>>());
+        result["bar_origin"] = json!(if binance_aggressor_practice {
+            "server_fetched_completed_binance_usdt_spot_1h_klines"
+        } else {
+            "server_fetched_completed_binance_usdt_spot_bars"
+        });
+        if !binance_aggressor_practice {
+            result["bars"] = json!(trade_bars.iter().map(|bar| &bar.bar).collect::<Vec<_>>());
+        }
     } else if open_candle_pair.is_none() {
         result["bars"] = json!(bars);
     }

@@ -62,6 +62,9 @@ async fn data_practice_accepts_only_concepts_with_a_data_plan() {
                     | "book_pitfall_formula_variant"
                     | "book_pitfall_open_candle"
                     | "book_trade_volume"
+                    | "inside_outside"
+                    | "book_order_flow"
+                    | "cvd"
             )
     }) {
         let mut first: Option<Value> = None;
@@ -374,7 +377,11 @@ async fn mock_trade_volume_klines(Query(q): Query<HashMap<String, String>>) -> J
                     "110",
                     "10",
                     start + (index as i64 + 1) * 3_600_000 - 1,
-                    if index == 24 { "1017" } else { "1000" }
+                    if index == 24 { "1017" } else { "1000" },
+                    10,
+                    "6",
+                    if index == 24 { "610.2" } else { "600" },
+                    "0"
                 ])
             })
             .collect(),
@@ -531,6 +538,145 @@ async fn trade_volume_practice_uses_binance_quote_notional_and_rejects_client_da
         json!({"source":"binance","symbol":"BTCUSDT","bars":null,"inputs":{"price":1}}),
     ] {
         let mut request_body = json!({"concept_id":"book_trade_volume","module":"data","limit":2});
+        request_body
+            .as_object_mut()
+            .unwrap()
+            .extend(invalid.as_object().unwrap().clone());
+        let (status, _) = request(&app, "/api/practice", request_body).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+    server.abort();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn binance_aggressor_practices_use_taker_fields_and_reject_manual_data() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            axum::Router::new()
+                .route("/api/v3/klines", get(mock_trade_volume_klines))
+                .route("/api/v3/time", get(mock_binance_time)),
+        )
+        .await
+        .unwrap()
+    });
+    let dir = PathBuf::from(format!(
+        "target/practice-aggressor-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let mut state = AppState::new(default_config(), dir.clone());
+    let mut feed = HttpFeed::new(&dir);
+    feed.base_url = format!("http://127.0.0.1:{port}");
+    state.feed = Arc::new(feed);
+    let app = api::router(Arc::new(state));
+
+    for concept_id in ["inside_outside", "book_order_flow", "cvd"] {
+        let (status, body) = request(
+            &app,
+            "/api/practice",
+            json!({"concept_id":concept_id,"module":"data","symbol":"BTCUSDT","source":"binance","inputs":{}}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{concept_id}: {body}");
+        assert_eq!(
+            body["bar_origin"],
+            "server_fetched_completed_binance_usdt_spot_1h_klines"
+        );
+        assert_eq!(body["bars"].as_array().unwrap().len(), 24);
+        assert_eq!(
+            body["asset_units"],
+            json!({"base_asset":"BTC","quote_asset":"USDT"})
+        );
+        let latest = body["bars"].as_array().unwrap().last().unwrap();
+        assert_eq!(latest["total_base_volume"], 10.0);
+        assert_eq!(latest["total_quote_volume"], 1017.0);
+        assert_eq!(latest["taker_buy_base_volume"], 6.0);
+        assert_eq!(latest["taker_buy_quote_volume"], 610.2);
+        assert_eq!(latest["taker_sell_base_volume"], 4.0);
+        assert!((latest["taker_sell_quote_volume"].as_f64().unwrap() - 406.8).abs() < 1e-9);
+        assert!(body["notes"]
+            .to_string()
+            .contains("非A股内外盘或资本净流入"));
+        if concept_id == "inside_outside" {
+            assert_eq!(
+                body["concept_scope"],
+                "cross_market_comparison_not_a_share_inside_outside"
+            );
+            assert!(body["notes"].to_string().contains("不能声称复现A股内外盘"));
+        }
+    }
+    let (status, inside) = request(&app, "/api/practice", json!({
+        "concept_id":"inside_outside","module":"data","symbol":"BTCUSDT","source":"binance","inputs":{}
+    })).await;
+    assert_eq!(status, StatusCode::OK, "{inside}");
+    assert!(
+        (inside["values"]["latest_taker_quote_imbalance"]
+            .as_f64()
+            .unwrap()
+            - 203.4)
+            .abs()
+            < 1e-9
+    );
+    assert!(
+        (inside["values"]["window_taker_quote_imbalance"]
+            .as_f64()
+            .unwrap()
+            - 4_803.4)
+            .abs()
+            < 1e-9
+    );
+    assert_eq!(inside["series"][5]["unit"], "USDT / 1h");
+
+    let (status, order_flow) = request(&app, "/api/practice", json!({
+        "concept_id":"book_order_flow","module":"data","symbol":"BTCUSDT","source":"binance","inputs":{}
+    })).await;
+    assert_eq!(status, StatusCode::OK, "{order_flow}");
+    assert!(
+        (order_flow["values"]["latest_aggressive_quote_delta"]
+            .as_f64()
+            .unwrap()
+            - 203.4)
+            .abs()
+            < 1e-9
+    );
+    assert!(
+        (order_flow["values"]["window_aggressive_quote_delta"]
+            .as_f64()
+            .unwrap()
+            - 4_803.4)
+            .abs()
+            < 1e-9
+    );
+
+    let (status, cvd) = request(
+        &app,
+        "/api/practice",
+        json!({
+            "concept_id":"cvd","module":"data","symbol":"BTCUSDT","source":"binance","inputs":{}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{cvd}");
+    assert_eq!(cvd["series"][2]["name"], "cvd_base");
+    assert_eq!(cvd["series"][2]["values"][0], 2.0);
+    assert!((cvd["values"]["latest_cvd_quote"].as_f64().unwrap() - 4_803.4).abs() < 1e-9);
+    assert!(cvd["series"][2]["unit"]
+        .as_str()
+        .unwrap()
+        .contains("window start"));
+    assert!(cvd["notes"].to_string().contains("不是历史全量CVD"));
+    assert!(cvd["notes"].to_string().contains("限价卖单吸收"));
+
+    for invalid in [
+        json!({"source":"synthetic","symbol":"BTCUSDT","inputs":{}}),
+        json!({"source":"binance","symbol":"BTCFDUSD","inputs":{}}),
+        json!({"source":"binance","symbol":"BTCUSDT","bars":[],"inputs":{}}),
+        json!({"source":"binance","symbol":"BTCUSDT","inputs":{"buy":1}}),
+    ] {
+        let mut request_body = json!({"concept_id":"cvd","module":"data"});
         request_body
             .as_object_mut()
             .unwrap()

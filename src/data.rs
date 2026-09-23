@@ -280,6 +280,12 @@ pub struct OpenCandlePair {
 pub struct BinanceTradeBar {
     pub bar: Bar,
     pub quote_volume: f64,
+    /// Binance kline field 8: number of trades in this candle.
+    pub trade_count: u64,
+    /// Binance kline field 9: base-asset quantity where the buyer was taker.
+    pub taker_buy_base_volume: f64,
+    /// Binance kline field 10: quote-asset quantity where the buyer was taker.
+    pub taker_buy_quote_volume: f64,
 }
 
 pub struct HttpFeed {
@@ -494,10 +500,14 @@ impl HttpFeed {
         let mut out = Vec::new();
         let mut previous_timestamp = None;
         for row in rows {
-            let bar = parse_binance_kline(row).context("invalid trade-volume kline")?;
             let fields = row
                 .as_array()
                 .context("trade-volume kline must be an array")?;
+            anyhow::ensure!(
+                fields.len() == 12,
+                "trade-volume kline must contain exactly 12 Binance fields"
+            );
+            let bar = parse_binance_kline(row).context("invalid trade-volume kline")?;
             let close_millis = fields
                 .get(6)
                 .and_then(serde_json::Value::as_i64)
@@ -512,10 +522,33 @@ impl HttpFeed {
                 .and_then(serde_json::Value::as_str)
                 .and_then(|x| x.parse::<f64>().ok())
                 .context("trade-volume kline missing quote asset volume")?;
+            let taker_buy_base = fields
+                .get(9)
+                .and_then(serde_json::Value::as_str)
+                .and_then(|x| x.parse::<f64>().ok())
+                .context("trade-volume kline missing taker buy base asset volume")?;
+            let taker_buy_quote = fields
+                .get(10)
+                .and_then(serde_json::Value::as_str)
+                .and_then(|x| x.parse::<f64>().ok())
+                .context("trade-volume kline missing taker buy quote asset volume")?;
+            let trade_count = fields
+                .get(8)
+                .and_then(serde_json::Value::as_u64)
+                .context("trade-volume kline missing nonnegative trade count")?;
             anyhow::ensure!(
-                [bar.open, bar.high, bar.low, bar.close, bar.volume, quote]
-                    .iter()
-                    .all(|value| value.is_finite())
+                [
+                    bar.open,
+                    bar.high,
+                    bar.low,
+                    bar.close,
+                    bar.volume,
+                    quote,
+                    taker_buy_base,
+                    taker_buy_quote,
+                ]
+                .iter()
+                .all(|value| value.is_finite())
                     && bar.open > 0.0
                     && bar.high > 0.0
                     && bar.low > 0.0
@@ -525,6 +558,14 @@ impl HttpFeed {
                     && bar.volume >= 0.0
                     && quote >= 0.0,
                 "invalid Binance trade-volume OHLCV"
+            );
+            anyhow::ensure!(
+                taker_buy_base <= bar.volume && taker_buy_quote <= quote,
+                "Binance taker-buy volume exceeds total kline volume"
+            );
+            anyhow::ensure!(
+                (trade_count == 0) == (bar.volume == 0.0),
+                "Binance trade count and total volume disagree"
             );
             anyhow::ensure!(
                 closes_at == bar.timestamp + Duration::hours(1),
@@ -548,6 +589,9 @@ impl HttpFeed {
                 out.push(BinanceTradeBar {
                     bar,
                     quote_volume: quote,
+                    trade_count,
+                    taker_buy_base_volume: taker_buy_base,
+                    taker_buy_quote_volume: taker_buy_quote,
                 });
             }
         }

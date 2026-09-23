@@ -330,20 +330,34 @@ async fn trade_volume_klines(Query(q): Query<HashMap<String, String>>) -> Json<V
                     "110",
                     "10",
                     open + 3_600_000 - 1,
-                    if index == 24 { "1017" } else { "1000" }
+                    if index == 24 { "1017" } else { "1000" },
+                    10,
+                    "6",
+                    if index == 24 { "610.2" } else { "600" },
+                    "0"
                 ]);
                 if symbol == "MISSINGUSDT" && index == 1 {
                     row.as_array_mut().unwrap().truncate(7);
                 }
                 if symbol == "MISMATCHUSDT" && index == 1 {
                     row[7] = json!("0");
+                    row[10] = json!("0");
                 }
                 if symbol == "ZEROUSDT" && index == 1 {
                     row[5] = json!("0");
                     row[7] = json!("0");
+                    row[8] = json!(0);
+                    row[9] = json!("0");
+                    row[10] = json!("0");
                 }
                 if symbol == "BADOHLCUSDT" && index == 1 {
                     row[2] = json!("99");
+                }
+                if symbol == "BAD_TAKERUSDT" && index == 1 {
+                    row[9] = json!("11");
+                }
+                if symbol == "BAD_COUNTUSDT" && index == 1 {
+                    row[8] = json!(0);
                 }
                 row
             })
@@ -395,7 +409,7 @@ async fn trade_volume_fetch_uses_field_seven_and_excludes_the_unfinished_row() {
         .await
         .unwrap_err()
         .to_string()
-        .contains("quote asset volume"));
+        .contains("exactly 12 Binance fields"));
     assert!(feed
         .fetch_completed_binance_trade_bars("MISMATCHUSDT")
         .await
@@ -415,6 +429,18 @@ async fn trade_volume_fetch_uses_field_seven_and_excludes_the_unfinished_row() {
         .unwrap_err()
         .to_string()
         .contains("invalid Binance trade-volume OHLCV"));
+    assert!(feed
+        .fetch_completed_binance_trade_bars("BAD_TAKERUSDT")
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("taker-buy volume exceeds total"));
+    assert!(feed
+        .fetch_completed_binance_trade_bars("BAD_COUNTUSDT")
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("trade count and total volume disagree"));
     assert!(feed
         .fetch_completed_binance_trade_bars("GAPUSDT")
         .await

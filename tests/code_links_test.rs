@@ -73,6 +73,12 @@ fn every_published_concept_resolves_to_an_actual_implementation_branch() {
                         location.code_ref,
                         "src/book.rs::market_trade_volume_summary"
                     );
+                } else if matches!(e.id.as_str(), "inside_outside" | "book_order_flow" | "cvd") {
+                    assert_eq!(location.kind, "function");
+                    assert_eq!(
+                        location.code_ref,
+                        "src/book.rs::market_binance_aggressor_summary"
+                    );
                 } else if e.id == "book_pitfall_timeframe" {
                     assert_eq!(location.kind, "function");
                     assert_eq!(location.code_ref, "src/book.rs::market_timeframe_summary");

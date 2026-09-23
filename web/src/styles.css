@@ -440,9 +440,19 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
 .ax-symbol-pages button:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .ax-wide-series-chart { max-width: 760px; }
+.ax-flow-practice { max-width: 760px; }
+.ax-flow-chart svg text { fill: var(--text-dim); font: 14px system-ui, sans-serif; }
+.ax-flow-chart svg .ax-flow-title { fill: var(--text); font-weight: 600; }
+.ax-flow-chart svg .ax-flow-zero { stroke: var(--text-faint); stroke-dasharray: 4 4; }
+.ax-flow-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .5rem; margin: .8rem 0; }
+.ax-flow-metrics div { padding: .6rem .7rem; border: 1px solid var(--border-soft); border-radius: .5rem; background: var(--bg-elev); }
+.ax-flow-metrics dt { color: var(--text-dim); font-size: .72rem; }
+.ax-flow-metrics dd { margin: .3rem 0 0; color: var(--text); font: 650 .85rem var(--mono); overflow-wrap: anywhere; }
 @media (max-width: 700px) {
   .ax-trade-volume-chart { overflow-x: auto; scrollbar-width: thin; }
   .ax-trade-volume-chart svg { min-width: 700px; }
+  .ax-flow-chart { overflow-x: auto; scrollbar-width: thin; }
+  .ax-flow-chart svg { min-width: 700px; }
 }
 .ax-repainting-chart .ax-series-legend i.ax-legend-retrospective, .ax-repainting-chart .ax-series-legend i.ax-legend-confirmed { width: 0.65rem; height: 0.65rem; border-radius: 50%; background: var(--bg-input) !important; border: 2px solid currentColor; }
 .ax-repainting-chart .ax-series-legend i.ax-legend-confirmed { background: currentColor !important; border-color: currentColor; }
