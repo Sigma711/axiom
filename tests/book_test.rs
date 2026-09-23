@@ -19,6 +19,81 @@ fn closed_bars(closes: &[f64]) -> Vec<Bar> {
 }
 
 #[test]
+fn depth_summary_rejects_finite_levels_whose_aggregate_quantity_overflows() {
+    use axiom::data::{BinanceDepthLevel, BinanceDepthSnapshot};
+    let snapshot = BinanceDepthSnapshot {
+        update_id: 1,
+        bids: vec![
+            BinanceDepthLevel {
+                price: 100.0,
+                quantity: f64::MAX,
+            },
+            BinanceDepthLevel {
+                price: 99.0,
+                quantity: f64::MAX,
+            },
+            BinanceDepthLevel {
+                price: 98.0,
+                quantity: 0.0,
+            },
+            BinanceDepthLevel {
+                price: 97.0,
+                quantity: 0.0,
+            },
+            BinanceDepthLevel {
+                price: 96.0,
+                quantity: 0.0,
+            },
+        ],
+        asks: (101..=105)
+            .map(|price| BinanceDepthLevel {
+                price: price as f64,
+                quantity: if price == 101 { 1.0 } else { 0.0 },
+            })
+            .collect(),
+    };
+    assert!(
+        book::market_binance_depth_summary("book_order_imbalance", &snapshot, "BTCUSDT")
+            .unwrap_err()
+            .contains("累计超出")
+    );
+}
+
+#[test]
+fn depth_imbalance_is_signed_and_undefined_without_visible_liquidity() {
+    use axiom::data::{BinanceDepthLevel, BinanceDepthSnapshot};
+    let mut snapshot = BinanceDepthSnapshot {
+        update_id: 1,
+        bids: (96..=100)
+            .rev()
+            .map(|price| BinanceDepthLevel {
+                price: price as f64,
+                quantity: if price == 100 { 3.0 } else { 0.0 },
+            })
+            .collect(),
+        asks: (101..=105)
+            .map(|price| BinanceDepthLevel {
+                price: price as f64,
+                quantity: if price == 101 { 1.0 } else { 0.0 },
+            })
+            .collect(),
+    };
+    let positive =
+        book::market_binance_depth_summary("book_order_imbalance", &snapshot, "BTCUSDT").unwrap();
+    assert_eq!(positive["values"]["order_imbalance"], 0.5);
+    snapshot.bids[0].quantity = 1.0;
+    snapshot.asks[0].quantity = 3.0;
+    let negative =
+        book::market_binance_depth_summary("book_order_imbalance", &snapshot, "BTCUSDT").unwrap();
+    assert_eq!(negative["values"]["order_imbalance"], -0.5);
+    snapshot.bids[0].quantity = 0.0;
+    snapshot.asks[0].quantity = 0.0;
+    let empty =
+        book::market_binance_depth_summary("book_order_imbalance", &snapshot, "BTCUSDT").unwrap();
+    assert!(empty["values"]["order_imbalance"].is_null());
+}
+
+#[test]
 fn industry_metrics_use_explicit_chinese_labeled_inputs_and_reject_invalid_values() {
     let concept = book::catalog()
         .into_iter()
@@ -93,7 +168,7 @@ fn every_book_catalog_default_is_executable_and_all_inputs_are_described() {
         // through their dedicated market summaries and the API, not defaults.
         if matches!(
             concept.id.as_str(),
-            "book_period" | "book_trade_volume" | "book_order_flow"
+            "book_period" | "book_trade_volume" | "book_order_flow" | "book_order_imbalance"
         ) {
             continue;
         }

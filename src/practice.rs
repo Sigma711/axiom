@@ -26,10 +26,11 @@ pub fn base_catalog() -> Vec<PracticeConcept> {
     let mut seen = BTreeSet::new();
     crate::knowledge::base_entries().into_iter().filter(|e|seen.insert(e.id.clone())).map(|e|{
   let d=defaults(&e.id).expect("every knowledge concept has an explicit practice definition");
-  let kind=kind(&e.id);
+  let kind=if e.id=="bid_ask_spread" { "market_bars" } else { kind(&e.id) };
   let is_binance_aggressor_practice=matches!(e.id.as_str(), "inside_outside" | "cvd");
   let hides_rolling_return_aliases = e.id == "rolling_correlation";
-  PracticeConcept{id:e.id,name:e.name,category:e.category,input_kind:kind.into(),inputs:d.as_object().unwrap().iter().filter(|(k, _)| !(hides_rolling_return_aliases && matches!(k.as_str(), "series_x" | "series_y"))).map(|(k,v)|PracticeInput{key:k.clone(),label:k.clone(),default:v.clone()}).collect(),notes:if is_binance_aggressor_practice{ "仅使用服务器从 Binance USDT 现货取得的最近24根连续已收盘1小时K线。按 taker-buy 与总量互补计算主动买卖，非A股内外盘或资本净流入；不接受手填或客户端K线。" }else if hides_rolling_return_aliases{"仅使用本页真实策略净值收益与同时间戳标的收盘收益；只可修改窗口，不提供教学收益数组。"}else if kind=="market_bars"{"仅使用传入、按时间排序的已收盘 K 线；回测需传入截至评估时点的前缀。预热/零分母为 null。"}else{"独立可编辑教学输入，不是当前币种真实数据；历史使用须由调用方保证输入发布时点不晚于评估时点。"}.into()}
+  let is_depth_snapshot=e.id=="bid_ask_spread";
+  PracticeConcept{id:e.id,name:e.name,category:e.category,input_kind:kind.into(),inputs:if is_depth_snapshot{Vec::new()}else{d.as_object().unwrap().iter().filter(|(k, _)| !(hides_rolling_return_aliases && matches!(k.as_str(), "series_x" | "series_y"))).map(|(k,v)|PracticeInput{key:k.clone(),label:k.clone(),default:v.clone()}).collect()},notes:if is_depth_snapshot{"仅使用服务器从 Binance USDT 现货深度端点取得的单次盘口快照；不接受手填报价、客户端深度或K线。"}else if is_binance_aggressor_practice{ "仅使用服务器从 Binance USDT 现货取得的最近24根连续已收盘1小时K线。按 taker-buy 与总量互补计算主动买卖，非A股内外盘或资本净流入；不接受手填或客户端K线。" }else if hides_rolling_return_aliases{"仅使用本页真实策略净值收益与同时间戳标的收盘收益；只可修改窗口，不提供教学收益数组。"}else if kind=="market_bars"{"仅使用传入、按时间排序的已收盘 K 线；回测需传入截至评估时点的前缀。预热/零分母为 null。"}else{"独立可编辑教学输入，不是当前币种真实数据；历史使用须由调用方保证输入发布时点不晚于评估时点。"}.into()}
  }).collect()
 }
 fn kind(id: &str) -> &'static str {

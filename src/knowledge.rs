@@ -210,11 +210,11 @@ fn market_microstructure() -> Vec<KnowledgeEntry> {
 
             category: "盘口".into(),
             name: "买卖价差 Spread".into(),
-            formula: "Ask - Bid".into(),
-            meaning: "挂单价差,。。 反映流动性。".into(),
-            signals: "Spread 收窄 → 流动性好、买卖双方分歧小;Spread 扩大 → 流动性差、有大单或异动。".into(),
-            pitfalls: "冷门股票 Spread 天然宽,需与同类股票比较。".into(),
-            implementation: "同 spread;PDF 第二章 2.1 节".into(),
+            formula: "绝对价差=最佳卖价-最佳买价；相对价差=绝对价差/中间价，中间价=(最佳买价+最佳卖价)/2。".into(),
+            meaning: "本实践从 Binance USDT 现货深度快照读取最佳挂单价，描述该瞬间的可见报价间距。".into(),
+            signals: "价差收窄或扩大只是当前报价状态；应结合交易对、深度档位和快照序列观察，不能单独作为交易指令。".into(),
+            pitfalls: "深度端点提供 updateId 但不提供历史快照时间；updateId 不是时间戳。挂单可撤销或改价，快照不等于成交、A股内外盘或未来价格预测。".into(),
+            implementation: "服务器调用 Binance /api/v3/depth?limit=5，并验证排序、价格、数量及未锁定盘口；src/book.rs::market_binance_depth_summary。".into(),
             diagram: None,
         },
         KnowledgeEntry {

@@ -65,6 +65,9 @@ async fn data_practice_accepts_only_concepts_with_a_data_plan() {
                     | "inside_outside"
                     | "book_order_flow"
                     | "cvd"
+                    | "bid_ask_spread"
+                    | "book_order_imbalance"
+                    | "book_pitfall_order_imbalance"
             )
     }) {
         let mut first: Option<Value> = None;
@@ -359,6 +362,16 @@ async fn mock_completed_klines(Query(q): Query<HashMap<String, String>>) -> Json
 
 async fn mock_binance_time() -> Json<Value> {
     Json(json!({"serverTime": Utc::now().timestamp_millis()}))
+}
+
+async fn mock_spot_depth(Query(q): Query<HashMap<String, String>>) -> Json<Value> {
+    assert_eq!(q.get("symbol").map(String::as_str), Some("BTCUSDT"));
+    assert_eq!(q.get("limit").map(String::as_str), Some("5"));
+    Json(json!({
+        "lastUpdateId": 42,
+        "bids":[["100.0","3.0"],["99.0","2.0"],["98.0","0.0"],["97.0","0.0"],["96.0","0.0"]],
+        "asks":[["101.0","1.0"],["102.0","4.0"],["103.0","0.0"],["104.0","0.0"],["105.0","0.0"]]
+    }))
 }
 
 async fn mock_trade_volume_klines(Query(q): Query<HashMap<String, String>>) -> Json<Value> {
@@ -1465,6 +1478,73 @@ async fn book_period_requires_real_source_bound_bars_and_preserves_stock_calenda
         let (status, _) = request(&app, "/api/practice", request_body).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
     }
+}
+
+#[tokio::test]
+async fn binance_spot_depth_practices_use_server_snapshot_and_reject_manual_data() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            axum::Router::new().route("/api/v3/depth", get(mock_spot_depth)),
+        )
+        .await
+        .unwrap()
+    });
+    let dir = PathBuf::from(format!("target/practice-depth-{}", uuid::Uuid::new_v4()));
+    let mut state = AppState::new(default_config(), dir.clone());
+    let mut feed = HttpFeed::new(&dir);
+    feed.base_url = format!("http://127.0.0.1:{port}");
+    state.feed = Arc::new(feed);
+    let app = api::router(Arc::new(state));
+
+    for concept_id in [
+        "bid_ask_spread",
+        "book_order_imbalance",
+        "book_pitfall_order_imbalance",
+    ] {
+        let (status, body) = request(
+            &app,
+            "/api/practice",
+            json!({"concept_id":concept_id,"module":"data","symbol":"BTCUSDT","source":"binance","inputs":{}}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{concept_id}: {body}");
+        assert_eq!(body["provenance"], "server_fetched_binance_spot_order_book");
+        assert_eq!(body["bar_origin"], "server_fetched_binance_spot_order_book");
+        assert_eq!(body["depth_snapshot"]["update_id"], 42);
+        assert!(body["depth_snapshot"]["timestamp"].is_null());
+        assert_eq!(body["levels"]["bids"].as_array().unwrap().len(), 5);
+        assert_eq!(body["levels"]["asks"].as_array().unwrap().len(), 5);
+        assert_eq!(body["inputs"], json!({}));
+        if concept_id == "bid_ask_spread" {
+            assert_eq!(body["values"]["best_bid"], 100.0);
+            assert_eq!(body["values"]["best_ask"], 101.0);
+            assert_eq!(body["values"]["mid_price"], 100.5);
+            assert_eq!(body["values"]["absolute_spread"], 1.0);
+            assert!(
+                (body["values"]["relative_spread"].as_f64().unwrap() - 1.0 / 100.5).abs() < 1e-12
+            );
+        } else {
+            assert_eq!(body["values"]["top_n"], 5.0);
+            assert_eq!(body["values"]["top_n_bid_quantity"], 5.0);
+            assert_eq!(body["values"]["top_n_ask_quantity"], 5.0);
+            assert_eq!(body["values"]["order_imbalance"], 0.0);
+        }
+    }
+    for body in [
+        json!({"concept_id":"bid_ask_spread","module":"data","symbol":"BTCFDUSD","source":"binance","inputs":{}}),
+        json!({"concept_id":"bid_ask_spread","module":"data","symbol":"BTCUSDT","source":"synthetic","inputs":{}}),
+        json!({"concept_id":"bid_ask_spread","module":"data","symbol":"BTCUSDT","source":"binance","bars":[],"inputs":{}}),
+        json!({"concept_id":"bid_ask_spread","module":"data","symbol":"BTCUSDT","source":"binance","inputs":{"bid":1}}),
+        json!({"concept_id":"bid_ask_spread","module":"data","symbol":"BTCUSDT","source":"binance","limit":10,"inputs":{}}),
+    ] {
+        let (status, _) = request(&app, "/api/practice", body).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+    server.abort();
+    std::fs::remove_dir_all(dir).unwrap();
 }
 
 #[tokio::test]

@@ -87,7 +87,7 @@ fn technical_series_do_not_rewrite_history_and_small_samples_do_not_panic() {
     }
     for c in bt::catalog()
         .into_iter()
-        .filter(|c| c.input_kind == "market_bars")
+        .filter(|c| c.input_kind == "market_bars" && c.id != "book_pitfall_order_imbalance")
     {
         let selected_bars = if c.id == "book_cdp" { &daily_b } else { &b };
         assert_eq!(

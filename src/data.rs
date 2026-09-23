@@ -14,6 +14,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Datelike, Duration, NaiveDate, TimeZone, Timelike, Utc, Weekday};
 use rand::{Rng, SeedableRng};
 use rand_distr::{Distribution, Normal};
+use serde::Serialize;
 use std::fs::File;
 use std::io::{BufReader, Write};
 use std::path::PathBuf;
@@ -288,6 +289,93 @@ pub struct BinanceTradeBar {
     pub taker_buy_quote_volume: f64,
 }
 
+/// One visible price level from a Binance spot depth snapshot. It is an
+/// outstanding order, not an executed trade.
+#[derive(Clone, Debug, Serialize)]
+pub struct BinanceDepthLevel {
+    pub price: f64,
+    pub quantity: f64,
+}
+
+/// A point-in-time Binance spot REST depth response. `update_id` is a sequence
+/// identifier supplied by the exchange; Binance's depth endpoint has no
+/// exchange timestamp, so callers must never treat it as one.
+#[derive(Clone, Debug, Serialize)]
+pub struct BinanceDepthSnapshot {
+    pub update_id: u64,
+    pub bids: Vec<BinanceDepthLevel>,
+    pub asks: Vec<BinanceDepthLevel>,
+}
+
+fn parse_binance_depth_snapshot(raw: &serde_json::Value) -> Result<BinanceDepthSnapshot> {
+    let update_id = raw["lastUpdateId"]
+        .as_u64()
+        .filter(|id| *id > 0)
+        .context("Binance depth response is missing a positive lastUpdateId")?;
+    let parse_side = |key: &str, descending: bool| -> Result<Vec<BinanceDepthLevel>> {
+        let rows = raw[key]
+            .as_array()
+            .with_context(|| format!("Binance depth response has no {key} array"))?;
+        anyhow::ensure!(!rows.is_empty(), "Binance depth {key} side is empty");
+        let mut levels: Vec<BinanceDepthLevel> = Vec::with_capacity(rows.len());
+        for (index, row) in rows.iter().enumerate() {
+            let fields = row
+                .as_array()
+                .with_context(|| format!("Binance depth {key}[{index}] is not a tuple"))?;
+            anyhow::ensure!(
+                fields.len() == 2,
+                "Binance depth {key}[{index}] must contain exactly price and quantity"
+            );
+            let parse_decimal = |field: usize, label: &str| -> Result<f64> {
+                fields[field]
+                    .as_str()
+                    .and_then(|value| value.parse::<f64>().ok())
+                    .filter(|value| value.is_finite())
+                    .with_context(|| format!("Binance depth {key}[{index}] has invalid {label}"))
+            };
+            let price = parse_decimal(0, "price")?;
+            let quantity = parse_decimal(1, "quantity")?;
+            anyhow::ensure!(
+                price > 0.0,
+                "Binance depth {key}[{index}] price must be positive"
+            );
+            anyhow::ensure!(
+                quantity >= 0.0,
+                "Binance depth {key}[{index}] quantity must be nonnegative"
+            );
+            if let Some(previous) = levels.last() {
+                let sorted = if descending {
+                    previous.price > price
+                } else {
+                    previous.price < price
+                };
+                anyhow::ensure!(
+                    sorted,
+                    "Binance depth {key} prices must be strictly {}",
+                    if descending {
+                        "descending"
+                    } else {
+                        "ascending"
+                    }
+                );
+            }
+            levels.push(BinanceDepthLevel { price, quantity });
+        }
+        Ok(levels)
+    };
+    let bids = parse_side("bids", true)?;
+    let asks = parse_side("asks", false)?;
+    anyhow::ensure!(
+        bids[0].price < asks[0].price,
+        "Binance depth snapshot is locked or crossed"
+    );
+    Ok(BinanceDepthSnapshot {
+        update_id,
+        bids,
+        asks,
+    })
+}
+
 pub struct HttpFeed {
     pub base_url: String,
     pub csv: CsvFeed,
@@ -304,6 +392,47 @@ impl HttpFeed {
                 .build()
                 .expect("无法创建 HTTP client"),
         }
+    }
+
+    /// Fetch an uncached, normalized Binance USDT-spot book snapshot. Parsing
+    /// and structural validation stay at the source boundary so no caller can
+    /// compute a practice result from malformed or crossed upstream depth.
+    pub async fn fetch_binance_usdt_spot_depth(
+        &self,
+        symbol: &str,
+        limit: usize,
+    ) -> Result<BinanceDepthSnapshot> {
+        anyhow::ensure!(
+            symbol
+                .strip_suffix("USDT")
+                .is_some_and(|base| !base.is_empty())
+                && symbol
+                    .bytes()
+                    .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit()),
+            "Binance depth requires an uppercase Binance USDT spot symbol"
+        );
+        anyhow::ensure!(
+            matches!(limit, 5 | 10 | 20 | 50 | 100),
+            "unsupported Binance depth limit"
+        );
+        let raw: serde_json::Value = self
+            .client
+            .get(format!("{}/api/v3/depth", self.base_url))
+            .query(&[("symbol", symbol), ("limit", &limit.to_string())])
+            .send()
+            .await
+            .context("Binance depth request failed")?
+            .error_for_status()
+            .context("Binance depth response failed")?
+            .json()
+            .await
+            .context("invalid Binance depth JSON")?;
+        let snapshot = parse_binance_depth_snapshot(&raw)?;
+        anyhow::ensure!(
+            snapshot.bids.len() == limit && snapshot.asks.len() == limit,
+            "Binance depth response did not return the requested number of levels"
+        );
+        Ok(snapshot)
     }
 
     async fn binance_server_time(&self) -> Result<DateTime<Utc>> {
@@ -1243,6 +1372,34 @@ pub async fn fetch_public_market_bars(
         "a_share" => fetch_a_share(symbol, since, limit).await,
         "us_stock" => fetch_us_stock(symbol, since, limit).await,
         _ => unreachable!("source is validated above"),
+    }
+}
+
+#[cfg(test)]
+mod depth_snapshot_tests {
+    use super::parse_binance_depth_snapshot;
+    use serde_json::json;
+
+    #[test]
+    fn accepts_strictly_sorted_uncrossed_depth_and_rejects_invalid_books() {
+        let valid = json!({
+            "lastUpdateId":7,
+            "bids":[["100","1"],["99","0"]],
+            "asks":[["101","2"],["102","0"]]
+        });
+        let book = parse_binance_depth_snapshot(&valid).unwrap();
+        assert_eq!(book.update_id, 7);
+        assert_eq!(book.bids[0].price, 100.0);
+        for invalid in [
+            json!({"bids":[["100","1"]],"asks":[["101","1"]]}),
+            json!({"lastUpdateId":7,"bids":[],"asks":[["101","1"]]}),
+            json!({"lastUpdateId":7,"bids":[["99","1"],["100","1"]],"asks":[["101","1"]]}),
+            json!({"lastUpdateId":7,"bids":[["100","1"]],"asks":[["100","1"]]}),
+            json!({"lastUpdateId":7,"bids":[["100","1"]],"asks":[["101","-1"]]}),
+            json!({"lastUpdateId":7,"bids":[["NaN","1"]],"asks":[["101","1"]]}),
+        ] {
+            assert!(parse_binance_depth_snapshot(&invalid).is_err(), "{invalid}");
+        }
     }
 }
 

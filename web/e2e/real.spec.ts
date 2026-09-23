@@ -903,3 +903,54 @@ test('aggressor-side and CVD practices preserve exact Binance classifications an
   expect(mobile.content).toBeGreaterThan(mobile.viewport);
   expect(mobile.svg).toBeGreaterThanOrEqual(700);
 });
+
+test('spot-depth practices read one live Binance order-book snapshot and keep quotes distinct from trades', async ({ page }) => {
+  test.setTimeout(150_000);
+  for (const [name, conceptId] of [
+    ['买卖价差 Spread', 'bid_ask_spread'],
+    ['委比与委差', 'book_order_imbalance'],
+    ['委比高不代表必涨', 'book_pitfall_order_imbalance'],
+  ] as const) {
+    await page.goto('/');
+    await page.getByRole('textbox', { name: '搜索 概念 / 公式 / 关键词' }).fill(name);
+    const card = page.locator('.ax-kb-card').filter({ hasText: name });
+    await expect(card).toHaveCount(1, { timeout: 30_000 });
+    await card.getByRole('button', { name: '在数据探索中实践' }).click();
+    const panel = page.getByLabel('概念实践');
+    await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+    const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+    const requestPromise = page.waitForRequest(request => request.url().includes('/api/practice') && request.method() === 'POST');
+    await panel.getByRole('button', { name: '运行实践' }).click();
+    const [request, response] = await Promise.all([requestPromise, responsePromise]);
+    expect(request.postDataJSON()).toMatchObject({ concept_id: conceptId, source: 'binance', limit: 5, inputs: {} });
+    expect(request.postDataJSON().bars).toBeUndefined();
+    expect(response.ok(), await response.text()).toBe(true);
+    const result = await response.json();
+    expect(result.provenance).toBe('server_fetched_binance_spot_order_book');
+    expect(result.depth_snapshot.symbol).toBe('BTCUSDT');
+    expect(result.depth_snapshot.timestamp).toBeNull();
+    expect(result.depth_snapshot.update_id).toBeGreaterThan(0);
+    expect(result.levels.bids.length).toBeGreaterThan(0);
+    expect(result.levels.asks.length).toBeGreaterThan(0);
+    expect(result.values.best_bid).toBe(result.levels.bids[0].price);
+    expect(result.values.best_ask).toBe(result.levels.asks[0].price);
+    expect(result.values.best_ask).toBeGreaterThan(result.values.best_bid);
+    if (conceptId === 'bid_ask_spread') {
+      expect(result.values.absolute_spread).toBeCloseTo(result.values.best_ask - result.values.best_bid, 8);
+      expect(result.values.relative_spread).toBeCloseTo(result.values.absolute_spread / ((result.values.best_ask + result.values.best_bid) / 2), 10);
+    } else {
+      const bid = result.levels.bids.reduce((total: number, level: { quantity: number }) => total + level.quantity, 0);
+      const ask = result.levels.asks.reduce((total: number, level: { quantity: number }) => total + level.quantity, 0);
+      expect(result.values.top_n_bid_quantity).toBeCloseTo(bid, 8);
+      expect(result.values.top_n_ask_quantity).toBeCloseTo(ask, 8);
+      expect(result.values.order_imbalance).toBeCloseTo((bid - ask) / (bid + ask), 8);
+    }
+    await expect(panel.locator('.ax-depth-chart svg')).toBeVisible();
+    await expect(panel).toContainText('没有历史时间戳');
+    if (conceptId === 'book_pitfall_order_imbalance') await expect(panel).toContainText('委比高不代表价格随后必涨');
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobile = await page.locator('.ax-depth-chart').evaluate(element => ({ viewport: element.clientWidth, content: element.scrollWidth, svg: element.querySelector('svg')?.getBoundingClientRect().width || 0 }));
+  expect(mobile.content).toBeGreaterThan(mobile.viewport);
+  expect(mobile.svg).toBeGreaterThanOrEqual(650);
+});

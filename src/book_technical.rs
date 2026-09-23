@@ -31,12 +31,14 @@ fn specs() -> &'static [Value] {
 pub fn catalog() -> Vec<PracticeConcept> {
     specs()
         .iter()
-        .map(|s| PracticeConcept {
+        .map(|s| {
+            let depth_snapshot = s["id"] == "book_pitfall_order_imbalance";
+            PracticeConcept {
             id: s["id"].as_str().unwrap().into(),
             name: s["name"].as_str().unwrap().into(),
             category: "原书补充·技术实践".into(),
-            input_kind: s["input_kind"].as_str().unwrap().into(),
-            inputs: s["defaults"]
+            input_kind: if depth_snapshot { "market_bars" } else { s["input_kind"].as_str().unwrap() }.into(),
+            inputs: if depth_snapshot { Vec::new() } else { s["defaults"]
                 .as_object()
                 .unwrap()
                 .iter()
@@ -45,9 +47,9 @@ pub fn catalog() -> Vec<PracticeConcept> {
                     label: k.clone(),
                     default: v.clone(),
                 })
-                .collect(),
-            notes: s["summary"].as_str().unwrap().into(),
-        })
+                .collect() },
+            notes: if depth_snapshot { "仅使用服务器从 Binance USDT 现货深度端点取得的单次盘口快照；不接受手填挂单、撤单或客户端深度。" } else { s["summary"].as_str().unwrap() }.into(),
+        }})
         .collect()
 }
 pub fn entries() -> Vec<KnowledgeEntry> {
@@ -55,7 +57,8 @@ pub fn entries() -> Vec<KnowledgeEntry> {
         .iter()
         .map(|s| {
             let text = |key: &str| s[key].as_str().unwrap_or("").to_string();
-            let market_bars = s["input_kind"] == "market_bars";
+            let depth_snapshot = s["id"] == "book_pitfall_order_imbalance";
+            let market_bars = s["input_kind"] == "market_bars" || depth_snapshot;
             let formula_variant = s["id"] == "book_pitfall_formula_variant";
             let open_candle = s["id"] == "book_pitfall_open_candle";
             KnowledgeEntry {
@@ -63,8 +66,8 @@ pub fn entries() -> Vec<KnowledgeEntry> {
                 summary: text("summary"),
                 example: text("example"),
                 related: vec![],
-                code_url: if open_candle { "https://github.com/Sigma711/axiom/blob/main/src/book.rs#market_open_candle_summary" } else if formula_variant { "https://github.com/Sigma711/axiom/blob/main/src/book.rs#market_formula_variant_summary" } else { "https://github.com/Sigma711/axiom/blob/main/src/book_technical.rs#symbol-evaluate" }.into(),
-                code_ref: if open_candle { "src/book.rs::market_open_candle_summary" } else if formula_variant { "src/book.rs::market_formula_variant_summary" } else { "src/book_technical.rs::evaluate" }.into(),
+                code_url: if depth_snapshot { "https://github.com/Sigma711/axiom/blob/main/src/book.rs#market_binance_depth_summary" } else if open_candle { "https://github.com/Sigma711/axiom/blob/main/src/book.rs#market_open_candle_summary" } else if formula_variant { "https://github.com/Sigma711/axiom/blob/main/src/book.rs#market_formula_variant_summary" } else { "https://github.com/Sigma711/axiom/blob/main/src/book_technical.rs#symbol-evaluate" }.into(),
+                code_ref: if depth_snapshot { "src/book.rs::market_binance_depth_summary" } else if open_candle { "src/book.rs::market_open_candle_summary" } else if formula_variant { "src/book.rs::market_formula_variant_summary" } else { "src/book_technical.rs::evaluate" }.into(),
                 category: "原书补充·技术实践".into(),
                 name: text("name"),
                 formula: if text("formula").is_empty() {
@@ -78,8 +81,8 @@ pub fn entries() -> Vec<KnowledgeEntry> {
                 } else {
                     "用可编辑教学输入理解公式；真实练习须按适用模块和数据口径提供证据，结果不自动等于交易指令。".into()
                 },
-                pitfalls: if market_bars { "行情必须标明来源、周期及收盘状态；当前未收盘价只作带 as-of 与预计收盘时刻的快照，不能当最终收盘或交易信号。".into() } else { "独立输入为可编辑教学数据；市场序列只在确认时点可用。专有指标仅核验用户导入信号，不声称复制未公开算法。".into() },
-                implementation: if open_candle { format!("src/book.rs::market_open_candle_summary; Binance 1h exchange-time snapshot; 来源 {}", s["source_ids"]) } else if formula_variant { format!("src/book.rs::market_formula_variant_summary; MACD 12/26/9; 来源 {}", s["source_ids"]) } else { format!("src/book_technical.rs::evaluate; 来源 {}", s["source_ids"]) },
+                pitfalls: if depth_snapshot { "可见挂单能在下一刻撤销、改价或成交；当前委托不平衡不预测未来价格，也不是 A 股内外盘、资金净流入或主动成交订单流。深度响应仅有 updateId，没有历史快照时间。".into() } else if market_bars { "行情必须标明来源、周期及收盘状态；当前未收盘价只作带 as-of 与预计收盘时刻的快照，不能当最终收盘或交易信号。".into() } else { "独立输入为可编辑教学数据；市场序列只在确认时点可用。专有指标仅核验用户导入信号，不声称复制未公开算法。".into() },
+                implementation: if depth_snapshot { format!("src/book.rs::market_binance_depth_summary; Binance USDT spot depth snapshot; 来源 {}", s["source_ids"]) } else if open_candle { format!("src/book.rs::market_open_candle_summary; Binance 1h exchange-time snapshot; 来源 {}", s["source_ids"]) } else if formula_variant { format!("src/book.rs::market_formula_variant_summary; MACD 12/26/9; 来源 {}", s["source_ids"]) } else { format!("src/book_technical.rs::evaluate; 来源 {}", s["source_ids"]) },
                 diagram: None,
             }
         })

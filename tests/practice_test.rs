@@ -87,7 +87,8 @@ fn candles(n: usize) -> Vec<axiom::types::Bar> {
 fn market_practices_preserve_history_and_handle_empty_and_short_input() {
     let bars = candles(140);
     for concept in practice::base_catalog().into_iter().filter(|c| {
-        c.input_kind == "market_bars" && !matches!(c.id.as_str(), "inside_outside" | "cvd")
+        c.input_kind == "market_bars"
+            && !matches!(c.id.as_str(), "inside_outside" | "cvd" | "bid_ask_spread")
     }) {
         assert_eq!(
             practice::evaluate(&concept.id, &[], &json!({})).unwrap()["status"],

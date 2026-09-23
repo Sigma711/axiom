@@ -1490,7 +1490,14 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
                 | "book_second_order_greeks"
         );
     let performance = concept.category == "风险-绩效";
-    if matches!(
+    if is_binance_spot_depth_practice(&concept.id) {
+        json!({
+            "markets":["crypto"], "modules":["data"],
+            "required_datasets":["server_fetched_binance_usdt_spot_depth_snapshot"],
+            "source_policy":"real_required",
+            "goal":"服务器从 Binance USDT 现货 /api/v3/depth 取得未缓存的单次盘口快照（固定5档）。返回 lastUpdateId 作为序列标识，但该端点不提供历史时间戳，不能把 updateId 当时间。严格验证买盘降序、卖盘升序、价格和数量、空边及锁定/交叉盘口；拒绝客户端K线、报价、挂单或教学输入。价差相对值以中间价 (bid+ask)/2 为分母。委托不平衡仅描述当前可见挂单，不能预测未来价格、代表成交订单流、A股内外盘或资金净流入。"
+        })
+    } else if matches!(
         concept.id.as_str(),
         "inside_outside" | "book_order_flow" | "cvd"
     ) {
@@ -1715,6 +1722,13 @@ fn source_market(source: &str) -> Option<&'static str> {
         "us_stock" => Some("us_equity"),
         _ => None,
     }
+}
+
+fn is_binance_spot_depth_practice(id: &str) -> bool {
+    matches!(
+        id,
+        "bid_ask_spread" | "book_order_imbalance" | "book_pitfall_order_imbalance"
+    )
 }
 
 fn practice_bars_are_closed(bars: &[Bar], source: &str) -> Result<(), ApiError> {
@@ -2014,7 +2028,7 @@ async fn post_practice(
         .symbol
         .unwrap_or_else(|| state.config.trading.symbol.clone());
     let source = req.source.unwrap_or_else(|| "binance".into());
-    let limit = req.limit.unwrap_or(200);
+    let mut limit = req.limit.unwrap_or(200);
     let registry = crate::practice::catalog();
     let concept = registry
         .iter()
@@ -2058,7 +2072,19 @@ async fn post_practice(
         concept.id.as_str(),
         "inside_outside" | "book_order_flow" | "cvd"
     );
-    if concept.id == "book_trade_volume" || binance_aggressor_practice {
+    let binance_spot_depth_practice = is_binance_spot_depth_practice(&concept.id);
+    if binance_spot_depth_practice {
+        if req.limit.is_some_and(|requested| requested != 5) {
+            return Err(validate::bad(
+                "depth practice uses the fixed five-level snapshot",
+            ));
+        }
+        limit = 5;
+    }
+    if concept.id == "book_trade_volume"
+        || binance_aggressor_practice
+        || binance_spot_depth_practice
+    {
         if source != "binance" {
             return Err(validate::bad(
                 "this practice requires the Binance USDT spot source",
@@ -2111,6 +2137,17 @@ async fn post_practice(
     } else {
         None
     };
+    let depth_snapshot = if binance_spot_depth_practice {
+        Some(
+            state
+                .feed
+                .fetch_binance_usdt_spot_depth(&symbol, limit)
+                .await
+                .map_err(|error| (StatusCode::BAD_GATEWAY, error.to_string()))?,
+        )
+    } else {
+        None
+    };
     let mut bars = if let Some(bars) = req.bars {
         validate::bars(&bars)?;
         bars
@@ -2118,6 +2155,7 @@ async fn post_practice(
         || concept.id == "book_pitfall_open_candle"
         || concept.id == "book_trade_volume"
         || binance_aggressor_practice
+        || binance_spot_depth_practice
     {
         Vec::new()
     } else {
@@ -2218,39 +2256,49 @@ async fn post_practice(
             }
         }
     }
-    let mut result = match trade_volume_bars.as_ref() {
-        Some(trade_bars) if concept.id == "book_trade_volume" => {
-            crate::book::market_trade_volume_summary(trade_bars, &symbol).map_err(validate::bad)?
-        }
-        Some(trade_bars) if binance_aggressor_practice => {
-            crate::book::market_binance_aggressor_summary(&concept.id, trade_bars, &symbol)
-                .map_err(validate::bad)?
-        }
-        Some(_) => unreachable!("only Binance trade-field practices fetch trade bars"),
-        None => match open_candle_summary {
-            Some(summary) => summary,
-            None => match formula_variant_summary {
+    let mut result = if let Some(snapshot) = depth_snapshot.as_ref() {
+        crate::book::market_binance_depth_summary(&concept.id, snapshot, &symbol)
+            .map_err(validate::bad)?
+    } else {
+        match trade_volume_bars.as_ref() {
+            Some(trade_bars) if concept.id == "book_trade_volume" => {
+                crate::book::market_trade_volume_summary(trade_bars, &symbol)
+                    .map_err(validate::bad)?
+            }
+            Some(trade_bars) if binance_aggressor_practice => {
+                crate::book::market_binance_aggressor_summary(&concept.id, trade_bars, &symbol)
+                    .map_err(validate::bad)?
+            }
+            Some(_) => unreachable!("only Binance trade-field practices fetch trade bars"),
+            None => match open_candle_summary {
                 Some(summary) => summary,
-                None => match timeframe_summary {
+                None => match formula_variant_summary {
                     Some(summary) => summary,
-                    None => match period_summary {
+                    None => match timeframe_summary {
                         Some(summary) => summary,
-                        None => match annualization {
-                            Some(annualization) => crate::practice::evaluate_with_annualization(
-                                &req.concept_id,
-                                &bars,
-                                &evaluator_inputs,
-                                annualization,
-                            ),
-                            None => {
-                                crate::practice::evaluate(&req.concept_id, &bars, &evaluator_inputs)
+                        None => match period_summary {
+                            Some(summary) => summary,
+                            None => match annualization {
+                                Some(annualization) => {
+                                    crate::practice::evaluate_with_annualization(
+                                        &req.concept_id,
+                                        &bars,
+                                        &evaluator_inputs,
+                                        annualization,
+                                    )
+                                }
+                                None => crate::practice::evaluate(
+                                    &req.concept_id,
+                                    &bars,
+                                    &evaluator_inputs,
+                                ),
                             }
-                        }
-                        .map_err(validate::bad)?,
+                            .map_err(validate::bad)?,
+                        },
                     },
                 },
             },
-        },
+        }
     };
     result["module"] = json!(req.module);
     result["symbol"] = json!(symbol);
@@ -2290,6 +2338,19 @@ async fn post_practice(
         if !binance_aggressor_practice {
             result["bars"] = json!(trade_bars.iter().map(|bar| &bar.bar).collect::<Vec<_>>());
         }
+    } else if let Some(snapshot) = depth_snapshot.as_ref() {
+        result["bar_origin"] = json!("server_fetched_binance_spot_order_book");
+        result["levels"] = json!({"bids":snapshot.bids,"asks":snapshot.asks});
+        result["depth_snapshot"] = json!({
+            "source":"binance_usdt_spot",
+            "endpoint":"https://data-api.binance.vision/api/v3/depth",
+            "symbol":symbol,
+            "depth_limit":limit,
+            "update_id":snapshot.update_id,
+            "timestamp":Value::Null,
+            "timestamp_note":"Binance depth supplies updateId, a sequence identifier, but no historical snapshot timestamp."
+        });
+        result["bars"] = json!([]);
     } else if open_candle_pair.is_none() {
         result["bars"] = json!(bars);
     }

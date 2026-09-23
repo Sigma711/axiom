@@ -555,10 +555,7 @@ fn extra_inputs(id: &str) -> Option<Vec<(&'static str, &'static str, f64)>> {
             ("high_52w", "52周最高价（元）", 100.),
             ("low_52w", "52周最低价（元）", 50.),
         ],
-        "book_order_imbalance" => vec![
-            ("bid_size", "委买数量（手）", 8000.),
-            ("ask_size", "委卖数量（手）", 5000.),
-        ],
+        "book_order_imbalance" => vec![],
         "book_order_flow" => vec![],
         "book_period" => vec![],
         "book_adjustment" => vec![
@@ -1073,6 +1070,103 @@ pub fn market_period_summary(bars: &[Bar], source: &str) -> Result<Value, String
         "values":{"book_period":nominal_seconds,"last_observed_interval_seconds":last_interval,"bar_count":bars.len(),"missing_expected_intervals":missing_expected_intervals,"calendar_gap_count":calendar_gap_count},
         "units":{"book_period":"秒","last_observed_interval_seconds":"秒","bar_count":"根 K 线","missing_expected_intervals":"个预期周期","calendar_gap_count":"个日期空档"},
         "series":[],"notes":notes,"inputs":{}
+    }))
+}
+
+/// Computes the three order-book lessons from one validated Binance spot depth
+/// snapshot. This is visible resting liquidity only: it contains neither
+/// executed aggressor flow nor an exchange timestamp.
+pub fn market_binance_depth_summary(
+    concept_id: &str,
+    snapshot: &crate::data::BinanceDepthSnapshot,
+    symbol: &str,
+) -> Result<Value, String> {
+    let base = symbol
+        .strip_suffix("USDT")
+        .filter(|base| !base.is_empty())
+        .ok_or("仅支持USDT现货交易对")?;
+    if !matches!(
+        concept_id,
+        "bid_ask_spread" | "book_order_imbalance" | "book_pitfall_order_imbalance"
+    ) {
+        return Err("该概念不使用 Binance 深度快照".into());
+    }
+    if snapshot.bids.len() != 5 || snapshot.asks.len() != 5 {
+        return Err("五档盘口练习需要每侧恰好五个深度档位".into());
+    }
+    let bid = snapshot.bids.first().ok_or("深度快照没有买盘")?;
+    let ask = snapshot.asks.first().ok_or("深度快照没有卖盘")?;
+    if ![bid.price, ask.price]
+        .iter()
+        .all(|value| value.is_finite() && *value > 0.0)
+        || bid.price >= ask.price
+    {
+        return Err("深度快照的最佳买卖价无效、锁定或交叉".into());
+    }
+    let validate_levels = |levels: &[crate::data::BinanceDepthLevel], descending: bool| {
+        !levels.is_empty()
+            && levels.iter().all(|level| {
+                level.price.is_finite()
+                    && level.price > 0.0
+                    && level.quantity.is_finite()
+                    && level.quantity >= 0.0
+            })
+            && levels.windows(2).all(|pair| {
+                if descending {
+                    pair[0].price > pair[1].price
+                } else {
+                    pair[0].price < pair[1].price
+                }
+            })
+    };
+    if !validate_levels(&snapshot.bids, true) || !validate_levels(&snapshot.asks, false) {
+        return Err("深度快照价格排序或数量无效".into());
+    }
+    // Halving each operand avoids overflow when both finite quotes are large.
+    let mid = bid.price / 2.0 + ask.price / 2.0;
+    let spread = ask.price - bid.price;
+    let relative_spread = spread / mid;
+    let checked_quantity = |levels: &[crate::data::BinanceDepthLevel]| -> Result<f64, String> {
+        levels.iter().try_fold(0.0, |sum, level| {
+            let next = sum + level.quantity;
+            next.is_finite()
+                .then_some(next)
+                .ok_or_else(|| "盘口挂单数量累计超出可表示范围".into())
+        })
+    };
+    let bid_quantity = checked_quantity(&snapshot.bids)?;
+    let ask_quantity = checked_quantity(&snapshot.asks)?;
+    let total_quantity = bid_quantity + ask_quantity;
+    if !mid.is_finite()
+        || !spread.is_finite()
+        || !relative_spread.is_finite()
+        || !total_quantity.is_finite()
+    {
+        return Err("盘口价差或数量累计超出可表示范围".into());
+    }
+    let imbalance = (total_quantity > 0.0).then(|| (bid_quantity - ask_quantity) / total_quantity);
+    let (values, units, notes) = match concept_id {
+        "bid_ask_spread" => (
+            json!({"best_bid":bid.price,"best_ask":ask.price,"mid_price":mid,"absolute_spread":spread,"relative_spread":relative_spread}),
+            json!({"best_bid":"USDT per base_asset","best_ask":"USDT per base_asset","mid_price":"USDT per base_asset","absolute_spread":"USDT per base_asset","relative_spread":"fraction"}),
+            vec!["相对价差 = (最佳卖价 - 最佳买价) / 中间价，其中中间价 = (最佳买价 + 最佳卖价) / 2。"],
+        ),
+        "book_order_imbalance" => (
+            json!({"best_bid":bid.price,"best_ask":ask.price,"top_n":5,"top_n_bid_quantity":bid_quantity,"top_n_ask_quantity":ask_quantity,"order_imbalance":imbalance}),
+            json!({"best_bid":"USDT per base_asset","best_ask":"USDT per base_asset","top_n":"levels","top_n_bid_quantity":"base_asset","top_n_ask_quantity":"base_asset","order_imbalance":"fraction"}),
+            vec!["委托不平衡 = (返回深度内买量 - 卖量) / (买量 + 卖量)；分母为零时为 null。"],
+        ),
+        "book_pitfall_order_imbalance" => (
+            json!({"best_bid":bid.price,"best_ask":ask.price,"top_n":5,"top_n_bid_quantity":bid_quantity,"top_n_ask_quantity":ask_quantity,"order_imbalance":imbalance}),
+            json!({"best_bid":"USDT per base_asset","best_ask":"USDT per base_asset","top_n":"levels","top_n_bid_quantity":"base_asset","top_n_ask_quantity":"base_asset","order_imbalance":"fraction"}),
+            vec!["这是当前可见挂单的描述，挂单可撤销、改价或被成交；它不是未来价格预测、交易信号或成交保证。", "Binance 现货深度不是 A 股内外盘，也不表示资金净流入或主动成交订单流。"],
+        ),
+        _ => unreachable!(),
+    };
+    Ok(json!({
+        "concept_id":concept_id,"input_kind":"market_bars","provenance":"server_fetched_binance_spot_order_book",
+        "status":"computed","reason":null,"values":values,"units":units,"series":[],"notes":notes,"inputs":{},
+        "asset_units":{"base_asset":base,"quote_asset":"USDT"}
     }))
 }
 

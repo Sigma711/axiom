@@ -82,6 +82,81 @@ async fn start_mock_feed() -> (HttpFeed, tokio::task::JoinHandle<()>, String) {
     (feed, server, dir)
 }
 
+async fn depth_endpoint(Query(q): Query<HashMap<String, String>>) -> Json<Value> {
+    assert_eq!(q.get("limit").map(String::as_str), Some("5"));
+    let valid = || {
+        json!({
+            "lastUpdateId":1,
+            "bids":[["100","1"],["99","0"],["98","0"],["97","0"],["96","0"]],
+            "asks":[["101","1"],["102","0"],["103","0"],["104","0"],["105","0"]]
+        })
+    };
+    let mut body = valid();
+    match q.get("symbol").map(String::as_str) {
+        Some("MISSINGUSDT") => {
+            body.as_object_mut().unwrap().remove("lastUpdateId");
+        }
+        Some("NONARRAYUSDT") => body["bids"] = json!("not-an-array"),
+        Some("EMPTYUSDT") => body["asks"] = json!([]),
+        Some("MISORDEREDUSDT") => body["bids"] = json!([["99", "1"], ["100", "1"]]),
+        Some("CROSSEDUSDT") => body["asks"] = json!([["100", "1"], ["101", "1"]]),
+        Some("BADQUANTITYUSDT") => body["asks"] = json!([["101", "-1"], ["102", "1"]]),
+        Some("NONFINITEUSDT") => body["bids"] = json!([["NaN", "1"], ["99", "1"]]),
+        Some("SHORTUSDT") => body["bids"] = json!([["100", "1"]]),
+        Some("BTCUSDT") => {}
+        other => panic!("unexpected symbol {other:?}"),
+    }
+    Json(body)
+}
+
+#[tokio::test]
+async fn binance_depth_contract_rejects_malformed_or_unusable_upstream_books() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            Router::new().route("/api/v3/depth", get(depth_endpoint)),
+        )
+        .await
+        .unwrap()
+    });
+    let dir = format!("target/test-depth-feed-{}", uuid::Uuid::new_v4());
+    let mut feed = HttpFeed::new(&dir);
+    feed.base_url = format!("http://127.0.0.1:{port}");
+    let valid = feed
+        .fetch_binance_usdt_spot_depth("BTCUSDT", 5)
+        .await
+        .unwrap();
+    assert_eq!(valid.update_id, 1);
+    assert_eq!(valid.bids[0].price, 100.0);
+    for symbol in [
+        "MISSINGUSDT",
+        "NONARRAYUSDT",
+        "EMPTYUSDT",
+        "MISORDEREDUSDT",
+        "CROSSEDUSDT",
+        "BADQUANTITYUSDT",
+        "NONFINITEUSDT",
+        "SHORTUSDT",
+    ] {
+        assert!(
+            feed.fetch_binance_usdt_spot_depth(symbol, 5).await.is_err(),
+            "{symbol}"
+        );
+    }
+    assert!(feed
+        .fetch_binance_usdt_spot_depth("BTCFDUSD", 5)
+        .await
+        .is_err());
+    assert!(feed
+        .fetch_binance_usdt_spot_depth("BTCUSDT", 7)
+        .await
+        .is_err());
+    server.abort();
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 #[tokio::test]
 async fn historical_pagination_returns_requested_closed_bars_and_cache_is_reusable() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

@@ -448,11 +448,22 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
 .ax-flow-metrics div { padding: .6rem .7rem; border: 1px solid var(--border-soft); border-radius: .5rem; background: var(--bg-elev); }
 .ax-flow-metrics dt { color: var(--text-dim); font-size: .72rem; }
 .ax-flow-metrics dd { margin: .3rem 0 0; color: var(--text); font: 650 .85rem var(--mono); overflow-wrap: anywhere; }
+.ax-depth-practice { max-width: 760px; }
+.ax-depth-chart { max-width: 760px; }
+.ax-depth-chart svg { width: 100%; min-width: 650px; }
+.ax-depth-chart svg text { fill: var(--text-dim); font: 12px var(--mono); }
+.ax-depth-chart svg .ax-depth-title { fill: var(--text); font: 650 17px system-ui, sans-serif; }
+.ax-depth-chart svg .ax-depth-rank { fill: var(--text-faint); }
+.ax-depth-axis { stroke: var(--border); }
+.ax-depth-bid-bar { fill: var(--accent-2); opacity: .28; }
+.ax-depth-ask-bar { fill: var(--red); opacity: .24; }
+.ax-depth-chart figcaption { color: var(--text-dim); }
 @media (max-width: 700px) {
   .ax-trade-volume-chart { overflow-x: auto; scrollbar-width: thin; }
   .ax-trade-volume-chart svg { min-width: 700px; }
   .ax-flow-chart { overflow-x: auto; scrollbar-width: thin; }
   .ax-flow-chart svg { min-width: 700px; }
+  .ax-depth-chart { overflow-x: auto; scrollbar-width: thin; }
 }
 .ax-repainting-chart .ax-series-legend i.ax-legend-retrospective, .ax-repainting-chart .ax-series-legend i.ax-legend-confirmed { width: 0.65rem; height: 0.65rem; border-radius: 50%; background: var(--bg-input) !important; border: 2px solid currentColor; }
 .ax-repainting-chart .ax-series-legend i.ax-legend-confirmed { background: currentColor !important; border-color: currentColor; }
