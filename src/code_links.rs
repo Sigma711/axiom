@@ -109,7 +109,9 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
     ROUTES.get_or_init(|| {
         let mut out = BTreeMap::new();
         for c in crate::practice::base_catalog() {
-            let candidates = if c.id == "bid_ask_spread" {
+            let candidates = if c.id == "volume_profile" {
+                vec!["src/book.rs::market_recent_trade_summary".to_string()]
+            } else if c.id == "bid_ask_spread" {
                 vec!["src/book.rs::market_binance_depth_summary".to_string()]
             } else if matches!(c.id.as_str(), "inside_outside" | "cvd") {
                 vec!["src/book.rs::market_binance_aggressor_summary".to_string()]
@@ -127,6 +129,8 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
             let id = c.id.strip_prefix("book_").unwrap_or(&c.id);
             let candidates = if c.id == "book_pitfall_order_imbalance" {
                 vec!["src/book.rs::market_binance_depth_summary".to_string()]
+            } else if c.id == "book_net_volume" {
+                vec!["src/book.rs::market_recent_trade_summary".to_string()]
             } else if c.id == "book_pitfall_open_candle" {
                 vec!["src/book.rs::market_open_candle_summary".to_string()]
             } else if c.id == "book_pitfall_formula_variant" {

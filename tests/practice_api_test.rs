@@ -56,7 +56,9 @@ async fn data_practice_accepts_only_concepts_with_a_data_plan() {
         concept.input_kind == "market_bars"
             && !matches!(
                 concept.id.as_str(),
-                "book_52w_range"
+                "book_net_volume"
+                    | "volume_profile"
+                    | "book_52w_range"
                     | "book_relative_strength_line"
                     | "book_pair_spread"
                     | "book_cointegration_diagnostic"
@@ -1805,4 +1807,97 @@ async fn year_range_catalog_and_api_reject_shortcuts_to_server_daily_evidence() 
     let concept = concepts.iter().find(|c| c.id == "book_52w_range").unwrap();
     assert_eq!(concept.input_kind, "market_bars");
     assert!(concept.inputs.is_empty());
+}
+
+async fn mock_recent_trades(Query(q): Query<HashMap<String, String>>) -> (StatusCode, Json<Value>) {
+    assert_eq!(q["limit"], "1000");
+    if q["symbol"] == "FAILUSDT" {
+        return (StatusCode::BAD_GATEWAY, Json(json!({})));
+    }
+    let now = Utc::now().timestamp_millis() - 1000;
+    let rows:Vec<_>=[(100.0,99.0),(101.0,2.0),(101.0,3.0),(99.0,4.0),(100.0,5.0)].iter().enumerate()
+        .map(|(i,(p,v))|json!({"id":10+i,"price":p.to_string(),"qty":v.to_string(),"time":now+i as i64/2})).collect();
+    (
+        StatusCode::OK,
+        Json(if q["symbol"] == "BADUSDT" {
+            json!([rows[0], rows[2]])
+        } else {
+            json!(rows)
+        }),
+    )
+}
+#[tokio::test]
+async fn recent_trade_practices_fetch_actual_trades_and_disclose_the_exact_window() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            axum::Router::new()
+                .route("/api/v3/trades", get(mock_recent_trades))
+                .route("/api/v3/time", get(mock_binance_time)),
+        )
+        .await
+        .unwrap();
+    });
+    let mut state = AppState::new(
+        default_config(),
+        PathBuf::from(format!("target/trades-test-{}", uuid::Uuid::new_v4())),
+    );
+    Arc::get_mut(&mut state.feed).unwrap().base_url = format!("http://127.0.0.1:{port}");
+    let app = api::router(Arc::new(state));
+    for id in ["book_net_volume", "volume_profile"] {
+        let base = json!({"concept_id":id,"module":"data","source":"binance","symbol":"BTCUSDT","inputs":{}});
+        let (status, body) = request(&app, "/api/practice", base.clone()).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["provenance"], "server_fetched_binance_recent_trades");
+        assert_eq!(body["recent_trades"]["trade_count"], 5);
+        assert_eq!(body["recent_trades"]["first_trade_id"], 10);
+        assert_eq!(body["recent_trades"]["last_trade_id"], 14);
+        assert_eq!(body["trades"].as_array().unwrap().len(), 5);
+        assert_eq!(body["bars"], json!([]));
+        assert_eq!(body["asset_units"]["base_asset"], "BTC");
+        assert_eq!(body["inputs"], json!({}));
+        if id == "book_net_volume" {
+            assert_eq!(
+                body["values"],
+                json!({"uptick_volume":7.0,"downtick_volume":4.0,"neutral_volume":3.0,"net_volume":3.0,"analyzed_volume":14.0})
+            );
+            assert_eq!(body["series"][0]["values"], json!([2.0, 0.0, -4.0, 5.0]));
+            assert_eq!(body["recent_trades"]["analyzed_trade_count"], 4);
+        } else {
+            assert_eq!(body["values"]["poc"], 100.0);
+            assert_eq!(body["values"]["total_volume"], 113.0);
+            assert_eq!(
+                body["profile_levels"],
+                json!([{"price":99.0,"volume":4.0,"is_poc":false,"in_value_area":false},{"price":100.0,"volume":104.0,"is_poc":true,"in_value_area":true},{"price":101.0,"volume":5.0,"is_poc":false,"in_value_area":false}])
+            );
+            assert_eq!(body["recent_trades"]["analyzed_trade_count"], 5);
+        }
+        for (key, value) in [
+            ("source", json!("real")),
+            ("source", json!("synthetic")),
+            ("symbol", json!("ETHBTC")),
+            ("module", json!("backtest")),
+            ("bars", json!([])),
+            ("inputs", json!({"prices":[1,2]})),
+            ("inputs", json!([])),
+        ] {
+            let mut invalid = base.clone();
+            invalid[key] = value;
+            assert_eq!(
+                request(&app, "/api/practice", invalid).await.0,
+                StatusCode::BAD_REQUEST
+            );
+        }
+        for symbol in ["FAILUSDT", "BADUSDT"] {
+            let mut invalid = base.clone();
+            invalid["symbol"] = json!(symbol);
+            assert_eq!(
+                request(&app, "/api/practice", invalid).await.0,
+                StatusCode::BAD_GATEWAY
+            );
+        }
+    }
+    server.abort();
 }

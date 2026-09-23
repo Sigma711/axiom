@@ -289,6 +289,97 @@ pub struct BinanceTradeBar {
     pub taker_buy_quote_volume: f64,
 }
 
+/// Executed spot trade. Decimal price spelling is retained for exact-price grouping.
+#[derive(Clone, Debug, Serialize)]
+pub struct BinanceRecentTrade {
+    pub id: u64,
+    pub price: f64,
+    pub price_decimal: String,
+    pub quantity: f64,
+    pub timestamp: DateTime<Utc>,
+}
+
+fn parse_binance_recent_trades(
+    raw: &serde_json::Value,
+    fetched_at: DateTime<Utc>,
+) -> Result<Vec<BinanceRecentTrade>> {
+    let rows = raw.as_array().context("recent trades must be an array")?;
+    anyhow::ensure!(
+        (2..=1000).contains(&rows.len()),
+        "recent trades need 2..1000 records"
+    );
+    let mut trades: Vec<BinanceRecentTrade> = Vec::with_capacity(rows.len());
+    let mut represented_prices = std::collections::HashMap::new();
+    for row in rows {
+        let decimal = |key: &str| -> Result<(f64, String)> {
+            let text = row[key]
+                .as_str()
+                .context("trade decimal must be a string")?;
+            anyhow::ensure!(
+                !text.is_empty()
+                    && text.bytes().all(|b| b.is_ascii_digit() || b == b'.')
+                    && text.bytes().filter(|b| *b == b'.').count() <= 1,
+                "invalid trade decimal spelling"
+            );
+            let value = text.parse::<f64>().context("invalid trade decimal")?;
+            anyhow::ensure!(
+                value.is_finite() && value > 0.0,
+                "trade price and quantity must be positive finite"
+            );
+            let canonical = if text.contains('.') {
+                text.trim_end_matches('0').trim_end_matches('.')
+            } else {
+                text
+            };
+            let canonical = canonical.trim_start_matches('0');
+            Ok((
+                value,
+                if canonical.starts_with('.') {
+                    format!("0{canonical}")
+                } else {
+                    canonical.to_owned()
+                },
+            ))
+        };
+        let (price, price_decimal) = decimal("price")?;
+        if let Some(previous) = represented_prices.insert(price.to_bits(), price_decimal.clone()) {
+            anyhow::ensure!(
+                previous == price_decimal,
+                "distinct decimal prices collapse at numeric precision"
+            );
+        }
+        let (quantity, _) = decimal("qty")?;
+        let id = row["id"]
+            .as_u64()
+            .context("trade id must be an unsigned integer")?;
+        let millis = row["time"]
+            .as_i64()
+            .context("trade time must be milliseconds")?;
+        let timestamp = Utc
+            .timestamp_millis_opt(millis)
+            .single()
+            .context("invalid trade timestamp")?;
+        anyhow::ensure!(
+            millis > 0 && timestamp <= fetched_at,
+            "trade timestamp is future or invalid"
+        );
+        if let Some(previous) = trades.last() {
+            anyhow::ensure!(
+                previous.id.checked_add(1) == Some(id) && previous.timestamp <= timestamp,
+                "recent trade IDs must be consecutive ascending and times nondecreasing"
+            );
+        }
+        trades.push(BinanceRecentTrade {
+            id,
+            price,
+            price_decimal,
+            quantity,
+            timestamp,
+        });
+    }
+    Ok(trades)
+}
+
 /// One visible price level from a Binance spot depth snapshot. It is an
 /// outstanding order, not an executed trade.
 #[derive(Clone, Debug, Serialize)]
@@ -392,6 +483,24 @@ impl HttpFeed {
                 .build()
                 .expect("无法创建 HTTP client"),
         }
+    }
+
+    /// Fetch the recent executed-trade window without cache or synthetic fallback.
+    pub async fn fetch_recent_spot_trades(
+        &self,
+        symbol: &str,
+    ) -> Result<(DateTime<Utc>, Vec<BinanceRecentTrade>)> {
+        let raw: serde_json::Value = self
+            .client
+            .get(format!("{}/api/v3/trades", self.base_url))
+            .query(&[("symbol", symbol), ("limit", "1000")])
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        let fetched_at = self.binance_server_time().await?;
+        Ok((fetched_at, parse_binance_recent_trades(&raw, fetched_at)?))
     }
 
     /// Fetch an uncached, normalized Binance USDT-spot book snapshot. Parsing
@@ -1889,5 +1998,64 @@ mod public_market_source_tests {
         assert_eq!(sh[0].close, 11.0);
         assert_eq!(bj[0].close, 11.0);
         server.abort();
+    }
+}
+
+#[cfg(test)]
+mod recent_trade_parser_tests {
+    use super::*;
+    use serde_json::{json, Value};
+    #[test]
+    fn trade_parser_preserves_id_order_and_decimal_prices_and_rejects_unusable_evidence() {
+        let cutoff = Utc.timestamp_millis_opt(1_700_000_010_000).unwrap();
+        let valid = json!([{"id":1,"price":"00100.00","qty":"2.00","time":1_700_000_000_001_i64},{"id":2,"price":"100.0","qty":"3","time":1_700_000_000_001_i64}]);
+        let parsed = parse_binance_recent_trades(&valid, cutoff).unwrap();
+        assert_eq!(parsed[0].price_decimal, "100");
+        assert_eq!(parsed[0].timestamp, parsed[1].timestamp);
+        let mut fractional = valid.clone();
+        fractional[0]["price"] = json!("000.0100");
+        fractional[1]["price"] = json!("0.01");
+        assert_eq!(
+            parse_binance_recent_trades(&fractional, cutoff).unwrap()[0].price_decimal,
+            "0.01"
+        );
+        for invalid in [
+            json!({}),
+            json!([]),
+            json!([valid[0]]),
+            json!(vec![valid[0].clone(); 1001]),
+        ] {
+            assert!(parse_binance_recent_trades(&invalid, cutoff).is_err());
+        }
+        for (key, value) in [
+            ("price", Value::Null),
+            ("price", json!("")),
+            ("price", json!("NaN")),
+            ("price", json!("1.2.3")),
+            ("price", json!(".")),
+            ("price", json!("0")),
+            ("qty", json!("-1")),
+            ("qty", json!("0")),
+            ("qty", json!("9".repeat(400))),
+            ("id", json!(-1)),
+            ("id", json!(1)),
+            ("id", json!(4)),
+            ("time", json!("bad")),
+            ("time", json!(i64::MAX)),
+            ("time", json!(0)),
+            ("time", json!(1_700_000_011_000_i64)),
+            ("time", json!(1_700_000_000_000_i64)),
+        ] {
+            let mut invalid = valid.clone();
+            invalid[1][key] = value;
+            assert!(
+                parse_binance_recent_trades(&invalid, cutoff).is_err(),
+                "{invalid}"
+            );
+        }
+        let mut ambiguous = valid;
+        ambiguous[0]["price"] = json!("100000000000000000000");
+        ambiguous[1]["price"] = json!("100000000000000000001");
+        assert!(parse_binance_recent_trades(&ambiguous, cutoff).is_err());
     }
 }

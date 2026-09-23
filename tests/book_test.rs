@@ -743,3 +743,66 @@ fn year_range_uses_calendar_window_and_observed_high_low_with_honest_boundaries(
     assert!(axiom::book::market_52w_range_summary(&future, "us_stock").is_err());
     assert!(axiom::book::evaluate("book_52w_range", &bars, &serde_json::json!({})).is_err());
 }
+
+#[test]
+fn recent_trade_calculators_have_direction_and_value_area_oracles() {
+    let trades = |prices: &[f64], quantities: &[f64]| -> Vec<axiom::data::BinanceRecentTrade> {
+        prices
+            .iter()
+            .zip(quantities)
+            .enumerate()
+            .map(|(i, (p, q))| axiom::data::BinanceRecentTrade {
+                id: i as u64,
+                price: *p,
+                price_decimal: p.to_string(),
+                quantity: *q,
+                timestamp: chrono::DateTime::from_timestamp(1_700_000_000 + i as i64, 0).unwrap(),
+            })
+            .collect()
+    };
+    let net = book::market_recent_trade_summary(
+        "book_net_volume",
+        &trades(&[100., 101., 101., 99., 100.], &[99., 2., 3., 4., 5.]),
+    )
+    .unwrap();
+    assert_eq!(net["values"]["net_volume"], 3.0);
+    assert_eq!(net["values"]["neutral_volume"], 3.0);
+    let tie = book::market_recent_trade_summary(
+        "volume_profile",
+        &trades(&[99., 100., 101., 102.], &[1., 4., 4., 1.]),
+    )
+    .unwrap();
+    assert_eq!(tie["values"]["poc"], 101.0);
+    assert_eq!(tie["values"]["value_area_low"], 100.0);
+    assert_eq!(tie["values"]["value_area_high"], 101.0);
+    let adjacent = book::market_recent_trade_summary(
+        "volume_profile",
+        &trades(&[99., 100., 101.], &[2., 5., 2.]),
+    )
+    .unwrap();
+    assert_eq!(adjacent["values"]["value_area_low"], 100.0);
+    assert_eq!(adjacent["values"]["value_area_high"], 101.0);
+    let one =
+        book::market_recent_trade_summary("volume_profile", &trades(&[100., 100.], &[2., 3.]))
+            .unwrap();
+    assert_eq!(one["values"]["poc"], 100.0);
+    assert_eq!(one["values"]["price_level_count"], 1);
+    assert_eq!(one["values"]["included_fraction"], 1.0);
+    assert!(
+        book::market_recent_trade_summary("unsupported", &trades(&[1., 2.], &[1., 1.])).is_err()
+    );
+    assert!(book::market_recent_trade_summary("volume_profile", &[]).is_err());
+    for id in ["volume_profile", "book_net_volume"] {
+        assert!(book::market_recent_trade_summary(
+            id,
+            &trades(&[1., 2., 3.], &[1., f64::MAX, f64::MAX])
+        )
+        .is_err());
+        assert!(book::market_recent_trade_summary(id, &trades(&[1., 2.], &[0., 1.])).is_err());
+    }
+    let mut collision = trades(&[100., 100.], &[1., 1.]);
+    collision[0].price_decimal = "100.00000000000000001".into();
+    assert!(book::market_recent_trade_summary("volume_profile", &collision).is_err());
+    assert!(axiom::practice::evaluate("volume_profile", &[], &json!({})).is_err());
+    assert!(axiom::book_technical::evaluate("book_net_volume", &[], &json!({})).is_err());
+}

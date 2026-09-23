@@ -39,16 +39,17 @@ pub fn catalog() -> Vec<PracticeConcept> {
         .iter()
         .map(|s| {
             let depth_snapshot = s["id"] == "book_pitfall_order_imbalance";
+            let recent_trades = s["id"] == "book_net_volume";
             PracticeConcept {
             id: s["id"].as_str().unwrap().into(),
             name: s["name"].as_str().unwrap().into(),
             category: "原书补充·技术实践".into(),
-            input_kind: if depth_snapshot || is_pair_practice(s["id"].as_str().unwrap()) { "market_bars" } else { s["input_kind"].as_str().unwrap() }.into(),
+            input_kind: if depth_snapshot || recent_trades || is_pair_practice(s["id"].as_str().unwrap()) { "market_bars" } else { s["input_kind"].as_str().unwrap() }.into(),
             inputs: if is_pair_practice(s["id"].as_str().unwrap()) {
                 if s["id"] == "book_pair_spread" {
                     vec![PracticeInput { key: "hedge_ratio".into(), label: "对冲比例（B单位/A单位）".into(), default: json!(1.0) }, PracticeInput { key: "period".into(), label: "Z-Score小时窗口".into(), default: json!(20) }]
                 } else { Vec::new() }
-            } else if depth_snapshot { Vec::new() } else { s["defaults"]
+            } else if depth_snapshot || recent_trades { Vec::new() } else { s["defaults"]
                 .as_object()
                 .unwrap()
                 .iter()
@@ -58,12 +59,12 @@ pub fn catalog() -> Vec<PracticeConcept> {
                     default: v.clone(),
                 })
                 .collect() },
-            notes: if depth_snapshot { "仅使用服务器从 Binance USDT 现货深度端点取得的单次盘口快照；不接受手填挂单、撤单或客户端深度。" } else { s["summary"].as_str().unwrap() }.into(),
+            notes: if recent_trades { "服务器取得最近Binance现货逐笔成交，以前笔价格分类上涨、下跌与等价量；首笔仅作锚点，不冒称资金净流入或完整交易日。" } else if depth_snapshot { "仅使用服务器从 Binance USDT 现货深度端点取得的单次盘口快照；不接受手填挂单、撤单或客户端深度。" } else { s["summary"].as_str().unwrap() }.into(),
         }})
         .collect()
 }
 pub fn entries() -> Vec<KnowledgeEntry> {
-    specs()
+    let mut entries: Vec<KnowledgeEntry> = specs()
         .iter()
         .map(|s| {
             let text = |key: &str| s[key].as_str().unwrap_or("").to_string();
@@ -96,7 +97,25 @@ pub fn entries() -> Vec<KnowledgeEntry> {
                 diagram: None,
             }
         })
-        .collect()
+        .collect();
+    if let Some(entry) = entries
+        .iter_mut()
+        .find(|entry| entry.id == "book_net_volume")
+    {
+        entry.summary = "按真实近期逐笔成交的相邻价格比较上涨Tick量与下跌Tick量。".into();
+        entry.meaning =
+            "逐笔按ID排序；首笔作锚点，等价量单独列为neutral，净量=上涨量−下跌量。".into();
+        entry.signals = "仅描述已发生的近期成交价格方向，不是交易指令。".into();
+        entry.pitfalls =
+            "不是maker/taker分类、CVD或资金净流入；最近1000笔可能只覆盖数秒，不代表完整时段。"
+                .into();
+        entry.code_ref = "src/book.rs::market_recent_trade_summary".into();
+        entry.code_url =
+            "https://github.com/Sigma711/axiom/blob/main/src/book.rs#market_recent_trade_summary"
+                .into();
+        entry.implementation = entry.code_ref.clone();
+    }
+    entries
 }
 pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String> {
     evaluate_inner(id, bars, inputs, None)
@@ -119,6 +138,9 @@ fn evaluate_inner(
         .iter()
         .find(|s| s["id"] == id)
         .ok_or_else(|| format!("未知技术概念: {id}"))?;
+    if id == "book_net_volume" {
+        return Err("Net Volume必须由API使用服务器取得的逐笔成交计算".into());
+    }
     let mut v = s["defaults"].clone();
     let provided = inputs.as_object().ok_or("inputs必须为对象")?;
     if is_pair_practice(id)

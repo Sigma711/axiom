@@ -1177,6 +1177,104 @@ pub fn market_binance_depth_summary(
     }))
 }
 
+/// Computes only the recent exchange-observed executions, never a full session.
+pub fn market_recent_trade_summary(
+    id: &str,
+    trades: &[crate::data::BinanceRecentTrade],
+) -> Result<Value, String> {
+    if !matches!(id, "book_net_volume" | "volume_profile") || trades.len() < 2 {
+        return Err(
+            "recent-trade practice requires a supported concept and at least two trades".into(),
+        );
+    }
+    if trades.iter().any(|trade| {
+        !trade.price.is_finite()
+            || trade.price <= 0.0
+            || !trade.quantity.is_finite()
+            || trade.quantity <= 0.0
+    }) {
+        return Err("recent-trade prices and quantities must be positive finite".into());
+    }
+    let mut result = if id == "book_net_volume" {
+        let (mut up, mut down, mut neutral) = (0.0, 0.0, 0.0);
+        let mut signed = Vec::new();
+        for pair in trades.windows(2) {
+            let q = pair[1].quantity;
+            let value = match pair[1].price.total_cmp(&pair[0].price) {
+                std::cmp::Ordering::Greater => {
+                    up += q;
+                    q
+                }
+                std::cmp::Ordering::Less => {
+                    down += q;
+                    -q
+                }
+                std::cmp::Ordering::Equal => {
+                    neutral += q;
+                    0.0
+                }
+            };
+            signed.push(value);
+        }
+        let total = up + down + neutral;
+        if !total.is_finite() {
+            return Err("trade quantity sum overflow".into());
+        }
+        json!({"values":{"uptick_volume":up,"downtick_volume":down,"neutral_volume":neutral,"net_volume":up-down,"analyzed_volume":total},"units":{"uptick_volume":"base_asset","downtick_volume":"base_asset","neutral_volume":"base_asset","net_volume":"base_asset","analyzed_volume":"base_asset"},"series":[{"name":"tick_net_volume","unit":"base_asset","values":signed}],"source_ids":["appendix_019"]})
+    } else {
+        let mut levels: std::collections::BTreeMap<&str, (f64, f64)> =
+            std::collections::BTreeMap::new();
+        for trade in trades {
+            let level = levels
+                .entry(&trade.price_decimal)
+                .or_insert((trade.price, 0.0));
+            level.1 += trade.quantity;
+        }
+        let mut levels: Vec<_> = levels.into_values().collect();
+        levels.sort_by(|a, b| a.0.total_cmp(&b.0));
+        if levels.windows(2).any(|w| w[0].0 == w[1].0) {
+            return Err(
+                "distinct decimal prices cannot be represented as distinct numeric levels".into(),
+            );
+        }
+        let total: f64 = levels.iter().map(|(_, q)| q).sum();
+        if !total.is_finite() {
+            return Err("trade quantity sum overflow".into());
+        }
+        let prices: Vec<_> = levels.iter().map(|(p, _)| *p).collect();
+        let volumes: Vec<_> = levels.iter().map(|(_, q)| *q).collect();
+        let mut profile = crate::practice::evaluate(
+            "volume_profile",
+            &[],
+            &json!({"prices":prices,"volumes":volumes,"value_area_fraction":0.7}),
+        )?;
+        let poc = profile["values"]["poc"].as_f64().unwrap();
+        let low = profile["values"]["value_area_low"].as_f64().unwrap();
+        let high = profile["values"]["value_area_high"].as_f64().unwrap();
+        profile["profile_levels"]=json!(levels.iter().map(|(p,q)|json!({"price":p,"volume":q,"in_value_area":*p>=low&&*p<=high,"is_poc":*p==poc})).collect::<Vec<_>>());
+        profile["values"]["total_volume"] = json!(total);
+        profile["values"]["price_level_count"] = json!(levels.len());
+        profile["units"]["total_volume"] = json!("base_asset");
+        profile["units"]["price_level_count"] = json!("levels");
+        profile["units"]["weights"] = json!("base_asset");
+        profile["series"][1]["unit"] = json!("base_asset");
+        profile["source_ids"] = json!(["book_19_01"]);
+        profile
+    };
+    result["concept_id"] = json!(id);
+    result["input_kind"] = json!("market_bars");
+    result["provenance"] = json!("server_fetched_binance_recent_trades");
+    result["status"] = json!("computed");
+    result["reason"] = Value::Null;
+    result["inputs"] = json!({});
+    result["notes"] = if id == "book_net_volume" {
+        json!(["按交易ID顺序比较每笔成交价与前一笔；首笔仅作价格锚点，其成交量不计入。等价成交单独记为neutral，不继承上次方向。这里的上涨/下跌Tick量不是maker/taker分类、CVD或资金净流入。","窗口仅为接口返回的最近成交记录，时间跨度可短至数秒；不是完整小时、交易日或全市场。"])
+    } else {
+        json!(["精确按观测成交价汇总base数量，不把K线量分摊到价格层。POC并列时取较高价；从POC开始，逐次纳入相邻观测价位中成交量较大的一侧，同量向上扩展，直至至少70%。未观测价位不补零，也不声称复刻某供应商。","只描述本次最近成交窗口；不代表完整时段或全市场，也不保证POC、价值区会形成未来支撑阻力。"])
+    };
+    Ok(result)
+}
+
 /// Observed provider-OHLC range, anchored to the supplied last completed daily bar.
 /// A pre-window observation and 180 daily observations are a sufficiency gate,
 /// not a claim that the provider's exchange calendar or adjustments were audited.

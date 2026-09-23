@@ -483,14 +483,9 @@ pub(super) fn evaluate(id: &str, v: &Value, o: &mut Output) -> Result<(), String
             o.number("parallel_b", y[1] + slope * (eval - x[1]), "price");
             o.number("parallel_c", y[2] + slope * (eval - x[2]), "price");
         }
-        "cumulative_volume_index" | "net_volume" => {
-            let (a_key, b_key) = if id == "cumulative_volume_index" {
-                ("up_volume", "down_volume")
-            } else {
-                ("uptick_volume", "downtick_volume")
-            };
-            let up = a(a_key)?;
-            let down = a(b_key)?;
+        "cumulative_volume_index" => {
+            let up = a("up_volume")?;
+            let down = a("down_volume")?;
             pair(&up, &down)?;
             if up.iter().chain(&down).any(|x| *x < 0.0) {
                 return Err("成交量不能负".into());
@@ -503,11 +498,7 @@ pub(super) fn evaluate(id: &str, v: &Value, o: &mut Output) -> Result<(), String
                     .map(|(u, d)| {
                         let delta = u - d;
                         total += delta;
-                        Some(if id == "cumulative_volume_index" {
-                            total
-                        } else {
-                            delta
-                        })
+                        Some(total)
                     })
                     .collect(),
                 "volume",

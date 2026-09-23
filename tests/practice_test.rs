@@ -52,10 +52,12 @@ fn every_unique_knowledge_concept_has_editable_executable_practice() {
             volume: 1000.0 + i as f64,
         })
         .collect();
-    for item in cat
-        .into_iter()
-        .filter(|item| !matches!(item.id.as_str(), "inside_outside" | "cvd"))
-    {
+    for item in cat.into_iter().filter(|item| {
+        !matches!(
+            item.id.as_str(),
+            "inside_outside" | "cvd" | "volume_profile"
+        )
+    }) {
         let inputs = if item.id == "rolling_correlation" {
             json!({"series_x":[0.01,0.02,0.03],"series_y":[0.03,0.02,0.01],"period":2})
         } else {
@@ -88,7 +90,10 @@ fn market_practices_preserve_history_and_handle_empty_and_short_input() {
     let bars = candles(140);
     for concept in practice::base_catalog().into_iter().filter(|c| {
         c.input_kind == "market_bars"
-            && !matches!(c.id.as_str(), "inside_outside" | "cvd" | "bid_ask_spread")
+            && !matches!(
+                c.id.as_str(),
+                "inside_outside" | "cvd" | "volume_profile" | "bid_ask_spread"
+            )
     }) {
         assert_eq!(
             practice::evaluate(&concept.id, &[], &json!({})).unwrap()["status"],

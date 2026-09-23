@@ -1052,3 +1052,58 @@ test('52-week stock practice derives its range from real daily highs and lows in
   await page.getByLabel('切换到浅色模式').click();
   expect(await visual.evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(dark);
 });
+
+test('recent-trade concepts derive tick net volume and price distribution from exchange executions', async ({ page }) => {
+  test.setTimeout(120_000);
+  for (const conceptId of ['book_net_volume', 'volume_profile']) {
+    await page.goto(`/data?concept=${conceptId}&source=binance`);
+    const panel = page.getByLabel('概念实践');
+    await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+    const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+    const requestPromise = page.waitForRequest(request => request.url().includes('/api/practice') && request.method() === 'POST');
+    await panel.getByRole('button', { name: '运行实践' }).click();
+    const [request, response] = await Promise.all([requestPromise, responsePromise]);
+    expect(request.postDataJSON()).toMatchObject({ concept_id: conceptId, module: 'data', source: 'binance', symbol: 'BTCUSDT', inputs: {} });
+    expect(request.postDataJSON().bars).toBeUndefined();
+    expect(response.ok(), await response.text()).toBe(true);
+    const result = await response.json();
+    expect(result.provenance).toBe('server_fetched_binance_recent_trades');
+    expect(result.recent_trades.window_kind).toBe('recent_observed_trades');
+    expect(result.trades.length).toBe(result.recent_trades.trade_count);
+    expect(result.trades.length).toBeGreaterThanOrEqual(2);
+    for (let index = 1; index < result.trades.length; index++) {
+      expect(result.trades[index].id).toBe(result.trades[index - 1].id + 1);
+      expect(new Date(result.trades[index].timestamp).getTime()).toBeGreaterThanOrEqual(new Date(result.trades[index - 1].timestamp).getTime());
+    }
+    if (conceptId === 'book_net_volume') {
+      let up = 0, down = 0, neutral = 0;
+      for (let index = 1; index < result.trades.length; index++) {
+        const trade = result.trades[index], previous = result.trades[index - 1];
+        if (trade.price > previous.price) up += trade.quantity;
+        else if (trade.price < previous.price) down += trade.quantity;
+        else neutral += trade.quantity;
+      }
+      expect(result.values.uptick_volume).toBeCloseTo(up, 8);
+      expect(result.values.downtick_volume).toBeCloseTo(down, 8);
+      expect(result.values.neutral_volume).toBeCloseTo(neutral, 8);
+      expect(result.values.net_volume).toBeCloseTo(up - down, 8);
+      expect(result.recent_trades.analyzed_trade_count).toBe(result.trades.length - 1);
+      await expect(panel.locator('.ax-trade-directions')).toBeVisible();
+      await expect(panel).toContainText('首笔只作前价锚点');
+    } else {
+      const groups = new Map<number, number>();
+      for (const trade of result.trades) groups.set(trade.price, (groups.get(trade.price) || 0) + trade.quantity);
+      expect(result.profile_levels).toHaveLength(groups.size);
+      for (const level of result.profile_levels) expect(level.volume).toBeCloseTo(groups.get(level.price)!, 8);
+      const included = result.profile_levels.filter((level: { in_value_area: boolean }) => level.in_value_area).reduce((sum: number, level: { volume: number }) => sum + level.volume, 0);
+      expect(result.values.included_fraction).toBeCloseTo(included / result.values.total_volume, 8);
+      expect(result.values.poc).toBe(result.profile_levels.find((level: { is_poc: boolean }) => level.is_poc).price);
+      await expect(panel.locator('.ax-trade-profile svg')).toBeVisible();
+      await expect(panel.locator('.ax-trade-profile rect[data-price-level]')).toHaveCount(groups.size);
+      await expect(panel).toContainText('不是全天成交分布');
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  const profile = page.locator('.ax-trade-profile');
+  expect(await profile.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+});

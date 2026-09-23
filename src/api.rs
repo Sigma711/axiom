@@ -1490,7 +1490,9 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
                 | "book_second_order_greeks"
         );
     let performance = concept.category == "风险-绩效";
-    if concept.id == "book_52w_range" {
+    if matches!(concept.id.as_str(), "book_net_volume" | "volume_profile") {
+        json!({"markets":["crypto"],"modules":["data"],"required_datasets":["server_fetched_binance_usdt_spot_recent_trades"],"source_policy":"real_required","goal":"服务器直接取得最近最多1000笔Binance USDT现货逐笔成交，校验连续交易ID与非递减毫秒时间。Net Volume按相邻成交价分类，首笔作锚点、等价量单列；Volume Profile按实际价格汇总数量并按已披露算法计算70%价值区。不接收客户端K线或输入，不把近期记录冒称完整小时、交易日或资金净流入。"})
+    } else if concept.id == "book_52w_range" {
         json!({"markets":["cn_equity","us_equity"],"modules":["data"],"required_datasets":["server_fetched_completed_daily_ohlcv_364_calendar_days","pre_window_daily_observation","at_least_180_window_observations"],"source_policy":"real_required","goal":"服务器固定取得400根股票日线，以最新已收盘日线为截止取前364自然日开区间；要求窗口前历史锚点及至少180根窗口内观测。显示提供者OHLC的高低与收盘位置，不宣称已核验复权口径或交易日完整性。拒绝客户端价格、K线及教学输入。"})
     } else if crate::book_technical::is_pair_practice(&concept.id) {
         json!({"markets":["crypto"],"modules":["data"],"required_datasets":["server_fetched_aligned_binance_usdt_spot_hourly_pair"],"source_policy":"real_required","goal":"服务器以同一交易所截止时刻取得两个不同USDT现货标的的已收盘小时线，精确匹配时间且拒绝匹配窗口内部缺口；展示双方标的、时间范围、匹配与舍弃数量。相对强弱不是RSI，价差不是套利保证，残差单位根统计量不能证明协整。"})
@@ -2187,6 +2189,49 @@ async fn post_practice(
     }
     if crate::book_technical::is_pair_practice(&concept.id) {
         return post_pair_practice(&state, &req, &symbol, &source, limit).await;
+    }
+    if matches!(concept.id.as_str(), "book_net_volume" | "volume_profile") {
+        if source != "binance"
+            || symbol.strip_suffix("USDT").is_none_or(str::is_empty)
+            || req.bars.is_some()
+            || !req
+                .inputs
+                .as_object()
+                .is_some_and(serde_json::Map::is_empty)
+        {
+            return Err(validate::bad("recent-trade practice requires Binance USDT spot and rejects client bars or inputs"));
+        }
+        if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Live market data is disabled in offline mode".into(),
+            ));
+        }
+        let (fetched_at, trades) = state
+            .feed
+            .fetch_recent_spot_trades(&symbol)
+            .await
+            .map_err(|error| (StatusCode::BAD_GATEWAY, error.to_string()))?;
+        let mut result = crate::book::market_recent_trade_summary(&concept.id, &trades)
+            .map_err(validate::bad)?;
+        let anchor_excluded = concept.id == "book_net_volume";
+        result["module"] = json!("data");
+        result["symbol"] = json!(symbol);
+        result["source"] = json!(source);
+        result["context"] = json!("selected_dataset");
+        result["bars"] = json!([]);
+        result["provenance"] = json!("server_fetched_binance_recent_trades");
+        result["bar_origin"] = json!("server_fetched_binance_recent_trades");
+        result["asset_units"] =
+            json!({"base_asset":symbol.strip_suffix("USDT").unwrap(),"quote_asset":"USDT"});
+        result["recent_trades"] = json!({"source":"binance_usdt_spot","endpoint":format!("{}/api/v3/trades", state.feed.base_url.trim_end_matches('/')),"requested_limit":1000,"trade_count":trades.len(),"analyzed_trade_count":trades.len()-usize::from(anchor_excluded),"first_trade_id":trades[0].id,"last_trade_id":trades.last().unwrap().id,"first_time":trades[0].timestamp,"last_time":trades.last().unwrap().timestamp,"fetched_at":fetched_at,"anchor_excluded":anchor_excluded,"zero_tick_policy":"equal_price_is_neutral","window_kind":"recent_observed_trades"});
+        result["trades"] = json!(trades
+            .iter()
+            .map(
+                |t| json!({"id":t.id,"price":t.price,"quantity":t.quantity,"timestamp":t.timestamp})
+            )
+            .collect::<Vec<_>>());
+        return Ok(Json(result));
     }
     if concept.id == "book_52w_range" {
         if req.bars.is_some()

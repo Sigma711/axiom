@@ -130,7 +130,7 @@ export interface PracticeResult {
   status: 'computed' | 'undefined';
   reason: string | null;
   input_kind: PracticeConcept['input_kind'];
-  provenance: 'provided_market_bars' | 'provided_result_context' | 'editable_teaching_inputs' | 'server_fetched_provisional_snapshot' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_spot_order_book' | 'server_fetched_completed_stock_daily_bars';
+  provenance: 'provided_market_bars' | 'provided_result_context' | 'editable_teaching_inputs' | 'server_fetched_provisional_snapshot' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_spot_order_book' | 'server_fetched_completed_stock_daily_bars' | 'server_fetched_binance_recent_trades';
   values: Record<string, number | null>;
   units?: Record<string, string>;
   series: Array<{ name: string; unit?: string; values: Array<number | null> }>;
@@ -143,6 +143,9 @@ export interface PracticeResult {
   second_bars?: Bar[];
   pair?: { first_symbol: string; second_symbol: string; interval: string; quote_asset: string; matched_count: number; dropped_first: number; dropped_second: number; start: string; end: string; completion_cutoff: string };
   year_range?: { window_start: string; window_end: string; as_of: string; bar_count: number; price_basis: string; source: string; pre_window_observation: string; window_start_inclusive: false };
+  recent_trades?: { source: string; endpoint: string; requested_limit: number; trade_count: number; analyzed_trade_count: number; first_trade_id: number; last_trade_id: number; first_time: string; last_time: string; fetched_at: string; anchor_excluded: boolean; zero_tick_policy: string; window_kind: string };
+  trades?: Array<{ id: number; price: number; quantity: number; timestamp: string }>;
+  profile_levels?: Array<{ price: number; volume: number; in_value_area: boolean; is_poc: boolean }>;
   asset_units?: { base_asset: string; quote_asset: string };
   levels?: { bids: Array<{ price: number; quantity: number }>; asks: Array<{ price: number; quantity: number }> };
   depth_snapshot?: { source: string; endpoint: string; symbol: string; depth_limit: number; update_id: number; timestamp: null; timestamp_note: string };

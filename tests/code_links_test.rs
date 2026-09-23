@@ -73,6 +73,12 @@ fn every_published_concept_resolves_to_an_actual_implementation_branch() {
                         location.code_ref,
                         "src/book.rs::market_trade_volume_summary"
                     );
+                } else if matches!(e.id.as_str(), "book_net_volume" | "volume_profile") {
+                    assert_eq!(location.kind, "function");
+                    assert_eq!(
+                        location.code_ref,
+                        "src/book.rs::market_recent_trade_summary"
+                    );
                 } else if matches!(
                     e.id.as_str(),
                     "bid_ask_spread" | "book_order_imbalance" | "book_pitfall_order_imbalance"

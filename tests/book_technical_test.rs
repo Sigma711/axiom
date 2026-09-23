@@ -17,7 +17,7 @@ fn all_book_technical_cards_are_executable_and_have_real_examples() {
     let catalog = bt::catalog();
     assert!(catalog.len() >= 98);
     let bars = bars(750);
-    for c in catalog {
+    for c in catalog.into_iter().filter(|c| c.id != "book_net_volume") {
         let mut daily_cdp_bars = Vec::new();
         if c.id == "book_cdp" {
             daily_cdp_bars = bars.clone();
@@ -99,6 +99,7 @@ fn technical_series_do_not_rewrite_history_and_small_samples_do_not_panic() {
     for c in bt::catalog().into_iter().filter(|c| {
         c.input_kind == "market_bars"
             && c.id != "book_pitfall_order_imbalance"
+            && c.id != "book_net_volume"
             && !bt::is_pair_practice(&c.id)
     }) {
         let selected_bars = if c.id == "book_cdp" { &daily_b } else { &b };

@@ -279,6 +279,25 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
 .ax-year-range-prices span:last-child { text-align: right; }
 .ax-year-range-prices b { display: block; color: var(--text); font: 600 .92rem var(--mono); }
 .ax-year-range figcaption { margin-top: 1rem; color: var(--text-dim); font-size: .77rem; line-height: 1.65; }
+.ax-recent-trades-window { color: var(--text-dim); font-size: .78rem; line-height: 1.5; overflow-wrap: anywhere; }
+.ax-trade-directions, .ax-trade-profile { margin: .65rem 0; padding: 1rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; }
+.ax-trade-direction { display: grid; grid-template-columns: 74px minmax(0, 1fr) 120px; align-items: center; gap: .6rem; margin: .8rem 0; color: var(--text-dim); font-size: .78rem; }
+.ax-trade-direction-track { height: 18px; overflow: hidden; border-radius: 4px; background: var(--bg-elev); }
+.ax-trade-direction-bar { display: block; height: 100%; border-radius: 4px; }
+.ax-trade-direction-bar.up { background: var(--green); }
+.ax-trade-direction-bar.down { background: var(--red); }
+.ax-trade-direction-bar.neutral { background: var(--accent-2); }
+.ax-trade-direction b { color: var(--text); font: 600 .77rem var(--mono); text-align: right; }
+.ax-trade-directions figcaption, .ax-trade-profile figcaption { margin-top: .8rem; color: var(--text-dim); font-size: .77rem; line-height: 1.65; }
+.ax-trade-directions figcaption strong { color: var(--text); font: 700 .95rem var(--mono); }
+.ax-trade-profile { max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
+.ax-trade-profile svg { display: block; background: var(--bg-input); border: 1px solid var(--border-soft); border-radius: 6px; }
+.ax-trade-profile svg text { fill: var(--text-dim); font: 11px var(--mono); }
+.ax-trade-profile svg line { stroke: var(--border); stroke-width: 1; }
+.ax-trade-profile rect.outside { fill: var(--text-faint); }
+.ax-trade-profile rect.value-area { fill: var(--accent-2); }
+.ax-trade-profile rect.poc { fill: var(--accent); }
+@media (max-width: 520px) { .ax-trade-direction { grid-template-columns: 64px minmax(0, 1fr); gap: .25rem .5rem; }.ax-trade-direction b { grid-column: 2; text-align: left; } }
 
 /* === 图示 (ASCII) === */
 .ax-diagram { background: var(--bg-elev); border: 1px solid var(--border-soft); border-radius: 4px; padding: 0.7rem 1rem; margin: 0.5rem 0; font-family: var(--mono); font-size: 0.78rem; line-height: 1.55; color: var(--text); white-space: pre; overflow-x: auto; }
