@@ -500,3 +500,9 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
 }
 .ax-repainting-chart .ax-series-legend i.ax-legend-retrospective, .ax-repainting-chart .ax-series-legend i.ax-legend-confirmed { width: 0.65rem; height: 0.65rem; border-radius: 50%; background: var(--bg-input) !important; border: 2px solid currentColor; }
 .ax-repainting-chart .ax-series-legend i.ax-legend-confirmed { background: currentColor !important; border-color: currentColor; }
+.ax-market-as-of {
+  margin: 0.7rem 0;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}

@@ -63,6 +63,10 @@ async fn an_empty_indicator_selection_returns_a_price_only_chart() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["bars"].as_array().unwrap().len(), 60);
     assert_eq!(body["indicators"].as_object().unwrap().len(), 0);
+    assert_eq!(
+        body["market_data_as_of"],
+        body["bars"].as_array().unwrap().last().unwrap()["timestamp"]
+    );
 }
 
 #[tokio::test]
@@ -156,6 +160,10 @@ async fn fixed_bars_produce_distinct_strategy_and_parameter_equity_curves() {
         assert_eq!(status, StatusCode::OK, "{strategy}: {result}");
         let curve = result["equity_curve"].as_array().unwrap();
         assert_eq!(curve.len(), 240);
+        assert_eq!(
+            result["market_data_as_of"],
+            data["bars"].as_array().unwrap().last().unwrap()["timestamp"]
+        );
         curves.insert(serde_json::to_string(curve).unwrap());
     }
     assert_eq!(
@@ -443,6 +451,10 @@ async fn public_learning_and_exploration_reads_return_complete_safe_documents() 
     let (status, data) = request("GET", "/api/data?source=synthetic&limit=25", Value::Null).await;
     assert_eq!(status, StatusCode::OK, "{data}");
     assert_eq!(data["bars"].as_array().unwrap().len(), 25);
+    assert_eq!(
+        data["market_data_as_of"],
+        data["bars"].as_array().unwrap().last().unwrap()["timestamp"]
+    );
 
     let (status, patterns) = request(
         "GET",

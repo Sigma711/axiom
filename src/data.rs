@@ -1316,17 +1316,51 @@ fn select_a_share_daily_bars(
         }
         (true, false) => primary,
         (false, true) => fallback,
+        // A calendar-age check cannot distinguish an upstream outage from a
+        // valid multi-day exchange closure. When neither provider has a
+        // weekday-recent bar, retain the newest structurally valid completed
+        // series within a bounded closure window; callers disclose its last
+        // observation timestamp rather than presenting it as today's price.
         (false, false) => {
+            let bars = newest_nonempty_daily_series(primary, fallback)?;
+            let age_days = now
+                .date_naive()
+                .signed_duration_since(bars.last().unwrap().timestamp.date_naive())
+                .num_days();
+            anyhow::ensure!(
+                (0..=21).contains(&age_days),
+                "A-share latest completed daily bar is {age_days} calendar days old; provider history requires verification"
+            );
+            Ok(bars)
+        }
+    }
+}
+
+fn newest_nonempty_daily_series(
+    primary: Result<Vec<Bar>>,
+    fallback: Result<Vec<Bar>>,
+) -> Result<Vec<Bar>> {
+    match (primary, fallback) {
+        (Ok(primary), Ok(fallback)) if !primary.is_empty() && !fallback.is_empty() => {
+            if fallback.last().map(|bar| bar.timestamp) > primary.last().map(|bar| bar.timestamp) {
+                Ok(fallback)
+            } else {
+                Ok(primary)
+            }
+        }
+        (Ok(primary), _) if !primary.is_empty() => Ok(primary),
+        (_, Ok(fallback)) if !fallback.is_empty() => Ok(fallback),
+        (primary, fallback) => {
             let primary_error = primary
                 .err()
                 .map(|error| error.to_string())
-                .unwrap_or_else(|| "primary daily series is stale".into());
+                .unwrap_or_else(|| "primary returned no daily rows".into());
             let fallback_error = fallback
                 .err()
                 .map(|error| error.to_string())
-                .unwrap_or_else(|| "Tencent daily series is stale".into());
+                .unwrap_or_else(|| "Tencent returned no daily rows".into());
             anyhow::bail!(
-                "no current A-share daily series; primary: {primary_error}; Tencent: {fallback_error}"
+                "no usable A-share daily series; primary: {primary_error}; Tencent: {fallback_error}"
             )
         }
     }
@@ -1735,15 +1769,34 @@ mod public_market_source_tests {
                 .close,
             10.5
         );
+        let holiday_now = Utc.with_ymd_and_hms(2026, 10, 5, 12, 0, 0).unwrap();
+        let pre_closure = Bar {
+            timestamp: Utc.with_ymd_and_hms(2026, 9, 30, 0, 0, 0).unwrap(),
+            ..primary
+        };
+        let older = Bar {
+            timestamp: Utc.with_ymd_and_hms(2026, 9, 29, 0, 0, 0).unwrap(),
+            close: 9.5,
+            ..primary
+        };
+        let selected =
+            select_a_share_daily_bars(Ok(vec![older]), Ok(vec![pre_closure]), holiday_now).unwrap();
+        assert_eq!(
+            selected.last().unwrap().timestamp,
+            Utc.with_ymd_and_hms(2026, 9, 30, 0, 0, 0).unwrap()
+        );
+        let stale = Bar {
+            timestamp: Utc.with_ymd_and_hms(2026, 8, 31, 0, 0, 0).unwrap(),
+            ..primary
+        };
         assert!(select_a_share_daily_bars(
-            Ok(vec![Bar {
-                timestamp: Utc.with_ymd_and_hms(2026, 9, 14, 0, 0, 0).unwrap(),
-                ..primary
-            }]),
-            Err(anyhow::anyhow!("fixture unavailable")),
-            now
+            Ok(vec![stale]),
+            Err(anyhow::anyhow!("unavailable")),
+            holiday_now
         )
-        .is_err());
+        .unwrap_err()
+        .to_string()
+        .contains("requires verification"));
     }
 
     #[test]

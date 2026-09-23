@@ -63,6 +63,15 @@ function practiceValue(key: string, value: number | null) {
   if (key === 'is_current_candle_closed') return value === 0 ? '否，仍可能变化' : '是';
   return fmtNum(value, 6);
 }
+function marketAsOf(bars: Bar[] | undefined, source: SourceType) {
+  const last = bars?.[bars.length - 1]?.timestamp;
+  if (!last) return null;
+  const date = new Date(last);
+  if (!Number.isFinite(date.getTime())) return null;
+  return source === 'binance'
+    ? `${date.toISOString().slice(0, 16).replace('T', ' ')} UTC（已收盘小时）`
+    : `${date.toISOString().slice(0, 10)}（数据提供方交易日标签）`;
+}
 function resultSentence(name: string, values: Record<string, number | null>, units?: Record<string, string>, hasSeries = false, provenance: PracticeResult['provenance'] = 'editable_teaching_inputs') {
   const first = Object.entries(values).find(([, value]) => value != null);
   if (!first) return `${name} 当前没有足够数据，图中的空白表示预热期或无法定义的结果。`;
@@ -803,6 +812,13 @@ function DataExplore({ targetConcept, targetSource, theme }: { targetConcept?: s
   const [error, setError] = useState('');
   const chartRef = useRef<HTMLDivElement>(null);
   const requestId = useRef(0);
+  const invalidate = () => {
+    ++requestId.current;
+    setLoading(false);
+    setChartData(null);
+    setSummary(null);
+    setPatterns([]);
+  };
 
   const loadData = useCallback(async (requestedIndicators = appliedIndicators.current) => {
     const id = ++requestId.current;
@@ -931,19 +947,19 @@ function DataExplore({ targetConcept, targetSource, theme }: { targetConcept?: s
       <p className="ax-lead">真实行情：加密货币、A 股与美股；支持指标叠加和形态识别。</p>
       <div className="ax-controls">
         <label>交易对
-          <SymbolPicker source={source} value={symbol} onChange={setSymbol} />
+          <SymbolPicker source={source} value={symbol} onChange={v => { invalidate(); setSymbol(v); }} />
         </label>
         <label>K 线数
-          <input type="number" value={limit} onChange={e => setLimit(parseInt(e.target.value) || 200)}
+          <input type="number" value={limit} onChange={e => { invalidate(); setLimit(parseInt(e.target.value) || 200); }}
             min={50} max={2000} step={50} />
         </label>
         <label>数据源
           <Dropdown label="数据源" options={MARKET_SOURCE_OPTIONS}
-            value={source} onChange={(v: SourceType) => { if (v === source) return; setSource(v); setSymbol(MARKET_DEFAULT_SYMBOL[v]); setChartData(null); setSummary(null); setPatterns([]); }} minWidth={140} />
+            value={source} onChange={(v: SourceType) => { if (v === source) return; invalidate(); setSource(v); setSymbol(MARKET_DEFAULT_SYMBOL[v]); }} minWidth={140} />
         </label>
         <label>图表类型
           <Dropdown label="图表类型" options={[{v:'candle',l:'标准 K 线'},{v:'heikin_ashi',l:'Heikin Ashi'}]}
-            value={chartType} onChange={(v: ChartType) => setChartType(v)} minWidth={140} />
+            value={chartType} onChange={(v: ChartType) => { invalidate(); setChartType(v); }} minWidth={140} />
         </label>
         <label>指标叠加
           <MultiSelectDropdown label="指标叠加" options={INDICATOR_OPTIONS} values={selectedIndicators} onChange={setSelectedIndicators} minWidth={210} />
@@ -956,6 +972,7 @@ function DataExplore({ targetConcept, targetSource, theme }: { targetConcept?: s
       <div ref={chartRef} className="ax-chart"></div>
       {summary && (
         <div className="ax-summary">
+          <p className="ax-market-as-of">行情截至：{marketAsOf(chartData?.bars, source)}。仅代表来源已返回的最后一根已收盘 K 线，不保证今天开市。</p>
           <table>
             <tbody>
               <tr><th>标的</th><td>{chartData?.symbol}</td><th>来源</th><td>{MARKET_SOURCE_LABEL[summary.source] || summary.source}</td></tr>
@@ -1002,6 +1019,16 @@ function Backtest({ targetConcept, targetSource, theme }: { targetConcept?: stri
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [error, setError] = useState('');
   const chartRef = useRef<HTMLDivElement>(null);
+  const requestId = useRef(0);
+  const selection = JSON.stringify([strategy, params, symbol, source, limit, capital, sl, tp, mp]);
+  const currentSelection = useRef(selection);
+  currentSelection.current = selection;
+
+  useEffect(() => {
+    ++requestId.current;
+    setResult(null);
+    setLoading(false);
+  }, [selection]);
 
   useEffect(() => {
     api.listStrategies().then(d => {
@@ -1028,6 +1055,8 @@ function Backtest({ targetConcept, targetSource, theme }: { targetConcept?: stri
 
   const run = async () => {
     if (!strategy) return;
+    const id = ++requestId.current;
+    const requestedSelection = currentSelection.current;
     setLoading(true);
     setError('');
     try {
@@ -1035,12 +1064,14 @@ function Backtest({ targetConcept, targetSource, theme }: { targetConcept?: stri
         strategy, params, symbol, source, limit, initial_capital: capital,
         stop_loss_pct: sl / 100, take_profit_pct: tp / 100, max_position_pct: mp / 100,
       });
+      if (id !== requestId.current || requestedSelection !== currentSelection.current) return;
       setResult(r);
     } catch (e) {
+      if (id !== requestId.current || requestedSelection !== currentSelection.current) return;
       setError(String(e));
       setResult(null);
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   };
 
@@ -1115,6 +1146,7 @@ function Backtest({ targetConcept, targetSource, theme }: { targetConcept?: stri
       {error && <div className="ax-error">{error}</div>}
       {result && (
         <>
+          {marketAsOf(result.bars, source) && <p className="ax-market-as-of">行情截至：{marketAsOf(result.bars, source)}。回测只使用已返回的历史行情。</p>}
           <div className="ax-metrics">
             {METRIC_FIELDS.map(f => {
               const raw = result.metrics[f.key];
@@ -1341,6 +1373,16 @@ function CompareStrategies({ targetConcept, targetSource, theme }: { targetConce
   const [customParams, setCustomParams] = useState('{"fast": 8, "slow": 30}');
   const [customSL, setCustomSL] = useState(0);
   const chartRef = useRef<HTMLDivElement>(null);
+  const requestId = useRef(0);
+  const selection = JSON.stringify([source, symbol, capital, [...selected].sort(), customStrategies]);
+  const currentSelection = useRef(selection);
+  currentSelection.current = selection;
+
+  useEffect(() => {
+    ++requestId.current;
+    setResults([]);
+    setLoading(false);
+  }, [selection]);
 
   useEffect(() => {
     api.listStrategies().then(d => {
@@ -1392,6 +1434,8 @@ function CompareStrategies({ targetConcept, targetSource, theme }: { targetConce
       setError('请至少选 2 个策略');
       return;
     }
+    const id = ++requestId.current;
+    const requestedSelection = currentSelection.current;
     setLoading(true);
     setError('');
     setResults([]);
@@ -1410,12 +1454,18 @@ function CompareStrategies({ targetConcept, targetSource, theme }: { targetConce
       }
       try {
         const r = await api.runBacktest(req);
+        if (id !== requestId.current || requestedSelection !== currentSelection.current) return;
         sharedBars ??= r.bars;
         list.push({ name: item, result: r });
-      } catch (e) { console.error('策略失败:', item, e); }
+      } catch (e) {
+        if (id !== requestId.current || requestedSelection !== currentSelection.current) return;
+        console.error('策略失败:', item, e);
+      }
     }
-    setResults(list);
-    setLoading(false);
+    if (id === requestId.current && requestedSelection === currentSelection.current) {
+      setResults(list);
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -1519,6 +1569,7 @@ function CompareStrategies({ targetConcept, targetSource, theme }: { targetConce
 
       {results.length > 0 && (
         <>
+          {marketAsOf(results[0].result.bars, source) && <p className="ax-market-as-of">行情截至：{marketAsOf(results[0].result.bars, source)}。各策略使用同一段已返回行情。</p>}
           <div className="ax-cmp-table" role="region" aria-label="策略业绩对比，可横向滚动" tabIndex={0}>
           <table>
             <thead>

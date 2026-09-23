@@ -426,6 +426,7 @@ async fn get_data(
         "count": bars.len(),
         "bars": json_bars,
         "source": source,
+        "market_data_as_of": bars.last().map(|bar| bar.timestamp),
     })))
 }
 
@@ -614,9 +615,11 @@ async fn post_backtest(
         })
         .collect();
 
+    let market_data_as_of = bars.last().map(|bar| bar.timestamp);
     Ok(Json(json!({
         "bars": bars,
         "source": source,
+        "market_data_as_of": market_data_as_of,
         "config": result.config,
         "metrics": result.metrics,
         "equity_curve": equity_curve,
@@ -1089,6 +1092,7 @@ async fn get_indicators(
         "bars": json_bars,
         "indicators": indicator_output,
         "source": source,
+        "market_data_as_of": bars.last().map(|bar| bar.timestamp),
     })))
 }
 

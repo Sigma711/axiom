@@ -246,6 +246,58 @@ test('backtest and comparison show the returned metrics', async ({ page }) => {
   await expect(page.locator('.ax-cmp-table')).toContainText('均线交叉');
 });
 
+test('changing the backtest market discards a delayed result from the previous market', async ({ page }) => {
+  let releaseFirst: () => void = () => {};
+  const firstHeld = new Promise<void>(resolve => { releaseFirst = resolve; });
+  let firstCompleted = false;
+  const requests: any[] = [];
+  await page.route('**/api/backtest', async route => {
+    const request = JSON.parse(route.request().postData() || '{}');
+    requests.push(request);
+    if (requests.length === 1) await firstHeld;
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify(backtest) });
+    if (requests.length === 1) firstCompleted = true;
+  });
+  await page.goto('/backtest');
+  await page.getByRole('button', { name: '运行回测' }).click();
+  await expect.poll(() => requests.length).toBe(1);
+  await page.getByLabel('数据源').click();
+  await page.getByRole('option', { name: /A 股/ }).click();
+  await expect(page.getByLabel('交易对')).toContainText('600519');
+  releaseFirst();
+  await expect.poll(() => firstCompleted).toBe(true);
+  await expect(page.locator('.ax-metrics')).toHaveCount(0);
+  await page.getByRole('button', { name: '运行回测' }).click();
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[1]).toMatchObject({ source: 'a_share', symbol: '600519' });
+  await expect(page.locator('.ax-metrics')).toContainText('12.00%');
+});
+
+test('changing comparison inputs stops an old sequence before it replaces the new market', async ({ page }) => {
+  let releaseFirst: () => void = () => {};
+  const firstHeld = new Promise<void>(resolve => { releaseFirst = resolve; });
+  let firstCompleted = false;
+  const requests: any[] = [];
+  await page.route('**/api/backtest', async route => {
+    requests.push(JSON.parse(route.request().postData() || '{}'));
+    if (requests.length === 1) await firstHeld;
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify(backtest) });
+    if (requests.length === 1) firstCompleted = true;
+  });
+  await page.goto('/compare');
+  await page.getByRole('button', { name: '跑对比' }).click();
+  await expect.poll(() => requests.length).toBe(1);
+  await page.getByLabel('数据源').click();
+  await page.getByRole('option', { name: /美股/ }).click();
+  await expect(page.getByLabel('交易对')).toContainText('AAPL');
+  releaseFirst();
+  await expect.poll(() => firstCompleted).toBe(true);
+  await expect(page.locator('.ax-cmp-table')).toHaveCount(0);
+  await page.getByRole('button', { name: '跑对比' }).click();
+  await expect(page.locator('.ax-cmp-table')).toBeVisible();
+  expect(requests.slice(1).every(request => request.source === 'us_stock' && request.symbol === 'AAPL')).toBe(true);
+});
+
 test('chart retains warm-up gaps, rejects invalid points, and exposes separate axes', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: '数据探索', exact: true }).click();
