@@ -174,6 +174,12 @@ fn independent_boundaries_and_imported_signals_are_honest() {
         &json!({"periods_per_year":-1.0})
     )
     .is_err());
+    let cdp = bt::entries()
+        .into_iter()
+        .find(|entry| entry.id == "book_cdp")
+        .unwrap();
+    assert!(cdp.signals.contains("适用模块"));
+    assert!(!cdp.signals.contains("四页同一计算"));
     assert_eq!(
         bt::evaluate("book_rho", &[], &json!({"time_years":0.0})).unwrap()["status"],
         "undefined"

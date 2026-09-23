@@ -55,7 +55,7 @@ async fn data_practice_accepts_only_concepts_with_a_data_plan() {
     {
         let mut first: Option<Value> = None;
         for module in ["data"] {
-            let(status,out)=request(&app,"/api/practice",json!({"concept_id":concept.id,"module":module,"symbol":"BTCUSDT","source":"synthetic","bars":bars,"inputs":{}})).await;
+            let(status,out)=request(&app,"/api/practice",json!({"concept_id":concept.id,"module":module,"symbol":"BTCUSDT","source":"binance","bars":bars,"inputs":{}})).await;
             assert_eq!(status, StatusCode::OK, "{} {module}: {out}", concept.id);
             assert_eq!(out["concept_id"], concept.id);
             assert_eq!(out["module"], module);
@@ -435,7 +435,7 @@ async fn logarithmic_return_uses_the_last_two_observed_closes_only() {
     let (status, output) = request(
         &app,
         "/api/practice",
-        json!({"concept_id":"book_log_return","module":"data","symbol":"BTCUSDT","source":"synthetic","bars":bars,"inputs":{}}),
+        json!({"concept_id":"book_log_return","module":"data","symbol":"BTCUSDT","source":"binance","bars":bars,"inputs":{}}),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{output}");
@@ -444,7 +444,7 @@ async fn logarithmic_return_uses_the_last_two_observed_closes_only() {
     let (status, _) = request(
         &app,
         "/api/practice",
-        json!({"concept_id":"book_log_return","module":"data","symbol":"BTCUSDT","source":"synthetic","bars":bars,"inputs":{"start_price":100.0,"end_price":110.0}}),
+        json!({"concept_id":"book_log_return","module":"data","symbol":"BTCUSDT","source":"binance","bars":bars,"inputs":{"start_price":100.0,"end_price":110.0}}),
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -495,6 +495,95 @@ async fn cdp_uses_the_previous_completed_a_share_daily_bar_only() {
 }
 
 #[tokio::test]
+async fn annualized_volatility_uses_source_bound_bar_frequency_and_returns() {
+    let app = app();
+    let mut bars = SyntheticFeed::new(91)
+        .fetch_historical(
+            "BTCUSDT",
+            Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+            3,
+        )
+        .unwrap();
+    for (bar, close) in bars.iter_mut().zip([100.0, 102.0, 100.0]) {
+        bar.open = close;
+        bar.high = close;
+        bar.low = close;
+        bar.close = close;
+    }
+    let body = |source: &str, symbol: &str, supplied: Vec<axiom::types::Bar>| json!({"concept_id":"book_annualized_volatility","module":"data","symbol":symbol,"source":source,"bars":supplied,"inputs":{}});
+    let (status, crypto) = request(
+        &app,
+        "/api/practice",
+        body("binance", "BTCUSDT", bars.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{crypto}");
+    assert_eq!(crypto["input_kind"], "market_bars");
+    assert_eq!(crypto["provenance"], "provided_market_bars");
+    assert_eq!(crypto["values"]["periods_per_year"], 8760.0);
+    assert!(
+        (crypto["values"]["annualized_volatility"].as_f64().unwrap() - 2.621_309_180_996_4).abs()
+            < 1e-9
+    );
+    assert!(crypto["notes"].as_array().unwrap().iter().any(|note| note
+        .as_str()
+        .is_some_and(|note| note.contains("简单收益率"))));
+    let (status, _) = request(
+        &app,
+        "/api/practice",
+        body("synthetic", "BTCUSDT", bars.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    let mut daily = bars.clone();
+    daily[1].timestamp = daily[0].timestamp + chrono::Duration::days(1);
+    daily[2].timestamp = daily[1].timestamp + chrono::Duration::days(3);
+    let (status, equity) = request(
+        &app,
+        "/api/practice",
+        body("a_share", "600519", daily.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{equity}");
+    assert_eq!(equity["values"]["periods_per_year"], 252.0);
+    assert!(
+        (equity["values"]["annualized_volatility"].as_f64().unwrap() - 0.444_596_936_546_081).abs()
+            < 1e-9
+    );
+    let (status, us_equity) = request(&app, "/api/practice", body("us_stock", "AAPL", daily)).await;
+    assert_eq!(status, StatusCode::OK, "{us_equity}");
+    assert_eq!(us_equity["values"]["periods_per_year"], 252.0);
+
+    let (status, short) = request(
+        &app,
+        "/api/practice",
+        body("binance", "BTCUSDT", bars[..2].to_vec()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{short}");
+    assert_eq!(short["status"], "undefined");
+    assert!(short["values"]["annualized_volatility"].is_null());
+
+    let mut gapped_hourly = bars;
+    gapped_hourly[2].timestamp += chrono::Duration::hours(1);
+    let intraday_equity = SyntheticFeed::new(91)
+        .fetch_historical(
+            "BTCUSDT",
+            Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+            3,
+        )
+        .unwrap();
+    for body in [
+        body("binance", "BTCUSDT", gapped_hourly),
+        body("a_share", "600519", intraday_equity),
+    ] {
+        let (status, _) = request(&app, "/api/practice", body).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+}
+
+#[tokio::test]
 async fn rolling_24h_volume_requires_contiguous_hourly_crypto_bars() {
     let app = app();
     let bars = SyntheticFeed::new(73)
@@ -509,7 +598,7 @@ async fn rolling_24h_volume_requires_contiguous_hourly_crypto_bars() {
     let (status, out) = request(
         &app,
         "/api/practice",
-        body("synthetic", "BTCUSDT", bars.clone(), json!({})),
+        body("binance", "BTCUSDT", bars.clone(), json!({})),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{out}");
@@ -518,12 +607,12 @@ async fn rolling_24h_volume_requires_contiguous_hourly_crypto_bars() {
     for request_body in [
         body("a_share", "600519", bars.clone(), json!({})),
         body(
-            "synthetic",
+            "binance",
             "BTCUSDT",
             bars.clone(),
             json!({"hourly_volumes":[1,2]}),
         ),
-        body("synthetic", "BTCUSDT", bars[..23].to_vec(), json!({})),
+        body("binance", "BTCUSDT", bars[..23].to_vec(), json!({})),
     ] {
         let (status, _) = request(&app, "/api/practice", request_body).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -533,7 +622,7 @@ async fn rolling_24h_volume_requires_contiguous_hourly_crypto_bars() {
     let (status, _) = request(
         &app,
         "/api/practice",
-        body("synthetic", "BTCUSDT", gap, json!({})),
+        body("binance", "BTCUSDT", gap, json!({})),
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -561,7 +650,7 @@ async fn five_nonstandard_charts_use_the_selected_real_bar_context() {
             "/api/practice",
             json!({
                 "concept_id": id, "module": "data", "symbol": "BTCUSDT",
-                "source": "synthetic", "bars": bars, "inputs": {}
+                "source": "binance", "bars": bars, "inputs": {}
             }),
         )
         .await;
@@ -572,8 +661,8 @@ async fn five_nonstandard_charts_use_the_selected_real_bar_context() {
         assert_eq!(out["chart"]["source_bar_count"], bars.len(), "{id}");
     }
     for body in [
-        json!({"concept_id":"book_chart_renko","module":"data","source":"synthetic","bars":bars,"inputs":{"prices":[10,11]}}),
-        json!({"concept_id":"book_chart_heikin_ashi","module":"data","source":"synthetic","bars":[],"inputs":{}}),
+        json!({"concept_id":"book_chart_renko","module":"data","source":"binance","bars":bars,"inputs":{"prices":[10,11]}}),
+        json!({"concept_id":"book_chart_heikin_ashi","module":"data","source":"binance","bars":[],"inputs":{}}),
     ] {
         let (status, _) = request(&app, "/api/practice", body).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);

@@ -1,5 +1,11 @@
 use super::*;
-pub(super) fn evaluate(id: &str, b: &[Bar], v: &Value, o: &mut Output) -> Result<(), String> {
+pub(super) fn evaluate(
+    id: &str,
+    b: &[Bar],
+    v: &Value,
+    o: &mut Output,
+    annualization: Option<AnnualizationBasis>,
+) -> Result<(), String> {
     let c: Vec<_> = b.iter().map(|x| x.close).collect();
     let n = b.len();
     let per = |k| period(v, k);
@@ -15,6 +21,37 @@ pub(super) fn evaluate(id: &str, b: &[Bar], v: &Value, o: &mut Output) -> Result
         };
     }
     match id {
+        "annualized_volatility" => {
+            let Some(basis) = annualization else {
+                o.value(id, None, "annual fraction", "需要已验证市场来源的年化口径");
+                return Ok(());
+            };
+            let (periods_per_year, label): (f64, &str) = match basis {
+                AnnualizationBasis::CryptoHourly => {
+                    (8760.0, "加密市场连续1小时K线，按365×24=8760小时/年")
+                }
+                AnnualizationBasis::EquityDaily => {
+                    (252.0, "交易所日线，按252个交易日/年的年化惯例")
+                }
+            };
+            let returns: Vec<_> = b
+                .windows(2)
+                .map(|pair| pair[1].close / pair[0].close - 1.0)
+                .collect();
+            let annualized = stddev(&returns).map(|value| value * periods_per_year.sqrt());
+            o.value(
+                id,
+                annualized,
+                "annual fraction",
+                "至少需要三根已收盘K线（两项相邻收盘价简单收益率）",
+            );
+            if annualized.is_some() {
+                o.number("periods_per_year", periods_per_year, "periods per year");
+            }
+            o.note(&format!(
+                "{label}；收益率定义为相邻收盘价简单收益率 C_t/C_(t-1)-1，使用样本标准差。"
+            ));
+        }
         "cdp" => {
             let Some(previous) = n.checked_sub(2).and_then(|index| b.get(index)) else {
                 for key in ["cdp", "ah", "al", "nh", "nl"] {

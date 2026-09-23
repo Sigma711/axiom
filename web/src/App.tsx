@@ -23,12 +23,12 @@ const PRACTICE_MODULE_LABELS: Record<PracticeModule, string> = { data: '数据�
 const CHINESE_FIELDS: Record<string, string> = {
   price: '价格', close: '收盘价', open: '开盘价', high: '最高价', low: '最低价', volume: '成交量', hourly_volume: '每小时成交量', rolling_24h_volume: '滚动 24 小时成交量', book_log_return: '最近一根 K 线对数收益率',
   period: '周期', fast: '快线周期', slow: '慢线周期', signal: '信号周期', multiplier: '倍数',
-  returns: '收益率序列', equity: '净值序列', elapsed_days: '经过天数', periods_per_year: '年化周期数',
+  returns: '收益率序列', equity: '净值序列', elapsed_days: '经过天数', periods_per_year: '每年期数', annualized_volatility: '年化波动率',
   rsi: '相对强弱指标', value: '计算值', mean: '均值', stddev: '标准差', correlation: '相关系数',
   beta: '贝塔系数', alpha: '阿尔法', sharpe: '夏普比率', max_drawdown: '最大回撤',
   eps: '每股收益', net_income: '净利润', preferred_dividends: '优先股股息', shares: '普通股股数', weighted_shares: '加权平均普通股股数', weighted_average_shares: '加权平均普通股股数',
 };
-const CHINESE_UNITS: Record<string, string> = { fraction: '比例（小数）', annualized_ratio: '年化比率', price: '价格', currency: '元', share: '股', shares: '股', 'currency/share': '元/股', '元/股': '元/股', percent: '%', ratio: '比率', days: '天', bars: '根 K 线' };
+const CHINESE_UNITS: Record<string, string> = { fraction: '比例（小数）', annualized_ratio: '年化比率', 'annual fraction': '年化比例（小数）', 'periods per year': '每年期数', price: '价格', currency: '元', share: '股', shares: '股', 'currency/share': '元/股', '元/股': '元/股', percent: '%', ratio: '比率', days: '天', bars: '根 K 线' };
 function chineseUnit(unit?: string) { return unit ? (CHINESE_UNITS[unit] || unit) : ''; }
 function chineseField(key: string, label?: string) {
   if (label && !/^[a-z_]+$/i.test(label)) return label;

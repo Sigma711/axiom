@@ -1457,7 +1457,15 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
                 | "book_second_order_greeks"
         );
     let performance = concept.category == "风险-绩效";
-    if concept.id == "book_cdp" {
+    if concept.id == "book_annualized_volatility" {
+        json!({
+            "markets":["crypto","cn_equity","us_equity"],
+            "modules":["data"],
+            "required_datasets":["completed_ohlcv_with_source_cadence"],
+            "source_policy":"real_required",
+            "goal":"使用所选市场的已收盘K线计算相邻收盘价简单收益率样本标准差；加密1小时线按8760小时/年，A股和美股日线按252个交易日/年惯例。年化口径由已验证数据源决定，不接受手填。"
+        })
+    } else if concept.id == "book_cdp" {
         json!({
             "markets":["cn_equity"],
             "modules":["data"],
@@ -1635,6 +1643,41 @@ fn cdp_requires_daily_a_share_bars(bars: &[Bar]) -> Result<(), ApiError> {
     Ok(())
 }
 
+fn annualization_basis_for_source(
+    source: &str,
+) -> Result<crate::book_technical::AnnualizationBasis, ApiError> {
+    match source {
+        "real" | "binance" => Ok(crate::book_technical::AnnualizationBasis::CryptoHourly),
+        "a_share" | "us_stock" => Ok(crate::book_technical::AnnualizationBasis::EquityDaily),
+        _ => Err(validate::bad("unsupported annualized-volatility source")),
+    }
+}
+
+fn annualized_volatility_requires_source_cadence(
+    bars: &[Bar],
+    source: &str,
+) -> Result<(), ApiError> {
+    let intraday = bars
+        .windows(2)
+        .any(|pair| pair[1].timestamp - pair[0].timestamp < Duration::hours(20));
+    match source {
+        "real" | "binance"
+            if bars
+                .windows(2)
+                .any(|pair| pair[1].timestamp - pair[0].timestamp != Duration::hours(1)) =>
+        {
+            Err(validate::bad(
+                "annualized volatility requires consecutive 1-hour crypto bars",
+            ))
+        }
+        "a_share" | "us_stock" if intraday => Err(validate::bad(
+            "annualized volatility requires daily equity bars; weekends and holidays may be absent",
+        )),
+        "real" | "binance" | "a_share" | "us_stock" => Ok(()),
+        _ => Err(validate::bad("unsupported annualized-volatility source")),
+    }
+}
+
 fn plan_allows(plan: &Value, field: &str, value: &str) -> bool {
     plan[field]
         .as_array()
@@ -1753,6 +1796,11 @@ async fn post_practice(
             "practice source is not applicable to this concept",
         ));
     }
+    if plan["source_policy"].as_str() == Some("real_required") && source == "synthetic" {
+        return Err(validate::bad(
+            "real_required practice does not accept synthetic market bars",
+        ));
+    }
     let independent = concept.input_kind != "market_bars";
     let provided_bars = req.bars.is_some();
     let bars = if let Some(bars) = req.bars {
@@ -1769,6 +1817,12 @@ async fn post_practice(
     if concept.id == "book_cdp" {
         cdp_requires_daily_a_share_bars(&bars)?;
     }
+    let annualization = if concept.id == "book_annualized_volatility" {
+        annualized_volatility_requires_source_cadence(&bars, &source)?;
+        Some(annualization_basis_for_source(&source)?)
+    } else {
+        None
+    };
     let result_required = plan["source_policy"].as_str() == Some("result_required");
     if result_required {
         // The evaluator has teaching defaults. Result modules must never fall back to them.
@@ -1811,8 +1865,16 @@ async fn post_practice(
             }
         }
     }
-    let mut result = crate::practice::evaluate(&req.concept_id, &bars, &evaluator_inputs)
-        .map_err(validate::bad)?;
+    let mut result = match annualization {
+        Some(annualization) => crate::practice::evaluate_with_annualization(
+            &req.concept_id,
+            &bars,
+            &evaluator_inputs,
+            annualization,
+        ),
+        None => crate::practice::evaluate(&req.concept_id, &bars, &evaluator_inputs),
+    }
+    .map_err(validate::bad)?;
     result["module"] = json!(req.module);
     result["symbol"] = json!(symbol);
     result["source"] = json!(source);

@@ -95,6 +95,42 @@ test('CDP practice sends loaded A-share daily bars instead of editable HLC field
   await expect(panel).toContainText('100');
 });
 
+test('annualized volatility uses the selected market source without a user annualization input', async ({ page }) => {
+  const volatility = {
+    id: 'book_annualized_volatility', name: '年化波动率', category: '原书补充·技术实践', input_kind: 'market_bars', inputs: [],
+    notes: '相邻收盘价简单收益率样本标准差年化。',
+    plan: { markets: ['crypto', 'cn_equity', 'us_equity'], modules: ['data'], required_datasets: ['completed_ohlcv_with_source_cadence'], source_policy: 'real_required', goal: '年化口径由已验证数据源决定。' }
+  };
+  const sources: string[] = [];
+  await page.route('**/api/practice', async route => {
+    if (route.request().method() === 'GET') {
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ concepts: [volatility], modules: ['data'], total: 1 }) });
+    }
+    const request = JSON.parse(route.request().postData() || '{}');
+    sources.push(request.source);
+    expect(request.inputs).toEqual({});
+    expect(request.bars).toHaveLength(60);
+    const periods = request.source === 'binance' ? 8760 : 252;
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({
+      concept_id: 'book_annualized_volatility', status: 'computed', reason: null, input_kind: 'market_bars', provenance: 'provided_market_bars',
+      values: { annualized_volatility: 0.32, periods_per_year: periods }, units: { annualized_volatility: 'annual fraction', periods_per_year: 'periods per year' },
+      series: [], notes: [periods === 8760 ? '加密市场连续1小时K线，按365×24=8760小时/年。' : '交易所日线，按252个交易日/年的年化惯例。'],
+      module: 'data', source: request.source, symbol: request.symbol, bars: []
+    }) });
+  });
+  for (const market of [
+    { source: 'binance', text: '8760' },
+    { source: 'a_share', text: '252' },
+  ]) {
+    await page.goto(`/data?concept=book_annualized_volatility&source=${market.source}`);
+    const panel = page.getByLabel('概念实践');
+    await expect(panel.locator('input')).toHaveCount(0);
+    await page.getByRole('button', { name: '运行实践' }).click();
+    await expect(panel).toContainText(market.text);
+  }
+  expect(sources).toEqual(['binance', 'a_share']);
+});
+
 test('each rendered knowledge concept expands to an explanatory SVG', async ({ page }) => {
   await page.goto('/');
   const cards = page.locator('.ax-kb-card');

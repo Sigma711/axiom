@@ -684,19 +684,11 @@
     {
       "id": "book_annualized_volatility",
       "name": "年化波动率",
-      "summary": "同频收益标准差乘年期数平方根。",
+      "summary": "用已收盘行情的相邻收盘价简单收益率样本标准差年化：加密小时线按8760小时，A股和美股日线按252个交易日惯例。",
       "example": "日波动1%，按252日年化约15.87%。",
       "formula": "",
-      "input_kind": "independent_inputs",
-      "defaults": {
-        "returns": [
-          0.01,
-          -0.01,
-          0.02,
-          -0.02
-        ],
-        "periods_per_year": 252.0
-      },
+      "input_kind": "market_bars",
+      "defaults": {},
       "source_ids": [
         "book_23_03"
       ]

@@ -167,6 +167,62 @@ fn test_compare_strategies_picks_winner() {
 }
 
 #[test]
+fn strategy_and_parameter_changes_produce_distinct_executed_equity_paths() {
+    let start = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+    let bars = (0..160)
+        .map(|index| {
+            let close = if index < 80 {
+                180.0 - index as f64
+            } else {
+                100.0 + (index - 80) as f64
+            };
+            axiom::types::Bar {
+                timestamp: start + chrono::Duration::hours(index),
+                open: close,
+                high: close + 1.0,
+                low: close - 1.0,
+                close,
+                volume: 100.0,
+            }
+        })
+        .collect::<Vec<_>>();
+    let engine = BacktestEngine::new(EngineConfig::default(), RiskConfig::default());
+    let buy_hold = engine.run(&mut BuyAndHoldStrategy::new(), &bars);
+    let fast = engine.run(&mut SmaCrossStrategy::new(3, 10), &bars);
+    let slow = engine.run(&mut SmaCrossStrategy::new(20, 50), &bars);
+    assert_eq!(buy_hold.equity_curve.len(), bars.len());
+    assert_eq!(fast.equity_curve.len(), bars.len());
+    assert_eq!(slow.equity_curve.len(), bars.len());
+    assert_ne!(
+        buy_hold
+            .equity_curve
+            .iter()
+            .map(|point| point.equity)
+            .collect::<Vec<_>>(),
+        fast.equity_curve
+            .iter()
+            .map(|point| point.equity)
+            .collect::<Vec<_>>(),
+        "buy-and-hold and signal strategy must use distinct fills"
+    );
+    assert_ne!(
+        fast.equity_curve
+            .iter()
+            .map(|point| point.equity)
+            .collect::<Vec<_>>(),
+        slow.equity_curve
+            .iter()
+            .map(|point| point.equity)
+            .collect::<Vec<_>>(),
+        "changing the moving-average periods must change executed results on a known reversal"
+    );
+    assert_ne!(
+        fast.fills.first().map(|fill| fill.timestamp),
+        slow.fills.first().map(|fill| fill.timestamp)
+    );
+}
+
+#[test]
 fn test_macd_strategy_runs() {
     let bars = SyntheticFeed::new(42)
         .fetch_historical(

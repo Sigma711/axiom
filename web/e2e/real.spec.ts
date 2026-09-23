@@ -383,3 +383,36 @@ test('CDP practice derives the last completed A-share session levels from its pr
   expect(JSON.stringify(payload.notes)).toContain(bars.at(-1)!.timestamp.slice(0, 10));
   await expect(panel).toContainText('基于当前标的已收盘行情');
 });
+
+test('annualized volatility binds its calculation and annualization to the selected real market cadence', async ({ page }) => {
+  test.setTimeout(120_000);
+  for (const market of [
+    { source: 'binance', periodsPerYear: 8760, note: '8760小时/年' },
+    { source: 'a_share', periodsPerYear: 252, note: '252个交易日/年' },
+  ]) {
+    await page.goto(`/data?concept=book_annualized_volatility&source=${market.source}`);
+    await page.getByRole('button', { name: '加载数据' }).click();
+    await expect(page.locator('.ax-chart svg.main-svg').first()).toBeVisible({ timeout: 30_000 });
+    const panel = page.getByLabel('概念实践');
+    await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+    const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+    await panel.getByRole('button', { name: '运行实践' }).click();
+    const response = await responsePromise;
+    expect(response.ok(), await response.text()).toBe(true);
+    const request = response.request().postDataJSON();
+    expect(request.source).toBe(market.source);
+    expect(request.inputs).toEqual({});
+    const closes = (request.bars as Array<{ close: number }>).map(bar => bar.close);
+    const returns = closes.slice(1).map((close, index) => close / closes[index] - 1);
+    const mean = returns.reduce((sum, value) => sum + value, 0) / returns.length;
+    const sampleStddev = Math.sqrt(returns.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (returns.length - 1));
+    const payload = await response.json();
+    expect(payload.provenance).toBe('provided_market_bars');
+    expect(payload.values.periods_per_year).toBe(market.periodsPerYear);
+    expect(payload.values.annualized_volatility).toBeCloseTo(sampleStddev * Math.sqrt(market.periodsPerYear), 8);
+    expect(JSON.stringify(payload.notes)).toContain(market.note);
+    await expect(panel).toContainText('年化波动率');
+    await expect(panel).toContainText('每年期数');
+    await expect(panel).toContainText('年化比例（小数）');
+  }
+});

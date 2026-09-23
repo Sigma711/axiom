@@ -259,6 +259,22 @@ pub fn catalog() -> Vec<PracticeConcept> {
     registry().concepts.clone()
 }
 pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String> {
+    evaluate_inner(id, bars, inputs, None)
+}
+pub fn evaluate_with_annualization(
+    id: &str,
+    bars: &[Bar],
+    inputs: &Value,
+    annualization: crate::book_technical::AnnualizationBasis,
+) -> Result<Value, String> {
+    evaluate_inner(id, bars, inputs, Some(annualization))
+}
+fn evaluate_inner(
+    id: &str,
+    bars: &[Bar],
+    inputs: &Value,
+    annualization: Option<crate::book_technical::AnnualizationBasis>,
+) -> Result<Value, String> {
     let reg = registry();
     let (index, owner) = reg
         .routes
@@ -283,7 +299,12 @@ pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String>
     let merged = Value::Object(merged);
     let mut result = match owner {
         Owner::Book => crate::book::evaluate(id, bars, &merged),
-        Owner::Technical => crate::book_technical::evaluate(id, bars, &merged),
+        Owner::Technical => match annualization {
+            Some(annualization) => {
+                crate::book_technical::evaluate_with_annualization(id, bars, &merged, annualization)
+            }
+            None => crate::book_technical::evaluate(id, bars, &merged),
+        },
         Owner::Charts => crate::book_charts::evaluate(id, bars, &merged),
         Owner::Supplement => crate::supplement::evaluate(id, bars, &merged),
         Owner::Workflows => crate::workflows::evaluate(id, bars, &merged),

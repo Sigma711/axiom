@@ -13,6 +13,11 @@ use crate::{
 use serde_json::{json, Value};
 mod external;
 mod market;
+#[derive(Clone, Copy)]
+pub enum AnnualizationBasis {
+    CryptoHourly,
+    EquityDaily,
+}
 fn specs() -> &'static [Value] {
     static SPECS: std::sync::OnceLock<Vec<Value>> = std::sync::OnceLock::new();
     SPECS.get_or_init(|| {
@@ -46,9 +51,55 @@ pub fn catalog() -> Vec<PracticeConcept> {
         .collect()
 }
 pub fn entries() -> Vec<KnowledgeEntry> {
-    specs().iter().map(|s|{let text=|k:&str|s[k].as_str().unwrap_or("").to_string();KnowledgeEntry{id:text("id"),summary:text("summary"),example:text("example"),related:vec![],code_url:"https://github.com/Sigma711/axiom/blob/main/src/book_technical.rs#symbol-evaluate".into(),code_ref:"src/book_technical.rs::evaluate".into(),category:"原书补充·技术实践".into(),name:text("name"),formula:if text("formula").is_empty(){text("summary")}else{text("formula")},meaning:text("summary"),signals:"四页同一计算：探索观察、历史时点评估、模拟盘观察、统一输入对比；结果不自动等于交易指令。".into(),pitfalls:"独立输入为可编辑教学数据；市场序列只在确认时点可用。专有指标仅核验用户导入信号，不声称复制未公开算法。".into(),implementation:format!("src/book_technical.rs::evaluate; 来源 {}",s["source_ids"]),diagram:None}}).collect()
+    specs()
+        .iter()
+        .map(|s| {
+            let text = |key: &str| s[key].as_str().unwrap_or("").to_string();
+            let market_bars = s["input_kind"] == "market_bars";
+            KnowledgeEntry {
+                id: text("id"),
+                summary: text("summary"),
+                example: text("example"),
+                related: vec![],
+                code_url: "https://github.com/Sigma711/axiom/blob/main/src/book_technical.rs#symbol-evaluate".into(),
+                code_ref: "src/book_technical.rs::evaluate".into(),
+                category: "原书补充·技术实践".into(),
+                name: text("name"),
+                formula: if text("formula").is_empty() {
+                    text("summary")
+                } else {
+                    text("formula")
+                },
+                meaning: text("summary"),
+                signals: if market_bars {
+                    "在适用模块用已收盘、可追溯的市场序列观察；不适用的模块不展示此实践，结果不自动等于交易指令。".into()
+                } else {
+                    "用可编辑教学输入理解公式；真实练习须按适用模块和数据口径提供证据，结果不自动等于交易指令。".into()
+                },
+                pitfalls: "独立输入为可编辑教学数据；市场序列只在确认时点可用。专有指标仅核验用户导入信号，不声称复制未公开算法。".into(),
+                implementation: format!("src/book_technical.rs::evaluate; 来源 {}", s["source_ids"]),
+                diagram: None,
+            }
+        })
+        .collect()
 }
 pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String> {
+    evaluate_inner(id, bars, inputs, None)
+}
+pub fn evaluate_with_annualization(
+    id: &str,
+    bars: &[Bar],
+    inputs: &Value,
+    annualization: AnnualizationBasis,
+) -> Result<Value, String> {
+    evaluate_inner(id, bars, inputs, Some(annualization))
+}
+fn evaluate_inner(
+    id: &str,
+    bars: &[Bar],
+    inputs: &Value,
+    annualization: Option<AnnualizationBasis>,
+) -> Result<Value, String> {
     let s = specs()
         .iter()
         .find(|s| s["id"] == id)
@@ -79,7 +130,13 @@ pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String>
         if bars.is_empty() {
             out.value(id, None, "", "没有已收盘K线");
         } else {
-            market::evaluate(id.strip_prefix("book_").unwrap_or(id), bars, &v, &mut out)?;
+            market::evaluate(
+                id.strip_prefix("book_").unwrap_or(id),
+                bars,
+                &v,
+                &mut out,
+                annualization,
+            )?;
         }
     } else {
         external::evaluate(id.strip_prefix("book_").unwrap_or(id), &v, &mut out)?;
