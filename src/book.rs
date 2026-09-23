@@ -472,7 +472,11 @@ const INDUSTRY: &[(&str, &str, &str, &str, &str)] = &[
 ];
 
 const EXTRA: &[(&str, &str, &str)] = &[
-    ("book_trade_volume", "成交量与成交额", "成交额=成交量×价格"),
+    (
+        "book_trade_volume",
+        "成交量与成交额",
+        "成交额=Σ逐笔成交价格×数量（成交量单位须辨股/手）",
+    ),
     (
         "book_share_counts",
         "股本结构",
@@ -532,10 +536,7 @@ const EXTRA: &[(&str, &str, &str)] = &[
 
 fn extra_inputs(id: &str) -> Option<Vec<(&'static str, &'static str, f64)>> {
     Some(match id {
-        "book_trade_volume" => vec![
-            ("shares", "成交数量（股）", 1000.),
-            ("price", "成交价格（元/股）", 10.),
-        ],
+        "book_trade_volume" => vec![],
         "book_share_counts" => vec![
             ("free_float_shares", "自由流通股（股）", 6e8),
             ("total_shares", "总股本（股）", 1e9),
@@ -886,7 +887,7 @@ pub fn catalog() -> Vec<crate::practice::PracticeConcept> {
     for (id, name, formula) in EXTRA {
         let market_bars = matches!(
             *id,
-            "book_log_return" | "book_nonstandard_bar" | "book_period"
+            "book_log_return" | "book_nonstandard_bar" | "book_period" | "book_trade_volume"
         );
         let fs = extra_inputs(id)
             .expect("registered extra inputs")
@@ -907,7 +908,9 @@ pub fn catalog() -> Vec<crate::practice::PracticeConcept> {
                 "independent_inputs".into()
             },
             inputs: fs,
-            notes: if *id == "book_nonstandard_bar" {
+            notes: if *id == "book_trade_volume" {
+                "只使用 Binance USDT 现货最近24根已收盘1小时K线；服务器直接读取字段5 base asset volume 与字段7 quote asset volume，不接受手填或客户端K线。".into()
+            } else if *id == "book_nonstandard_bar" {
                 format!("{}；使用最近一根已收盘真实K线的OHLC计算合成展示价；实际收盘价单独给出，合成价不可作为成交价。", formula)
             } else if market_bars {
                 format!(
@@ -1066,7 +1069,56 @@ pub fn market_period_summary(bars: &[Bar], source: &str) -> Result<Value, String
     }))
 }
 
-/// Presents one exchange-observed open candle without inventing its final close.
+/// Summarizes exchange-observed base and quote volume without approximating
+/// quote notional from a candle price.
+pub fn market_trade_volume_summary(
+    bars: &[crate::data::BinanceTradeBar],
+    symbol: &str,
+) -> Result<Value, String> {
+    let base = symbol
+        .strip_suffix("USDT")
+        .filter(|base| !base.is_empty())
+        .ok_or("仅支持USDT现货交易对")?;
+    if bars.len() != 24 {
+        return Err("需要恰好24根已收盘1小时K线".into());
+    }
+    for (index, trade_bar) in bars.iter().enumerate() {
+        let bar = &trade_bar.bar;
+        if ![
+            bar.open,
+            bar.high,
+            bar.low,
+            bar.close,
+            bar.volume,
+            trade_bar.quote_volume,
+        ]
+        .iter()
+        .all(|value| value.is_finite())
+            || bar.open <= 0.0
+            || bar.high < bar.open.max(bar.close)
+            || bar.low <= 0.0
+            || bar.low > bar.open.min(bar.close)
+            || bar.volume < 0.0
+            || trade_bar.quote_volume < 0.0
+            || (bar.volume == 0.0) != (trade_bar.quote_volume == 0.0)
+            || (index > 0 && bars[index - 1].bar.timestamp >= bar.timestamp)
+            || (index > 0
+                && bars[index - 1].bar.timestamp + chrono::Duration::hours(1) != bar.timestamp)
+        {
+            return Err("Binance成交量K线包含无效OHLCV、成交额或时间顺序".into());
+        }
+    }
+    let base_values: Vec<f64> = bars.iter().map(|x| x.bar.volume).collect();
+    let quote_values: Vec<f64> = bars.iter().map(|x| x.quote_volume).collect();
+    let vwap = quote_values
+        .last()
+        .zip(base_values.last())
+        .and_then(|(q, b)| (*b > 0.0).then(|| q / b));
+    Ok(
+        json!({"concept_id":"book_trade_volume","input_kind":"market_bars","provenance":"server_fetched_completed_source_bars","status":"computed","reason":null,"values":{"base_volume":base_values.last(),"quote_volume":quote_values.last(),"vwap":vwap},"asset_units":{"base_asset":base,"quote_asset":"USDT"},"units":{"base_volume":"base_asset","quote_volume":"quote_asset","vwap":"quote_asset_per_base","base_volume_series":"base_asset","quote_volume_series":"quote_asset"},"series":[{"name":"base_volume_series","values":base_values},{"name":"quote_volume_series","values":quote_values}],"notes":["Binance 现货1小时已收盘K线：成交量取字段5（base asset volume），成交额取字段7（quote asset volume），未用收盘价乘成交量替代。"],"inputs":{},"source_ids":["book_01_04","book_01_05"]}),
+    )
+}
+
 pub fn market_open_candle_summary(
     last_completed: &Bar,
     provisional: &crate::data::ProvisionalCandleSnapshot,
@@ -1432,7 +1484,9 @@ pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String>
             n("voyage_revenue")? - n("voyage_expenses")?,
             n("available_operating_days")?,
         )?,
-        "book_trade_volume" => n("shares")? * n("price")?,
+        "book_trade_volume" => {
+            return Err("成交量与成交额必须由 API 使用 Binance 已收盘现货K线计算".into())
+        }
         "book_share_counts" => ratio(n("free_float_shares")?, n("total_shares")?)?,
         "book_float_market_cap" => n("price")? * n("float_shares")?,
         "book_52w_range" => ratio(n("price")?, n("high_52w")?)? - 1.0,

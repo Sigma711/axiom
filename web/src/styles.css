@@ -440,5 +440,9 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
 .ax-symbol-pages button:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .ax-wide-series-chart { max-width: 760px; }
+@media (max-width: 700px) {
+  .ax-trade-volume-chart { overflow-x: auto; scrollbar-width: thin; }
+  .ax-trade-volume-chart svg { min-width: 700px; }
+}
 .ax-repainting-chart .ax-series-legend i.ax-legend-retrospective, .ax-repainting-chart .ax-series-legend i.ax-legend-confirmed { width: 0.65rem; height: 0.65rem; border-radius: 50%; background: var(--bg-input) !important; border: 2px solid currentColor; }
 .ax-repainting-chart .ax-series-legend i.ax-legend-confirmed { background: currentColor !important; border-color: currentColor; }

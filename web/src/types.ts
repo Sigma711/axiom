@@ -140,7 +140,8 @@ export interface PracticeResult {
   source: string;
   symbol: string;
   bars: Bar[];
+  asset_units?: { base_asset: string; quote_asset: string };
   provisional_snapshot?: { candle: Bar; is_closed: false; fetched_at: string; expected_close_at: string; completion_evidence: string };
   context?: 'module_snapshot' | 'selected_dataset' | 'editable_teaching_inputs' | 'provided_result_context';
-  bar_origin?: 'server_fetched_completed_source_bars' | 'server_fetched_binance_provisional_snapshot';
+  bar_origin?: 'server_fetched_completed_source_bars' | 'server_fetched_completed_binance_usdt_spot_bars' | 'server_fetched_binance_provisional_snapshot';
 }

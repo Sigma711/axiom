@@ -84,3 +84,24 @@ it('labels an exchange-observed active candle as provisional against UTC candle 
   expect(html).toContain('尚未收盘');
   expect((html.match(/data-series-marker=/g) || [])).toHaveLength(3);
 });
+
+it('separates exchange base volume from exact quote turnover with explicit asset units', () => {
+  const bars = [0, 1, 2].map(index => ({ timestamp: `2026-09-23T0${index}:00:00Z`, open: 100, high: 102, low: 99, close: 101, volume: index + 1 }));
+  const result = { concept_id: 'book_trade_volume', bars, asset_units: { base_asset: 'BTC', quote_asset: 'USDT' }, series: [
+    { name: 'base_volume_series', values: [1, 2, 3] },
+    { name: 'quote_volume_series', values: [101, 202, 303] },
+  ], units: { base_volume_series: 'base_asset', quote_volume_series: 'quote_asset' } } as unknown as PracticeResult;
+  const html = renderToStaticMarkup(<KnowledgeSeriesVisual name="成交量与成交额" result={result} />);
+  expect(html).toContain('成交数量（BTC）');
+  expect(html).toContain('实际成交额（USDT）');
+  expect(html).toContain('2026-09-23 02:00 UTC');
+  expect(html).toContain('交易所计价资产成交量字段');
+  expect((html.match(/transform="translate/g) || [])).toHaveLength(2);
+  expect((html.match(/data-volume-bar=/g) || [])).toHaveLength(6);
+  expect(html).toContain('>0</text>');
+  expect(html).toContain('x1="90"');
+  expect(html).toContain('x="82"');
+  expect(html).toContain('data-volume-bar="base_volume_series"');
+  expect(html).toContain('data-volume-bar="quote_volume_series"');
+  expect(html).toContain('fill="var(--accent)"');
+});

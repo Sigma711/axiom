@@ -276,6 +276,12 @@ pub struct OpenCandlePair {
     pub provisional: ProvisionalCandleSnapshot,
 }
 
+#[derive(Clone, Debug)]
+pub struct BinanceTradeBar {
+    pub bar: Bar,
+    pub quote_volume: f64,
+}
+
 pub struct HttpFeed {
     pub base_url: String,
     pub csv: CsvFeed,
@@ -444,6 +450,115 @@ impl HttpFeed {
                 expected_close_at,
             },
         })
+    }
+
+    /// Fetches the latest completed Binance spot 1-hour bars for the trade
+    /// volume lesson. This deliberately bypasses the historical CSV cache:
+    /// field 7 is exchange-observed quote notional, not a derivable OHLCV
+    /// teaching value.
+    pub async fn fetch_completed_binance_trade_bars(
+        &self,
+        symbol: &str,
+    ) -> Result<Vec<BinanceTradeBar>> {
+        const COMPLETED_BARS: usize = 24;
+        // Capture the exchange cutoff before requesting candles. A post-request
+        // time can cross an hour boundary while the returned current candle was
+        // still provisional, so it is diagnostic evidence only.
+        let completion_cutoff = self.binance_server_time().await?;
+        let start = completion_cutoff
+            .with_minute(0)
+            .and_then(|x| x.with_second(0))
+            .and_then(|x| x.with_nanosecond(0))
+            .context("invalid current time")?
+            - Duration::hours(COMPLETED_BARS as i64 + 1);
+        let raw: serde_json::Value = self
+            .client
+            .get(format!("{}/api/v3/klines", self.base_url))
+            .query(&[
+                ("symbol", symbol.replace('/', "")),
+                ("interval", "1h".to_string()),
+                ("startTime", start.timestamp_millis().to_string()),
+                ("limit", (COMPLETED_BARS + 1).to_string()),
+            ])
+            .send()
+            .await
+            .context("trade-volume request failed")?
+            .error_for_status()
+            .context("trade-volume response failed")?
+            .json()
+            .await
+            .context("invalid trade-volume JSON")?;
+        let rows = raw
+            .as_array()
+            .context("trade-volume response must be kline array")?;
+        let mut out = Vec::new();
+        let mut previous_timestamp = None;
+        for row in rows {
+            let bar = parse_binance_kline(row).context("invalid trade-volume kline")?;
+            let fields = row
+                .as_array()
+                .context("trade-volume kline must be an array")?;
+            let close_millis = fields
+                .get(6)
+                .and_then(serde_json::Value::as_i64)
+                .context("trade-volume kline missing exchange close time")?;
+            let closes_at = Utc
+                .timestamp_millis_opt(close_millis.saturating_add(1))
+                .single()
+                .context("invalid trade-volume kline close time")?;
+            let quote = row
+                .as_array()
+                .and_then(|fields| fields.get(7))
+                .and_then(serde_json::Value::as_str)
+                .and_then(|x| x.parse::<f64>().ok())
+                .context("trade-volume kline missing quote asset volume")?;
+            anyhow::ensure!(
+                [bar.open, bar.high, bar.low, bar.close, bar.volume, quote]
+                    .iter()
+                    .all(|value| value.is_finite())
+                    && bar.open > 0.0
+                    && bar.high > 0.0
+                    && bar.low > 0.0
+                    && bar.close > 0.0
+                    && bar.high >= bar.open.max(bar.close)
+                    && bar.low <= bar.open.min(bar.close)
+                    && bar.volume >= 0.0
+                    && quote >= 0.0,
+                "invalid Binance trade-volume OHLCV"
+            );
+            anyhow::ensure!(
+                closes_at == bar.timestamp + Duration::hours(1),
+                "Binance trade-volume close time does not match the 1-hour interval"
+            );
+            anyhow::ensure!(
+                previous_timestamp.is_none_or(|previous| previous < bar.timestamp),
+                "Binance trade-volume timestamps are not strictly increasing"
+            );
+            anyhow::ensure!(
+                previous_timestamp
+                    .is_none_or(|previous| { bar.timestamp == previous + Duration::hours(1) }),
+                "Binance trade-volume candles are not continuous 1-hour observations"
+            );
+            anyhow::ensure!(
+                (bar.volume == 0.0) == (quote == 0.0),
+                "Binance trade-volume base and quote volumes disagree"
+            );
+            previous_timestamp = Some(bar.timestamp);
+            if closes_at <= completion_cutoff {
+                out.push(BinanceTradeBar {
+                    bar,
+                    quote_volume: quote,
+                });
+            }
+        }
+        if out.len() > COMPLETED_BARS {
+            out = out.split_off(out.len() - COMPLETED_BARS);
+        }
+        anyhow::ensure!(
+            out.len() == COMPLETED_BARS,
+            "trade-volume response has fewer than 24 completed candles"
+        );
+        Ok(out)
     }
 
     async fn fetch_remote(

@@ -820,3 +820,38 @@ test('open-candle practice shows an exchange-timed provisional snapshot without 
   await expect(panel).toContainText('不能当作最终收盘价');
   await expect(panel.locator('.ax-series-illustration svg')).toBeVisible();
 });
+
+test('trade-volume practice keeps exact Binance base and quote volumes in separate units', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/');
+  await page.getByRole('textbox', { name: '搜索 概念 / 公式 / 关键词' }).fill('成交量与成交额');
+  const card = page.locator('.ax-kb-card').filter({ hasText: '成交量与成交额' });
+  await expect(card).toHaveCount(1, { timeout: 30_000 });
+  await card.getByRole('button', { name: '在数据探索中实践' }).click();
+  const panel = page.getByLabel('概念实践');
+  await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+  const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+  const requestPromise = page.waitForRequest(request => request.url().includes('/api/practice') && request.method() === 'POST');
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  const [request, response] = await Promise.all([requestPromise, responsePromise]);
+  expect(request.postDataJSON()).toMatchObject({ concept_id: 'book_trade_volume', source: 'binance', inputs: {} });
+  expect(request.postDataJSON().bars).toBeUndefined();
+  expect(response.ok(), await response.text()).toBe(true);
+  const payload = await response.json();
+  expect(payload.asset_units.base_asset).toBe('BTC');
+  expect(payload.asset_units.quote_asset).toBe('USDT');
+  expect(payload.bar_origin).toBe('server_fetched_completed_binance_usdt_spot_bars');
+  expect(payload.bars).toHaveLength(24);
+  expect(payload.values.base_volume).toBe(payload.bars.at(-1).volume);
+  expect(payload.values.quote_volume).toBeGreaterThan(0);
+  expect(payload.values.vwap).toBeCloseTo(payload.values.quote_volume / payload.values.base_volume, 8);
+  expect(payload.series.map((item: { name: string }) => item.name)).toEqual(['base_volume_series', 'quote_volume_series']);
+  await expect(panel).toContainText('成交额取自交易所汇总字段');
+  await expect(panel).toContainText('成交数量（BTC）');
+  await expect(panel).toContainText('实际成交额（USDT）');
+  await expect(panel.locator('.ax-series-illustration svg')).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileChart = await panel.locator('.ax-trade-volume-chart').evaluate(element => ({ viewport: element.clientWidth, content: element.scrollWidth, svg: element.querySelector('svg')?.getBoundingClientRect().width || 0 }));
+  expect(mobileChart.content).toBeGreaterThan(mobileChart.viewport);
+  expect(mobileChart.svg).toBeGreaterThanOrEqual(700);
+});

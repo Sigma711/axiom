@@ -89,9 +89,9 @@ fn every_industry_metric_has_a_worked_literal_answer() {
 #[test]
 fn every_book_catalog_default_is_executable_and_all_inputs_are_described() {
     for concept in book::catalog() {
-        // This concept is source-bound: its contract is exercised through
-        // market_period_summary and the API, not synthetic teaching defaults.
-        if concept.id == "book_period" {
+        // These concepts are source-bound: their contracts are exercised
+        // through their dedicated market summaries and the API, not defaults.
+        if matches!(concept.id.as_str(), "book_period" | "book_trade_volume") {
             continue;
         }
         assert!(
@@ -510,4 +510,66 @@ fn open_candle_summary_exposes_only_snapshot_and_expiry_not_a_final_close() {
         .unwrap()
         .contains("timestamp-derived"));
     assert!(result["notes"].to_string().contains("不是最终收盘价"));
+}
+
+#[test]
+fn trade_volume_summary_uses_exchange_quote_notional_and_keeps_zero_trade_vwap_null() {
+    let bars = vec![
+        axiom::data::BinanceTradeBar {
+            bar: Bar {
+                timestamp: Utc.with_ymd_and_hms(2024, 1, 1, 9, 0, 0).unwrap(),
+                open: 100.0,
+                high: 120.0,
+                low: 90.0,
+                close: 110.0,
+                volume: 10.0,
+            },
+            quote_volume: 1_017.0,
+        },
+        axiom::data::BinanceTradeBar {
+            bar: Bar {
+                timestamp: Utc.with_ymd_and_hms(2024, 1, 1, 10, 0, 0).unwrap(),
+                open: 110.0,
+                high: 111.0,
+                low: 109.0,
+                close: 110.0,
+                volume: 0.0,
+            },
+            quote_volume: 0.0,
+        },
+    ];
+    let mut bars = bars;
+    for index in 2..24 {
+        let zero_trade = index == 23;
+        bars.push(axiom::data::BinanceTradeBar {
+            bar: Bar {
+                timestamp: bars[0].bar.timestamp + Duration::hours(index),
+                open: 110.0,
+                high: 111.0,
+                low: 109.0,
+                close: 110.0,
+                volume: if zero_trade { 0.0 } else { 10.0 },
+            },
+            quote_volume: if zero_trade { 0.0 } else { 1_000.0 },
+        });
+    }
+    let result = book::market_trade_volume_summary(&bars, "BTCUSDT").unwrap();
+    assert_eq!(result["asset_units"]["base_asset"], "BTC");
+    assert_eq!(result["asset_units"]["quote_asset"], "USDT");
+    assert_eq!(result["series"][0]["values"][0], 10.0);
+    assert_eq!(result["series"][1]["values"][0], 1_017.0);
+    assert_ne!(result["series"][1]["values"][0], 1_100.0);
+    assert!(result["values"]["vwap"].is_null());
+    assert!(book::market_trade_volume_summary(&bars[..1], "BTCUSDT").is_err());
+    assert!(book::market_trade_volume_summary(&bars, "USDT").is_err());
+    assert!(book::market_trade_volume_summary(&bars, "BTCFDUSD").is_err());
+    let mut invalid = bars.clone();
+    invalid[1].quote_volume = 1.0;
+    assert!(book::market_trade_volume_summary(&invalid, "BTCUSDT").is_err());
+    let mut unordered = bars.clone();
+    unordered[1].bar.timestamp = unordered[0].bar.timestamp;
+    assert!(book::market_trade_volume_summary(&unordered, "BTCUSDT").is_err());
+    let mut gapped = bars.clone();
+    gapped[1].bar.timestamp += Duration::hours(1);
+    assert!(book::market_trade_volume_summary(&gapped, "BTCUSDT").is_err());
 }

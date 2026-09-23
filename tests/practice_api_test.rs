@@ -61,6 +61,7 @@ async fn data_practice_accepts_only_concepts_with_a_data_plan() {
                     | "book_pitfall_timeframe"
                     | "book_pitfall_formula_variant"
                     | "book_pitfall_open_candle"
+                    | "book_trade_volume"
             )
     }) {
         let mut first: Option<Value> = None;
@@ -357,6 +358,29 @@ async fn mock_binance_time() -> Json<Value> {
     Json(json!({"serverTime": Utc::now().timestamp_millis()}))
 }
 
+async fn mock_trade_volume_klines(Query(q): Query<HashMap<String, String>>) -> Json<Value> {
+    assert_eq!(q.get("symbol").map(String::as_str), Some("BTCUSDT"));
+    assert_eq!(q.get("interval").map(String::as_str), Some("1h"));
+    assert_eq!(q.get("limit").map(String::as_str), Some("25"));
+    let start = q["startTime"].parse::<i64>().unwrap();
+    Json(Value::Array(
+        (1..=25)
+            .map(|index| {
+                json!([
+                    start + index as i64 * 3_600_000,
+                    "100",
+                    "120",
+                    "90",
+                    "110",
+                    "10",
+                    start + (index as i64 + 1) * 3_600_000 - 1,
+                    if index == 24 { "1017" } else { "1000" }
+                ])
+            })
+            .collect(),
+    ))
+}
+
 #[tokio::test]
 async fn open_candle_practice_reports_upstream_time_failure_without_a_stale_snapshot() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -455,6 +479,67 @@ async fn server_fetched_knowledge_practices_execute_against_completed_mock_marke
     }
     server.abort();
     let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn trade_volume_practice_uses_binance_quote_notional_and_rejects_client_data() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            axum::Router::new()
+                .route("/api/v3/klines", get(mock_trade_volume_klines))
+                .route("/api/v3/time", get(mock_binance_time)),
+        )
+        .await
+        .unwrap()
+    });
+    let dir = PathBuf::from(format!(
+        "target/practice-trade-volume-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let mut state = AppState::new(default_config(), dir.clone());
+    let mut feed = HttpFeed::new(&dir);
+    feed.base_url = format!("http://127.0.0.1:{port}");
+    state.feed = Arc::new(feed);
+    let app = api::router(Arc::new(state));
+    let (status, body) = request(
+        &app,
+        "/api/practice",
+        json!({"concept_id":"book_trade_volume","module":"data","symbol":"BTCUSDT","source":"binance","limit":2,"inputs":{}}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["values"]["quote_volume"], 1_017.0);
+    assert_ne!(body["values"]["quote_volume"], 1_100.0);
+    assert_eq!(body["values"]["vwap"], 101.7);
+    assert_eq!(
+        body["asset_units"],
+        json!({"base_asset":"BTC","quote_asset":"USDT"})
+    );
+    assert_eq!(
+        body["bar_origin"],
+        "server_fetched_completed_binance_usdt_spot_bars"
+    );
+    assert_eq!(body["bars"].as_array().unwrap().len(), 24);
+    assert_eq!(body["series"][1]["name"], "quote_volume_series");
+    for invalid in [
+        json!({"source":"synthetic","symbol":"BTCUSDT","bars":null,"inputs":{}}),
+        json!({"source":"binance","symbol":"BTCFDUSD","bars":null,"inputs":{}}),
+        json!({"source":"binance","symbol":"BTCUSDT","bars":[],"inputs":{}}),
+        json!({"source":"binance","symbol":"BTCUSDT","bars":null,"inputs":{"price":1}}),
+    ] {
+        let mut request_body = json!({"concept_id":"book_trade_volume","module":"data","limit":2});
+        request_body
+            .as_object_mut()
+            .unwrap()
+            .extend(invalid.as_object().unwrap().clone());
+        let (status, _) = request(&app, "/api/practice", request_body).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+    server.abort();
+    std::fs::remove_dir_all(dir).unwrap();
 }
 
 #[tokio::test]

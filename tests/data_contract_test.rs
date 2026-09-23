@@ -311,3 +311,167 @@ async fn open_candle_pair_rejects_when_exchange_time_service_fails() {
     server.abort();
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+async fn trade_volume_klines(Query(q): Query<HashMap<String, String>>) -> Json<Value> {
+    assert_eq!(q.get("interval").map(String::as_str), Some("1h"));
+    assert_eq!(q.get("limit").map(String::as_str), Some("25"));
+    let start = q["startTime"].parse::<i64>().unwrap();
+    let symbol = q["symbol"].as_str();
+    Json(Value::Array(
+        (1..=25)
+            .map(|index| {
+                let hours = index + usize::from(symbol == "GAPUSDT" && index >= 2);
+                let open = start + hours as i64 * 3_600_000;
+                let mut row = json!([
+                    open,
+                    "100",
+                    "120",
+                    "90",
+                    "110",
+                    "10",
+                    open + 3_600_000 - 1,
+                    if index == 24 { "1017" } else { "1000" }
+                ]);
+                if symbol == "MISSINGUSDT" && index == 1 {
+                    row.as_array_mut().unwrap().truncate(7);
+                }
+                if symbol == "MISMATCHUSDT" && index == 1 {
+                    row[7] = json!("0");
+                }
+                if symbol == "ZEROUSDT" && index == 1 {
+                    row[5] = json!("0");
+                    row[7] = json!("0");
+                }
+                if symbol == "BADOHLCUSDT" && index == 1 {
+                    row[2] = json!("99");
+                }
+                row
+            })
+            .collect(),
+    ))
+}
+
+async fn trade_volume_server_time() -> Json<Value> {
+    Json(json!({"serverTime": Utc::now().timestamp_millis()}))
+}
+
+async fn trade_volume_feed() -> (HttpFeed, tokio::task::JoinHandle<()>, String) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            Router::new()
+                .route("/api/v3/klines", get(trade_volume_klines))
+                .route("/api/v3/time", get(trade_volume_server_time)),
+        )
+        .await
+        .unwrap()
+    });
+    let dir = format!("target/test-trade-volume-{}", uuid::Uuid::new_v4());
+    let mut feed = HttpFeed::new(&dir);
+    feed.base_url = format!("http://127.0.0.1:{port}");
+    (feed, server, dir)
+}
+
+#[tokio::test]
+async fn trade_volume_fetch_uses_field_seven_and_excludes_the_unfinished_row() {
+    let (feed, server, dir) = trade_volume_feed().await;
+    let bars = feed
+        .fetch_completed_binance_trade_bars("BTCUSDT")
+        .await
+        .unwrap();
+    assert_eq!(bars.len(), 24);
+    assert_eq!(bars.last().unwrap().quote_volume, 1_017.0);
+    assert_ne!(
+        bars.last().unwrap().quote_volume,
+        bars.last().unwrap().bar.close * 10.0
+    );
+    assert!(bars
+        .windows(2)
+        .all(|pair| pair[0].bar.timestamp < pair[1].bar.timestamp));
+    assert!(feed
+        .fetch_completed_binance_trade_bars("MISSINGUSDT")
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("quote asset volume"));
+    assert!(feed
+        .fetch_completed_binance_trade_bars("MISMATCHUSDT")
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("base and quote volumes disagree"));
+    let zero_bars = feed
+        .fetch_completed_binance_trade_bars("ZEROUSDT")
+        .await
+        .unwrap();
+    assert!(zero_bars
+        .iter()
+        .any(|bar| bar.bar.volume == 0.0 && bar.quote_volume == 0.0));
+    assert!(feed
+        .fetch_completed_binance_trade_bars("BADOHLCUSDT")
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("invalid Binance trade-volume OHLCV"));
+    assert!(feed
+        .fetch_completed_binance_trade_bars("GAPUSDT")
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("not continuous"));
+    server.abort();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn trade_volume_refuses_an_unavailable_binance_time_endpoint() {
+    let (feed, server, dir) = start_mock_feed().await;
+    assert!(feed
+        .fetch_completed_binance_trade_bars("BTCUSDT")
+        .await
+        .unwrap_err()
+        .to_string()
+        .contains("server time"));
+    server.abort();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn trade_volume_keeps_the_pre_request_exchange_cutoff_across_an_hour_boundary() {
+    let at = |hour, minute, second| {
+        Utc.with_ymd_and_hms(2024, 1, 1, hour, minute, second)
+            .unwrap()
+            .timestamp_millis()
+    };
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let times = Arc::new(vec![at(10, 59, 59), at(11, 0, 1)]);
+    let index = Arc::new(AtomicUsize::new(0));
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            Router::new()
+                .route("/api/v3/klines", get(trade_volume_klines))
+                .route("/api/v3/time", get(scripted_binance_time))
+                .with_state((times, index)),
+        )
+        .await
+        .unwrap()
+    });
+    let dir = format!("target/test-trade-rollover-{}", uuid::Uuid::new_v4());
+    let mut feed = HttpFeed::new(&dir);
+    feed.base_url = format!("http://127.0.0.1:{port}");
+    let bars = feed
+        .fetch_completed_binance_trade_bars("BTCUSDT")
+        .await
+        .unwrap();
+    assert_eq!(bars.len(), 24);
+    assert_eq!(
+        bars.last().unwrap().bar.timestamp,
+        Utc.with_ymd_and_hms(2024, 1, 1, 9, 0, 0).unwrap()
+    );
+    server.abort();
+    std::fs::remove_dir_all(dir).unwrap();
+}

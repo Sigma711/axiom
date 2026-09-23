@@ -144,6 +144,9 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
             let references = match c.id.as_str() {
                 "book_nonstandard_bar" => vec!["src/book.rs::nonstandard_bar_ohlc4".to_string()],
                 "book_period" => vec!["src/book.rs::market_period_summary".to_string()],
+                "book_trade_volume" => {
+                    vec!["src/book.rs::market_trade_volume_summary".to_string()]
+                }
                 _ => vec![format!("src/book.rs::evaluate::{}", c.id)],
             };
             if let Some(r) = first_existing(references) {

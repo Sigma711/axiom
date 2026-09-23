@@ -1490,7 +1490,14 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
                 | "book_second_order_greeks"
         );
     let performance = concept.category == "风险-绩效";
-    if concept.id == "book_pitfall_open_candle" {
+    if concept.id == "book_trade_volume" {
+        json!({
+            "markets":["crypto"], "modules":["data"],
+            "required_datasets":["24_completed_binance_usdt_spot_1h_klines_with_quote_asset_volume"],
+            "source_policy":"real_required",
+            "goal":"服务器从 Binance USDT 现货一次未缓存K线响应读取最近24根已收盘1小时K线。成交量取字段5，成交额取字段7实际计价资产成交额，VWAP=字段7/字段5；零成交的字段5和字段7可同时为零，此时VWAP为空。拒绝客户端K线和手填输入。"
+        })
+    } else if concept.id == "book_pitfall_open_candle" {
         json!({
             "markets":["crypto"], "modules":["data"],
             "required_datasets":["server_fetched_binance_active_1h_snapshot","last_completed_binance_1h_bar"],
@@ -2037,6 +2044,32 @@ async fn post_practice(
             "open-candle practice requires the Binance 1-hour source",
         ));
     }
+    if concept.id == "book_trade_volume" {
+        if source != "binance" {
+            return Err(validate::bad(
+                "trade-volume practice requires the Binance USDT spot source",
+            ));
+        }
+        if symbol.strip_suffix("USDT").is_none_or(str::is_empty) {
+            return Err(validate::bad(
+                "trade-volume practice requires a Binance USDT spot symbol",
+            ));
+        }
+        if req.bars.is_some() {
+            return Err(validate::bad(
+                "trade-volume practice fetches Binance bars on the server and does not accept caller-supplied bars",
+            ));
+        }
+        if !req
+            .inputs
+            .as_object()
+            .is_some_and(serde_json::Map::is_empty)
+        {
+            return Err(validate::bad(
+                "trade-volume practice does not accept caller-supplied inputs",
+            ));
+        }
+    }
     if concept.id == "book_pitfall_open_candle" && req.bars.is_some() {
         return Err(validate::bad(
             "this practice uses a server-fetched active Binance snapshot and does not accept caller-supplied bars",
@@ -2053,10 +2086,24 @@ async fn post_practice(
     }
     let independent = concept.input_kind != "market_bars";
     let provided_bars = req.bars.is_some();
+    let trade_volume_bars = if concept.id == "book_trade_volume" {
+        Some(
+            state
+                .feed
+                .fetch_completed_binance_trade_bars(&symbol)
+                .await
+                .map_err(|error| (StatusCode::BAD_GATEWAY, error.to_string()))?,
+        )
+    } else {
+        None
+    };
     let mut bars = if let Some(bars) = req.bars {
         validate::bars(&bars)?;
         bars
-    } else if independent || concept.id == "book_pitfall_open_candle" {
+    } else if independent
+        || concept.id == "book_pitfall_open_candle"
+        || concept.id == "book_trade_volume"
+    {
         Vec::new()
     } else {
         market_bars(&state, &symbol, &source, limit).await?
@@ -2156,26 +2203,31 @@ async fn post_practice(
             }
         }
     }
-    let mut result = match open_candle_summary {
-        Some(summary) => summary,
-        None => match formula_variant_summary {
+    let mut result = match trade_volume_bars.as_ref() {
+        Some(trade_bars) => {
+            crate::book::market_trade_volume_summary(trade_bars, &symbol).map_err(validate::bad)?
+        }
+        None => match open_candle_summary {
             Some(summary) => summary,
-            None => match timeframe_summary {
+            None => match formula_variant_summary {
                 Some(summary) => summary,
-                None => match period_summary {
+                None => match timeframe_summary {
                     Some(summary) => summary,
-                    None => match annualization {
-                        Some(annualization) => crate::practice::evaluate_with_annualization(
-                            &req.concept_id,
-                            &bars,
-                            &evaluator_inputs,
-                            annualization,
-                        ),
-                        None => {
-                            crate::practice::evaluate(&req.concept_id, &bars, &evaluator_inputs)
+                    None => match period_summary {
+                        Some(summary) => summary,
+                        None => match annualization {
+                            Some(annualization) => crate::practice::evaluate_with_annualization(
+                                &req.concept_id,
+                                &bars,
+                                &evaluator_inputs,
+                                annualization,
+                            ),
+                            None => {
+                                crate::practice::evaluate(&req.concept_id, &bars, &evaluator_inputs)
+                            }
                         }
-                    }
-                    .map_err(validate::bad)?,
+                        .map_err(validate::bad)?,
+                    },
                 },
             },
         },
@@ -2209,7 +2261,10 @@ async fn post_practice(
     if result_required {
         result["provenance"] = json!("provided_result_context");
     }
-    if open_candle_pair.is_none() {
+    if let Some(trade_bars) = trade_volume_bars.as_ref() {
+        result["bar_origin"] = json!("server_fetched_completed_binance_usdt_spot_bars");
+        result["bars"] = json!(trade_bars.iter().map(|bar| &bar.bar).collect::<Vec<_>>());
+    } else if open_candle_pair.is_none() {
         result["bars"] = json!(bars);
     }
     Ok(Json(result))
