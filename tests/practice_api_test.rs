@@ -51,7 +51,10 @@ async fn data_practice_accepts_only_concepts_with_a_data_plan() {
         .unwrap();
     for concept in practice::catalog().into_iter().filter(|concept| {
         concept.input_kind == "market_bars"
-            && !matches!(concept.id.as_str(), "book_cdp" | "book_pitfall_repainting")
+            && !matches!(
+                concept.id.as_str(),
+                "book_cdp" | "book_pitfall_repainting" | "book_pitfall_timeframe"
+            )
     }) {
         let mut first: Option<Value> = None;
         for module in ["data"] {
@@ -206,6 +209,53 @@ async fn repainting_practice_has_no_manual_event_or_bar_override() {
         "concept_id":"book_pitfall_repainting", "module":"data", "symbol":"BTCUSDT", "source":"synthetic"
     })).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn timeframe_practice_requires_server_fetched_real_source_bars() {
+    let app = app();
+    let response = app
+        .clone()
+        .oneshot(Request::get("/api/practice").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let catalog: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), 10_000_000).await.unwrap()).unwrap();
+    let concept = catalog["concepts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == "book_pitfall_timeframe")
+        .unwrap();
+    assert_eq!(concept["input_kind"], "market_bars");
+    assert_eq!(concept["inputs"], json!([]));
+    assert_eq!(concept["plan"]["modules"], json!(["data"]));
+    assert_eq!(concept["plan"]["source_policy"], "real_required");
+    assert!(concept["plan"]["goal"]
+        .as_str()
+        .unwrap()
+        .contains("不同时间尺度"));
+
+    let bars = SyntheticFeed::new(31)
+        .fetch_historical(
+            "BTCUSDT",
+            Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+            21,
+        )
+        .unwrap();
+    let (status, body) = request(
+        &app,
+        "/api/practice",
+        json!({
+            "concept_id":"book_pitfall_timeframe", "module":"data", "symbol":"BTCUSDT",
+            "source":"binance", "bars":bars, "inputs":{}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(body
+        .to_string()
+        .contains("server-fetched completed source bars"));
 }
 
 #[tokio::test]

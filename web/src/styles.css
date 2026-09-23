@@ -439,6 +439,6 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
 .ax-symbol-pages button { padding: 0.25rem 0.45rem; border: 1px solid var(--border); border-radius: 4px; color: var(--text); background: var(--bg-elev); cursor: pointer; font: inherit; }
 .ax-symbol-pages button:disabled { opacity: 0.45; cursor: not-allowed; }
 
-.ax-repainting-chart { max-width: 760px; }
+.ax-wide-series-chart { max-width: 760px; }
 .ax-repainting-chart .ax-series-legend i.ax-legend-retrospective, .ax-repainting-chart .ax-series-legend i.ax-legend-confirmed { width: 0.65rem; height: 0.65rem; border-radius: 50%; background: var(--bg-input) !important; border: 2px solid currentColor; }
 .ax-repainting-chart .ax-series-legend i.ax-legend-confirmed { background: currentColor !important; border-color: currentColor; }

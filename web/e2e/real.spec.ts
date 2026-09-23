@@ -709,3 +709,44 @@ test('rolling correlation accepts aligned real compare and paper results', async
     page.getByRole('button', { name: /停止/ }).click(),
   ]);
 });
+
+
+test('timeframe practice uses one completed real series and visualizes both horizons', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/');
+  await page.getByRole('textbox', { name: '搜索 概念 / 公式 / 关键词' }).fill('同一时间尺度');
+  const card = page.locator('.ax-kb-card').filter({ hasText: '指标必须使用同一时间尺度' });
+  await expect(card).toHaveCount(1, { timeout: 30_000 });
+  await card.getByRole('button', { name: '在数据探索中实践' }).click();
+  const panel = page.getByLabel('概念实践');
+  await expect(panel).toContainText('不同时间尺度可以同时成立');
+  await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+
+  const requestPromise = page.waitForRequest(request => request.url().includes('/api/practice') && request.method() === 'POST');
+  const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+  await page.getByRole('button', { name: '运行实践' }).click();
+  const [request, response] = await Promise.all([requestPromise, responsePromise]);
+  const body = request.postDataJSON() as { concept_id: string; source: string; bars?: unknown; inputs: unknown };
+  expect(body).toMatchObject({ concept_id: 'book_pitfall_timeframe', source: 'binance', inputs: {} });
+  expect(body.bars).toBeUndefined();
+  expect(response.ok(), await response.text()).toBe(true);
+  const payload = await response.json();
+  expect(payload.context).toBe('selected_dataset');
+  expect(payload.provenance).toBe('provided_market_bars');
+  expect(payload.bar_origin).toBe('server_fetched_completed_source_bars');
+  expect(payload.values.source_bar_seconds).toBe(3600);
+  expect(payload.values.same_completed_asof).toBe(1);
+  expect(payload.values.short_horizon_bars).toBe(5);
+  expect(payload.values.long_horizon_bars).toBe(20);
+  expect(Number.isFinite(payload.values.short_horizon_return)).toBe(true);
+  expect(Number.isFinite(payload.values.long_horizon_return)).toBe(true);
+  expect(payload.bars.length).toBeGreaterThanOrEqual(21);
+  expect(payload.bars.every((bar: { timestamp: string }) => new Date(bar.timestamp).getTime() <= Date.now())).toBe(true);
+  const series = Object.fromEntries(payload.series.map((item: { name: string; values: Array<number | null> }) => [item.name, item.values]));
+  expect(series.close_price).toHaveLength(payload.bars.length);
+  expect(series.short_horizon_start.filter((value: number | null) => value != null)).toHaveLength(1);
+  expect(series.long_horizon_start.filter((value: number | null) => value != null)).toHaveLength(1);
+  await expect(panel).toContainText('短期窗口收盘价变化');
+  await expect(panel).toContainText('同一根已收盘 K 线为截止');
+  await expect(panel.locator('.ax-series-illustration svg')).toBeVisible();
+});

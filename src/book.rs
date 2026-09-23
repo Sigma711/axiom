@@ -1066,6 +1066,81 @@ pub fn market_period_summary(bars: &[Bar], source: &str) -> Result<Value, String
     }))
 }
 
+/// Evaluates two fixed horizons from one completed, source-bound series.
+/// The source only supplies one native cadence, so this intentionally does not
+/// pretend to compare a five-minute feed with a daily feed or infer independent
+/// confirmation from the two observations.
+pub fn market_timeframe_summary(bars: &[Bar], source: &str) -> Result<Value, String> {
+    const SHORT_BARS: usize = 5;
+    const LONG_BARS: usize = 20;
+    let mut result = market_period_summary(bars, source)?;
+    result["concept_id"] = json!("book_pitfall_timeframe");
+    let values = result["values"]
+        .as_object_mut()
+        .expect("period values are an object");
+    let nominal = values
+        .remove("book_period")
+        .expect("period summary has a nominal cadence");
+    values.insert("source_bar_seconds".into(), nominal);
+    values.insert("same_completed_asof".into(), json!(1.0));
+    values.insert("short_horizon_bars".into(), json!(SHORT_BARS as f64));
+    values.insert("long_horizon_bars".into(), json!(LONG_BARS as f64));
+    let horizon_return = |periods: usize| {
+        if bars.len() <= periods {
+            None
+        } else {
+            let last = bars.last().expect("nonempty bars were checked");
+            let first = &bars[bars.len() - periods - 1];
+            (first.close > 0.0 && last.close > 0.0).then(|| last.close / first.close - 1.0)
+        }
+    };
+    let short = horizon_return(SHORT_BARS);
+    let long = horizon_return(LONG_BARS);
+    let marker = |periods: usize| {
+        if bars.len() > periods {
+            bars.iter()
+                .enumerate()
+                .map(|(index, bar)| (index == bars.len() - periods - 1).then_some(bar.close))
+                .collect::<Vec<_>>()
+        } else {
+            vec![None; bars.len()]
+        }
+    };
+    values.insert("short_horizon_return".into(), json!(short));
+    values.insert("long_horizon_return".into(), json!(long));
+    values.insert("horizon_direction_differs".into(), json!(matches!((short, long), (Some(a), Some(b)) if a.signum() != b.signum() && a != 0.0 && b != 0.0) as u8 as f64));
+    let units = result["units"]
+        .as_object_mut()
+        .expect("period units are an object");
+    units.remove("book_period");
+    for (key, unit) in [
+        ("source_bar_seconds", "秒"),
+        ("same_completed_asof", "布尔值（1/0）"),
+        ("short_horizon_bars", "根 K 线"),
+        ("long_horizon_bars", "根 K 线"),
+        ("short_horizon_return", "比例（小数）"),
+        ("long_horizon_return", "比例（小数）"),
+        ("horizon_direction_differs", "布尔值（1/0）"),
+        ("close_price", "price"),
+        ("short_horizon_start", "price"),
+        ("long_horizon_start", "price"),
+    ] {
+        units.insert(key.into(), json!(unit));
+    }
+    let notes = result["notes"]
+        .as_array_mut()
+        .expect("period notes are an array");
+    notes.push(json!(format!(
+        "短期取最近 {SHORT_BARS} 根K线、长期取最近 {LONG_BARS} 根K线的收盘价变化；两者使用同一标的、同一来源和最后一根已收盘K线作为截止。原书提示不同时间尺度可同时成立：方向不同是可观察结果，不是错误，也不能据此宣称独立确认。"
+    )));
+    result["series"] = json!([
+        {"name":"close_price","values":bars.iter().map(|bar| Some(bar.close)).collect::<Vec<_>>()},
+        {"name":"short_horizon_start","values":marker(SHORT_BARS)},
+        {"name":"long_horizon_start","values":marker(LONG_BARS)}
+    ]);
+    Ok(result)
+}
+
 pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String> {
     let supplied = inputs.as_object().ok_or("inputs 必须是对象")?;
     let definition = catalog()

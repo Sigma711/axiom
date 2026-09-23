@@ -23,11 +23,30 @@ it('groups repainting prices, labels retrospective markers, and renders every is
     {name:'confirmed_pivot_low',values:[null,null,null,null,8,null]},
     {name:'confirmation_delay_bars',values:[null,null,null,2,2,null]},
   ], units:{pivot_high_occurrence:'price',pivot_low_occurrence:'price',confirmed_pivot_high:'price',confirmed_pivot_low:'price',confirmation_delay_bars:'bars'}} as unknown as PracticeResult;
+  result.bars = Array.from({ length: 6 }, (_, index) => ({ timestamp: `2026-09-01T0${index}:00:00Z`, open: 9, high: 12, low: 7, close: 10, volume: 1 }));
   const html = renderToStaticMarkup(<KnowledgeSeriesVisual name="重画" result={result} />);
   expect(html).toContain('局部高点发生位置（仅回看）');
   expect(html).toContain('局部低点确认价（t+2）');
   expect(html).toContain('根 K 线');
+  expect(html).toContain('2026-09-01 00:00 UTC');
+  expect(html).toContain('<title>局部高点发生位置（仅回看） · 2026-09-01 01:00 UTC · 10</title>');
   expect((html.match(/data-series-marker=/g) || [])).toHaveLength(6);
   expect(html).toContain('fill="var(--bg)"');
   expect((html.match(/transform="translate/g) || [])).toHaveLength(2);
+});
+
+it('labels both real-market timeframe windows and keeps sparse starts visible', () => {
+  const bars = Array.from({ length: 21 }, (_, index) => ({ timestamp: `2026-09-${String(index + 1).padStart(2, '0')}T00:00:00Z`, open: 100 + index, high: 101 + index, low: 99 + index, close: 100 + index, volume: 1 }));
+  const result = { bars, series: [
+    { name: 'close_price', values: bars.map(bar => bar.close) },
+    { name: 'short_horizon_start', values: bars.map((bar, index) => index === 15 ? bar.close : null) },
+    { name: 'long_horizon_start', values: bars.map((bar, index) => index === 0 ? bar.close : null) },
+  ], units: { close_price: 'price', short_horizon_start: 'price', long_horizon_start: 'price' } } as unknown as PracticeResult;
+  const html = renderToStaticMarkup(<KnowledgeSeriesVisual name="时间尺度" result={result} />);
+  expect(html).toContain('ax-wide-series-chart');
+  expect(html).toContain('真实收盘价');
+  expect(html).toContain('短期窗口起点（5 根）');
+  expect(html).toContain('长期窗口起点（20 根）');
+  expect(html).toContain('2026-09-21 00:00 UTC');
+  expect((html.match(/data-series-marker=/g) || [])).toHaveLength(2);
 });

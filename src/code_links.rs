@@ -119,10 +119,14 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
         }
         for c in crate::book_technical::catalog() {
             let id = c.id.strip_prefix("book_").unwrap_or(&c.id);
-            let candidates = [
-                format!("src/book_technical/market.rs::evaluate::{id}"),
-                format!("src/book_technical/external.rs::evaluate::{id}"),
-            ];
+            let candidates = if c.id == "book_pitfall_timeframe" {
+                vec!["src/book.rs::market_timeframe_summary".to_string()]
+            } else {
+                vec![
+                    format!("src/book_technical/market.rs::evaluate::{id}"),
+                    format!("src/book_technical/external.rs::evaluate::{id}"),
+                ]
+            };
             if let Some(r) = first_existing(candidates) {
                 out.insert(c.id, r);
             }

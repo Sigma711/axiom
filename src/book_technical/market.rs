@@ -22,6 +22,36 @@ pub(super) fn evaluate(
         };
     }
     match id {
+        "pitfall_timeframe" => {
+            const SHORT_BARS: usize = 5;
+            const LONG_BARS: usize = 20;
+            let horizon_return = |periods: usize| {
+                if n <= periods {
+                    None
+                } else {
+                    div(c[n - 1] - c[n - 1 - periods], c[n - 1 - periods])
+                }
+            };
+            let short = horizon_return(SHORT_BARS);
+            let long = horizon_return(LONG_BARS);
+            o.value(
+                "short_horizon_return",
+                short,
+                "fraction",
+                "短期窗口需要至少6根K线",
+            );
+            o.value(
+                "long_horizon_return",
+                long,
+                "fraction",
+                "长期窗口需要至少21根K线",
+            );
+            o.flag(
+                "horizon_direction_differs",
+                matches!((short, long), (Some(a), Some(b)) if a.signum() != b.signum() && a != 0.0 && b != 0.0),
+            );
+            o.note("离线计算只比较传入序列的5根与20根观察窗口，不能核验来源周期；实际实践由API从所选来源重新获取已收盘K线并绑定来源周期。不同窗口方向不同是可观察状态，不是独立确认。");
+        }
         "pitfall_repainting" => {
             // A five-bar fractal is only observable when the second bar to the
             // right has closed.  Keep the retrospective occurrence marker and

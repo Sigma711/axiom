@@ -1490,7 +1490,14 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
                 | "book_second_order_greeks"
         );
     let performance = concept.category == "风险-绩效";
-    if concept.id == "book_period" {
+    if concept.id == "book_pitfall_timeframe" {
+        json!({
+            "markets":["crypto","cn_equity","us_equity"], "modules":["data"],
+            "required_datasets":["server_fetched_completed_ohlcv_with_source_cadence"],
+            "source_policy":"real_required",
+            "goal":"从所选真实来源重新获取一段已收盘K线，按该来源的原生周期分别计算最近5根与20根K线的收盘价变化，并以同一最后已收盘K线为截止。原书提示不同时间尺度可以同时成立：方向不同是可观察的市场状态，不是数据错误，也不构成独立确认。当前接入只提供Binance 1小时线、A股日线或美股日线，不伪造5分钟与日线的双源比较。"
+        })
+    } else if concept.id == "book_period" {
         json!({
             "markets":["crypto","cn_equity","us_equity"],
             "modules":["data"],
@@ -2011,9 +2018,13 @@ async fn post_practice(
             "real_required practice does not accept synthetic market bars",
         ));
     }
-    if concept.id == "book_pitfall_repainting" && req.bars.is_some() {
+    if matches!(
+        concept.id.as_str(),
+        "book_pitfall_repainting" | "book_pitfall_timeframe"
+    ) && req.bars.is_some()
+    {
         return Err(validate::bad(
-            "repainting practice fetches completed source bars on the server and does not accept caller-supplied bars",
+            "this practice uses server-fetched completed source bars and does not accept caller-supplied bars",
         ));
     }
     let independent = concept.input_kind != "market_bars";
@@ -2035,6 +2046,11 @@ async fn post_practice(
     if concept.id == "book_relative_volume_at_time" {
         relative_volume_requires_continuous_binance_hours(&bars, &source)?;
     }
+    let timeframe_summary = if concept.id == "book_pitfall_timeframe" {
+        Some(crate::book::market_timeframe_summary(&bars, &source).map_err(validate::bad)?)
+    } else {
+        None
+    };
     let period_summary = if concept.id == "book_period" {
         Some(crate::book::market_period_summary(&bars, &source).map_err(validate::bad)?)
     } else {
@@ -2089,24 +2105,30 @@ async fn post_practice(
             }
         }
     }
-    let mut result = match period_summary {
+    let mut result = match timeframe_summary {
         Some(summary) => summary,
-        None => match annualization {
-            Some(annualization) => crate::practice::evaluate_with_annualization(
-                &req.concept_id,
-                &bars,
-                &evaluator_inputs,
-                annualization,
-            ),
-            None => crate::practice::evaluate(&req.concept_id, &bars, &evaluator_inputs),
-        }
-        .map_err(validate::bad)?,
+        None => match period_summary {
+            Some(summary) => summary,
+            None => match annualization {
+                Some(annualization) => crate::practice::evaluate_with_annualization(
+                    &req.concept_id,
+                    &bars,
+                    &evaluator_inputs,
+                    annualization,
+                ),
+                None => crate::practice::evaluate(&req.concept_id, &bars, &evaluator_inputs),
+            }
+            .map_err(validate::bad)?,
+        },
     };
     result["module"] = json!(req.module);
     result["symbol"] = json!(symbol);
     result["source"] = json!(source);
     result["context"] = json!(context);
-    if concept.id == "book_pitfall_repainting" {
+    if matches!(
+        concept.id.as_str(),
+        "book_pitfall_repainting" | "book_pitfall_timeframe"
+    ) {
         result["bar_origin"] = json!("server_fetched_completed_source_bars");
         if let Some(notes) = result["notes"].as_array_mut() {
             notes.push(json!("本次练习由服务器从所选来源重新获取并过滤已收盘 K 线；响应 bars 含实际使用的时间戳，可能比页面图表更新。"));

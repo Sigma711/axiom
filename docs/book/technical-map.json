@@ -945,16 +945,11 @@
     {
       "id": "book_pitfall_timeframe",
       "name": "指标必须使用同一时间尺度",
-      "summary": "检验两个输入序列是否同频、同截止时间。",
-      "example": "5分钟指标不能当成与日线同一周期的独立确认。",
+      "summary": "从同一段已收盘真实行情比较短期与长期观察窗口；不同时间尺度可以同时成立。",
+      "example": "同一标的的最近5根K线反弹而最近20根K线仍下跌，是不同观察窗口的并存状态。",
       "formula": "",
-      "input_kind": "independent_inputs",
-      "defaults": {
-        "first_interval_seconds": 300.0,
-        "second_interval_seconds": 86400.0,
-        "first_asof_seconds": 1000.0,
-        "second_asof_seconds": 1000.0
-      },
+      "input_kind": "market_bars",
+      "defaults": {},
       "source_ids": [
         "book_28_12"
       ]

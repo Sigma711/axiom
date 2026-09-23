@@ -349,6 +349,55 @@ fn period_summary_uses_the_source_contract_and_does_not_turn_stock_weekends_into
 }
 
 #[test]
+fn timeframe_practice_compares_real_source_horizons_at_one_completed_cutoff() {
+    let start = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+    let mut bars = closed_bars(
+        &(0..21)
+            .map(|index| 100.0 + index as f64)
+            .collect::<Vec<_>>(),
+    );
+    for (index, bar) in bars.iter_mut().enumerate() {
+        bar.timestamp = start + Duration::hours(index as i64);
+    }
+    let result = book::market_timeframe_summary(&bars, "binance").unwrap();
+    assert_eq!(result["concept_id"], "book_pitfall_timeframe");
+    assert_eq!(result["values"]["source_bar_seconds"], 3_600);
+    assert_eq!(result["values"]["same_completed_asof"], 1.0);
+    assert_eq!(result["values"]["short_horizon_bars"], 5.0);
+    assert_eq!(result["values"]["long_horizon_bars"], 20.0);
+    assert!(
+        (result["values"]["short_horizon_return"].as_f64().unwrap() - 5.0 / 115.0).abs() < 1e-12
+    );
+    assert!(
+        (result["values"]["long_horizon_return"].as_f64().unwrap() - 20.0 / 100.0).abs() < 1e-12
+    );
+    assert_eq!(result["values"]["horizon_direction_differs"], 0.0);
+    assert_eq!(result["units"]["close_price"], "price");
+    assert_eq!(result["series"].as_array().unwrap().len(), 3);
+    assert!(result["notes"].to_string().contains("不同时间尺度"));
+
+    let incomplete_long = book::market_timeframe_summary(&bars[..20], "binance").unwrap();
+    assert!(incomplete_long["values"]["long_horizon_return"].is_null());
+    assert!(
+        (incomplete_long["values"]["short_horizon_return"]
+            .as_f64()
+            .unwrap()
+            - 5.0 / 114.0)
+            .abs()
+            < 1e-12
+    );
+
+    let friday = Utc.with_ymd_and_hms(2024, 1, 5, 0, 0, 0).unwrap();
+    bars[0].timestamp = friday;
+    for (index, bar) in bars.iter_mut().enumerate().skip(1) {
+        bar.timestamp = friday + Duration::days(index as i64 + 2);
+    }
+    let stock = book::market_timeframe_summary(&bars, "a_share").unwrap();
+    assert_eq!(stock["values"]["source_bar_seconds"], 86_400);
+    assert_eq!(stock["values"]["calendar_gap_count"], 1);
+}
+
+#[test]
 fn period_summary_rejects_untrusted_source_empty_disordered_or_future_bars() {
     assert!(book::market_period_summary(&[], "binance").is_err());
     let mut bars = closed_bars(&[100.0, 101.0]);

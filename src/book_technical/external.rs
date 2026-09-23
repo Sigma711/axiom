@@ -435,16 +435,6 @@ pub(super) fn evaluate(id: &str, v: &Value, o: &mut Output) -> Result<(), String
                 "fraction"
             );
         }
-        "pitfall_timeframe" => {
-            o.flag(
-                "same_interval",
-                positive(v, "first_interval_seconds")? == positive(v, "second_interval_seconds")?,
-            );
-            o.flag(
-                "same_asof",
-                x("first_asof_seconds")? == x("second_asof_seconds")?,
-            );
-        }
         "pitfall_open_candle" => {
             let p = positive(v, "previous_close")?;
             o.number(
