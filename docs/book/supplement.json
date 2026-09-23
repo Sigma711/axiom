@@ -542,21 +542,14 @@
       "id": "book_utxo_value_stats",
       "name": "Mean / Median UTXO value created / spent",
       "category": "衍生品与链上",
-      "summary": "统计新建或花费 UTXO 的平均/中位价值。",
-      "meaning": "统计新建或花费 UTXO 的平均/中位价值。中位数更能代表典型小额活动。",
-      "pitfalls": "价格上涨会机械抬高美元口径；平均数易被巨额转账扭曲。",
-      "formula": "总量=Σ样本；均值=总量/样本数；中位数=排序后中间值（偶数时取中间两项平均）",
-      "example": "输入[1, 2, 3, 100]，分别观察总量、平均值和中位数；离群值会拉动均值，不能把单位混在一起。",
-      "op": "statistics",
-      "defaults": {
-        "observations": [
-          1,
-          2,
-          3,
-          100
-        ]
-      },
-      "unit": "tokens",
+      "summary": "固定已确认区块交易首页中，普通交易创建输出与花费前序输出的平均/中位 satoshi 价值。",
+      "meaning": "服务器读取固定区块的 Esplora /txs/0 第一页，排除 coinbase；普通交易 vin.prevout.value 是观察到的花费值，vout.value 是创建值。",
+      "pitfalls": "这不是整块、时间窗口或全网 UTXO 集合。仅 scriptpubkey_type=op_return 从创建输出小计排除；其余类型不保证可花费或仍未花费。",
+      "formula": "创建/花费均值=各自样本 satoshi 总和/各自输出数；中位数取排序中点。",
+      "example": "服务器固定一个有六个更新观测区块的主网区块，只返回首页至多24笔普通交易；无普通交易时均值和中位数无定义。",
+      "op": "bitcoin_utxo_sample",
+      "defaults": {},
+      "unit": "sats",
       "source_ids": [
         "appendix_080"
       ],
@@ -729,17 +722,13 @@
       "id": "book_utxo_counts",
       "name": "Created UTXOs / Spent UTXOs / Total UTXOs",
       "category": "衍生品与链上",
-      "summary": "UTXO 是尚未花费的交易输出。",
-      "meaning": "UTXO 是尚未花费的交易输出。Created 与 Spent 分别统计新建和被消费数量，Total 是当前集合规模。",
-      "pitfalls": "UTXO 数量受找零、批量交易和协议使用方式影响，不等于用户数。",
-      "formula": "UTXO集合末值 = 初始未花费输出数 + 新建数 − 已花费数",
-      "example": "原1000个、新建200、花费150，末值1050个；找零输出也会增加数量。",
-      "op": "open_interest",
-      "defaults": {
-        "previous_contracts": 1000,
-        "new_contracts": 200,
-        "closed_contracts": 150
-      },
+      "summary": "固定区块交易首页的普通交易创建输出数与花费前序输出数；当前全网 UTXO 总数无定义。",
+      "meaning": "只计固定已确认区块 `/txs/0` 首页中排除 coinbase 后的观察值。`op_return` 输出单列排除，不能把这一页的创建减花费当作全网集合变化。",
+      "pitfalls": "找零、批量交易、脚本类型及页面截断都会改变样本计数；不等于用户数，也不能推出当前全网 UTXO 总数。",
+      "formula": "样本创建数=非 OP_RETURN vout 数；样本花费数=普通交易 vin.prevout 数；全网总数=无定义。",
+      "example": "服务器固定一个有六个更新观测区块的主网区块，只返回首页至多24笔普通交易及明确的 OP_RETURN 排除数。",
+      "op": "bitcoin_utxo_sample",
+      "defaults": {},
       "unit": "outputs",
       "source_ids": [
         "appendix_078"
@@ -750,24 +739,14 @@
       "id": "book_utxo_totals",
       "name": "Total UTXO value created / spent",
       "category": "衍生品与链上",
-      "summary": "统计某段时间新建或花费的 UTXO 总价值。",
-      "meaning": "统计某段时间新建或花费的 UTXO 总价值。",
-      "pitfalls": "高值可能由少数大额内部转账造成，需结合调整后转账量与实体聚类。",
-      "formula": "新建总价值=Σ新建输出金额；花费总价值=Σ花费输出金额",
-      "example": "新建1+2+5=8枚、花费2+4=6枚；二者差不是投资资金净流入。",
-      "op": "utxo_totals",
-      "defaults": {
-        "created_values": [
-          1,
-          2,
-          5
-        ],
-        "spent_values": [
-          2,
-          4
-        ]
-      },
-      "unit": "tokens",
+      "summary": "固定区块交易首页的普通交易创建输出与花费前序输出 satoshi 总值；当前全网 UTXO 总值无定义。",
+      "meaning": "创建值来自普通交易 vout.value，花费值来自 vin.prevout.value。该页只排除 `scriptpubkey_type=op_return` 的创建输出。",
+      "pitfalls": "高值可来自找零或内部转账；样本不代表整块、时间窗口、净资金流入或当前全网 UTXO 总价值。",
+      "formula": "样本创建总值=Σ非 OP_RETURN vout.value；样本花费总值=Σvin.prevout.value；全网总值=无定义。",
+      "example": "服务器固定一个有六个更新观测区块的主网区块，只返回首页至多24笔普通交易，并披露排除的 OP_RETURN 值。",
+      "op": "bitcoin_utxo_sample",
+      "defaults": {},
+      "unit": "sats",
       "source_ids": [
         "appendix_079"
       ],

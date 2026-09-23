@@ -127,10 +127,10 @@ export interface PracticeConcept {
 
 export interface PracticeResult {
   concept_id: string;
-  status: 'computed' | 'undefined' | 'insufficient_data';
+  status: 'computed' | 'partial' | 'undefined' | 'insufficient_data';
   reason: string | null;
   input_kind: PracticeConcept['input_kind'];
-  provenance: 'provided_market_bars' | 'provided_result_context' | 'editable_teaching_inputs' | 'server_fetched_provisional_snapshot' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_spot_order_book' | 'server_fetched_completed_stock_daily_bars' | 'server_fetched_binance_recent_trades' | 'server_fetched_bitcoin_block_snapshot' | 'server_fetched_bitcoin_transaction_sample';
+  provenance: 'provided_market_bars' | 'provided_result_context' | 'editable_teaching_inputs' | 'server_fetched_provisional_snapshot' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_spot_order_book' | 'server_fetched_completed_stock_daily_bars' | 'server_fetched_binance_recent_trades' | 'server_fetched_bitcoin_block_snapshot' | 'server_fetched_bitcoin_transaction_sample' | 'server_fetched_bitcoin_transaction_first_page';
   values: Record<string, number | null>;
   units?: Record<string, string>;
   series: Array<{ name: string; unit?: string; values: Array<number | null> }>;
@@ -152,6 +152,8 @@ export interface PracticeResult {
   anchor_block_excluded?: boolean;
   transaction_sample?: { network: 'bitcoin_mainnet'; provider: string; endpoint: string; fetched_at: string; block_hash: string; block_height: number; block_time: string | number; page_start: 0; returned_count: number; analyzed_count: number; excluded_coinbase_count: number; scope: 'first_page_non_coinbase_transactions'; observed_newer_blocks: number; confirmation_note: string };
   transactions?: Array<{ txid: string; fee_sats: number; size_bytes: number }>;
+  utxo_sample?: { network: 'bitcoin_mainnet'; provider: string; endpoint: string; fetched_at: string; block_hash: string; block_height: number; block_time: string; page_start: 0; returned_count: number; excluded_coinbase_count: number; sampled_noncoinbase_transaction_count: number; scope: 'confirmed_pinned_block_first_page_noncoinbase_transactions'; observed_newer_blocks: number; confirmation_note: string; total_utxo_scope: 'undefined_not_derived_from_first_page_sample' };
+  utxo_transactions?: Array<{ txid: string; input_prevout_values_sats: number[]; non_op_return_output_values_sats: number[]; spent_prevout_count: number; spent_prevout_value_sats: number; created_output_count: number; created_output_value_sats: number; created_non_op_return_output_count: number; created_non_op_return_value_sats: number; excluded_op_return_output_count: number; excluded_op_return_output_value_sats: number; unclassified_non_op_return_output_count: number }>;
   asset_units?: { base_asset: string; quote_asset: string };
   levels?: { bids: Array<{ price: number; quantity: number }>; asks: Array<{ price: number; quantity: number }> };
   depth_snapshot?: { source: string; endpoint: string; symbol: string; depth_limit: number; update_id: number; timestamp: null; timestamp_note: string };

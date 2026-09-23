@@ -361,6 +361,52 @@ test('Bitcoin transaction practices navigate to a scoped sample chart in both th
   await expect(bytesPanel).toContainText('中位数 285 字节');
 });
 
+test('Bitcoin UTXO pages show only observed block-page inputs and outputs across themes', async ({ page }) => {
+  const ids = ['book_utxo_counts', 'book_utxo_totals', 'book_utxo_value_stats'];
+  const names = ['Created UTXOs / Spent UTXOs / Total UTXOs', 'Total UTXO value created / spent', 'Mean / Median UTXO value created / spent'];
+  const concepts = ids.map((id, index) => ({ id, name: names[index], category: '衍生品与链上', summary: '观察 Bitcoin 交易输入和输出。', formula: '在固定区块交易首页统计', meaning: '仅代表这个样本。', example: '以实际交易为准。', signals: '观察流量。', pitfalls: '不能推算全网集合。', related: [], code_url: 'https://example.test/src/book.rs', implementation: 'src/book.rs::market_bitcoin_utxo_sample_summary' }));
+  const hash = 'a'.repeat(64);
+  const utxo_transactions = [
+    { txid: '1'.repeat(64), input_prevout_values_sats: [20_000_000, 30_000_000], non_op_return_output_values_sats: [25_000_000, 20_000_000], spent_prevout_count: 2, spent_prevout_value_sats: 50_000_000, created_output_count: 3, created_output_value_sats: 45_000_000, created_non_op_return_output_count: 2, created_non_op_return_value_sats: 45_000_000, excluded_op_return_output_count: 1, excluded_op_return_output_value_sats: 0, unclassified_non_op_return_output_count: 0 },
+    { txid: '2'.repeat(64), input_prevout_values_sats: [25_000_000, 25_000_000, 25_000_000], non_op_return_output_values_sats: [70_000_000], spent_prevout_count: 3, spent_prevout_value_sats: 75_000_000, created_output_count: 1, created_output_value_sats: 70_000_000, created_non_op_return_output_count: 1, created_non_op_return_value_sats: 70_000_000, excluded_op_return_output_count: 0, excluded_op_return_output_value_sats: 0, unclassified_non_op_return_output_count: 1 },
+  ];
+  const utxo_sample = { network: 'bitcoin_mainnet', provider: 'Blockstream Esplora', endpoint: `https://blockstream.info/api/block/${hash}/txs/0`, fetched_at: '2026-09-23T00:00:00Z', block_hash: hash, block_height: 840000, block_time: '2026-09-23T00:00:00Z', page_start: 0, returned_count: 3, excluded_coinbase_count: 1, sampled_noncoinbase_transaction_count: 2, scope: 'confirmed_pinned_block_first_page_noncoinbase_transactions', observed_newer_blocks: 6, confirmation_note: 'six newer blocks', total_utxo_scope: 'undefined_not_derived_from_first_page_sample' };
+  await page.route('**/api/knowledge', route => route.fulfill({ json: { total: concepts.length, categories: { '衍生品与链上': concepts } } }));
+  await page.route('**/api/practice', route => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: { concepts: concepts.map(concept => ({ ...concept, input_kind: 'market_bars', inputs: [], notes: [], plan: { markets: ['crypto'], modules: ['data'], required_datasets: ['bitcoin_mainnet_confirmed_block_transaction_first_page'], source_policy: 'real_required', goal: '观察已确认交易输入输出' } })), modules: ['data'], total: concepts.length } });
+    const request = route.request().postDataJSON();
+    expect(request).toMatchObject({ module: 'data', source: 'binance', symbol: 'BTCUSDT', limit: 25, inputs: {} });
+    expect(request.bars).toBeUndefined();
+    const values = request.concept_id === ids[0]
+      ? { created_non_op_return_output_count: 3, spent_prevout_count: 5, total_utxo_count: null }
+      : request.concept_id === ids[1]
+        ? { created_non_op_return_value_sats: 115_000_000, spent_prevout_value_sats: 125_000_000, total_utxo_value_sats: null }
+        : { created_mean_value_sats: 115_000_000 / 3, created_median_value_sats: 25_000_000, spent_mean_value_sats: 25_000_000, spent_median_value_sats: 25_000_000 };
+    return route.fulfill({ json: { concept_id: request.concept_id, input_kind: 'market_bars', status: request.concept_id === ids[2] ? 'computed' : 'partial', reason: request.concept_id === ids[2] ? null : '全网总量无法从样本得出', provenance: 'server_fetched_bitcoin_transaction_first_page', values, units: {}, series: [], notes: [], module: 'data', source: 'binance', symbol: 'BTCUSDT', bars: [], utxo_sample, utxo_transactions } });
+  });
+
+  await page.goto('/');
+  await page.locator('.ax-kb-card').filter({ hasText: names[0] }).getByRole('button', { name: '在数据探索中实践' }).click();
+  const panel = page.getByLabel('概念实践');
+  await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  await expect(panel).toContainText('已计算样本 · 全网总量无定义');
+  await expect(panel).toContainText('全网当前 UTXO 总数：无法从这页样本得出');
+  await expect(panel.locator('[data-utxo-txid]')).toHaveCount(2);
+  await expect(panel.locator('.ax-utxo-sample')).toHaveScreenshot('utxo-counts-dark.png', { maxDiffPixelRatio: 0.02 });
+  await page.getByLabel('切换到浅色模式').click();
+  await expect(panel.locator('.ax-utxo-sample')).toHaveScreenshot('utxo-counts-light.png', { maxDiffPixelRatio: 0.02 });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => panel.locator('.ax-utxo-scroll').evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+  await expect(panel.locator('.ax-utxo-sample')).toHaveScreenshot('utxo-counts-mobile.png', { maxDiffPixelRatio: 0.02 });
+  for (const id of ids.slice(1)) {
+    await page.goto(`/data?concept=${id}&source=binance`);
+    await page.getByLabel('概念实践').getByRole('button', { name: '运行实践' }).click();
+    await expect(page.getByLabel('概念实践').locator('.ax-utxo-sample')).toBeVisible();
+  }
+  await expect(page.getByLabel('概念实践')).toContainText('花费输入：均值');
+});
+
 test('Bitcoin block timing and transaction rate preserve signed intervals and exclude the anchor block', async ({ page }) => {
   const entries = [
     { id: 'book_block_interval', name: 'Mean / Median block interval', category: '衍生品与链上', summary: '观察相邻区块头时间戳的差。' },

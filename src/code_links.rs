@@ -186,10 +186,18 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
                         | "book_transaction_rate"
                         | "book_transaction_fees"
                         | "book_transaction_bytes"
+                        | "book_utxo_value_stats"
+                        | "book_utxo_counts"
+                        | "book_utxo_totals"
                 ) {
                     vec![
                         if matches!(id, "book_transaction_fees" | "book_transaction_bytes") {
                             "src/book.rs::market_bitcoin_transaction_summary".to_string()
+                        } else if matches!(
+                            id,
+                            "book_utxo_value_stats" | "book_utxo_counts" | "book_utxo_totals"
+                        ) {
+                            "src/book.rs::market_bitcoin_utxo_summary".to_string()
                         } else {
                             "src/book.rs::market_bitcoin_block_summary".to_string()
                         },

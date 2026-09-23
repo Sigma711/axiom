@@ -39,6 +39,23 @@ fn funding_is_signed_and_sopr_uses_value_weighting() {
 }
 
 #[test]
+fn independent_onchain_examples_reject_missing_or_misaligned_observations() {
+    let negative =
+        supplement::evaluate("book_open_interest", &[], &json!({"previous_contracts":-1}))
+            .unwrap_err();
+    assert!(negative.contains("不得为负"));
+    let empty = supplement::evaluate("book_sopr", &[], &json!({"amounts":[]})).unwrap_err();
+    assert!(empty.contains("非空"));
+    let misaligned = supplement::evaluate(
+        "book_sopr",
+        &[],
+        &json!({"amounts":[1],"creation_prices":[100,200]}),
+    )
+    .unwrap_err();
+    assert!(misaligned.contains("逐项对齐"));
+}
+
+#[test]
 fn address_deduplication_and_net_issuance_are_not_transaction_counts() {
     let out = supplement::evaluate("book_eth_depositors", &[], &json!({})).unwrap();
     assert_eq!(out["values"]["new_unique_addresses"], 2.0);
@@ -58,6 +75,9 @@ fn every_supplement_has_working_inputs_and_units() {
                 | "book_transaction_rate"
                 | "book_transaction_fees"
                 | "book_transaction_bytes"
+                | "book_utxo_value_stats"
+                | "book_utxo_counts"
+                | "book_utxo_totals"
         ) {
             assert_eq!(concept.input_kind, "market_bars");
             assert!(concept.inputs.is_empty());

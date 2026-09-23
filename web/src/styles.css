@@ -541,6 +541,24 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
 .ax-transaction-empty { padding: 2rem .5rem; color: var(--text-dim); text-align: center; }
 .ax-transaction-sample figcaption { margin-top: .55rem; font-size: .88rem; line-height: 1.65; }
 .ax-transaction-caveat { margin: .5rem 0 0; color: var(--text-dim); font-size: .8rem; line-height: 1.5; }
+.ax-utxo-sample { margin: 1rem 0; padding: 1rem; border: 1px solid var(--border); border-radius: 14px; background: var(--bg-card); color: var(--text); }
+.ax-utxo-source { margin: 0 0 .35rem; color: var(--text); font-size: .89rem; font-weight: 650; }
+.ax-utxo-scope, .ax-utxo-caveat { margin: .5rem 0; color: var(--text-dim); font-size: .8rem; line-height: 1.6; }
+.ax-utxo-scope a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; margin-left: .4rem; }
+.ax-utxo-legend { display: flex; flex-wrap: wrap; gap: .8rem; margin: .6rem 0 .35rem; color: var(--text-dim); font-size: .75rem; }
+.ax-utxo-legend span { display: inline-flex; align-items: center; gap: .35rem; }
+.ax-utxo-legend i { display: inline-block; width: .7rem; height: .7rem; border-radius: 2px; }
+.ax-utxo-spent-key, .ax-utxo-spent { fill: var(--accent-2); background: var(--accent-2); }
+.ax-utxo-created-key, .ax-utxo-created { fill: var(--green); background: var(--green); }
+.ax-utxo-created { stroke: var(--bg-card); stroke-width: 1; }
+.ax-utxo-grid { stroke: var(--border); stroke-width: 1; }
+.ax-utxo-axis, .ax-utxo-tick { fill: var(--text-dim); font: 11px ui-monospace, monospace; }
+.ax-utxo-scroll { max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
+.ax-utxo-scroll svg { display: block; max-width: none; }
+.ax-utxo-scroll-hint { display: none; margin: .25rem 0; color: var(--text-dim); font-size: .75rem; }
+@media (max-width: 640px) { .ax-utxo-scroll-hint { display: block; } }
+.ax-utxo-empty { color: var(--text-dim); padding: 1.5rem .3rem; text-align: center; }
+.ax-utxo-sample figcaption { margin: .6rem 0; color: var(--text); font-size: .84rem; line-height: 1.6; }
 .ax-block-timing { margin: 1rem 0; padding: 1rem; border: 1px solid var(--border); border-radius: 14px; background: var(--bg-card); color: var(--text); }
 .ax-block-timing-source { margin: 0 0 .4rem; color: var(--text); font-size: .87rem; font-weight: 600; line-height: 1.5; }
 .ax-block-timing-scope { margin: 0 0 .65rem; color: var(--text-dim); font-size: .82rem; line-height: 1.55; }

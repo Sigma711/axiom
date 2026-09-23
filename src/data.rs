@@ -502,6 +502,17 @@ pub struct BitcoinTransaction {
     pub txid: String,
     pub fee_sats: u64,
     pub size_bytes: u64,
+    /// Values of every previous output spent by this ordinary transaction.
+    /// Esplora supplies these as `vin[].prevout.value`, in satoshis.
+    pub spent_prevout_values_sats: Vec<u64>,
+    /// Outputs created by this ordinary transaction. `op_return` outputs are
+    /// retained so consumers can disclose their explicit exclusion.
+    pub outputs: Vec<BitcoinTransactionOutput>,
+}
+#[derive(Clone, Debug, Serialize)]
+pub struct BitcoinTransactionOutput {
+    pub value_sats: u64,
+    pub scriptpubkey_type: String,
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct BitcoinTransactionSample {
@@ -566,15 +577,71 @@ fn parse_bitcoin_transactions(
             .as_u64()
             .filter(|x| *x > 0)
             .context("transaction size must be positive bytes")?;
+        let spent_prevout_values_sats = vin
+            .iter()
+            .enumerate()
+            .map(|(vin_index, input)| {
+                anyhow::ensure!(
+                    input["is_coinbase"].as_bool() != Some(true),
+                    "ordinary transaction vin[{vin_index}] cannot be coinbase"
+                );
+                input["prevout"]["value"].as_u64().with_context(|| {
+                    format!(
+                        "ordinary transaction vin[{vin_index}] prevout value must be unsigned sats"
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let vout = row["vout"]
+            .as_array()
+            .context("ordinary transaction vout must be a nonempty array")?;
+        anyhow::ensure!(
+            !vout.is_empty(),
+            "ordinary transaction vout must be nonempty"
+        );
+        let outputs = vout
+            .iter()
+            .enumerate()
+            .map(|(vout_index, output)| {
+                let value_sats = output["value"]
+                    .as_u64()
+                    .with_context(|| format!("ordinary transaction vout[{vout_index}] value must be unsigned sats"))?;
+                let scriptpubkey_type = output["scriptpubkey_type"]
+                    .as_str()
+                    .filter(|kind| !kind.is_empty())
+                    .with_context(|| format!("ordinary transaction vout[{vout_index}] scriptpubkey_type must be a nonempty string"))?
+                    .to_owned();
+                Ok(BitcoinTransactionOutput { value_sats, scriptpubkey_type })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let spent_value_sats =
+            spent_prevout_values_sats
+                .iter()
+                .try_fold(0u64, |total, value| {
+                    total
+                        .checked_add(*value)
+                        .context("ordinary transaction input value overflow")
+                })?;
+        let created_value_sats = outputs.iter().try_fold(0u64, |total, output| {
+            total
+                .checked_add(output.value_sats)
+                .context("ordinary transaction output value overflow")
+        })?;
+        anyhow::ensure!(
+            created_value_sats.checked_add(fee_sats) == Some(spent_value_sats),
+            "ordinary transaction prevout values must equal all output values plus fee"
+        );
         out.push(BitcoinTransaction {
             txid,
             fee_sats,
             size_bytes,
+            spent_prevout_values_sats,
+            outputs,
         });
     }
     anyhow::ensure!(
         excluded == 1 && out.len() <= 24,
-        "first page must contain 1..24 non-coinbase transactions and at most one coinbase"
+        "first page must contain a leading coinbase, then at most 24 ordinary transactions"
     );
     Ok((rows.len(), excluded, out))
 }
@@ -2468,7 +2535,7 @@ mod bitcoin_transaction_parser_tests {
         }
     }
     fn rows() -> serde_json::Value {
-        json!([{"txid":h(1),"fee":0,"size":100,"vin":[{"is_coinbase":true}],"status":{"confirmed":true,"block_hash":h(9),"block_height":9}},{"txid":h(2),"fee":7,"size":101,"vin":[{}],"status":{"confirmed":true,"block_hash":h(9),"block_height":9}}])
+        json!([{"txid":h(1),"fee":0,"size":100,"vin":[{"is_coinbase":true}],"status":{"confirmed":true,"block_hash":h(9),"block_height":9}},{"txid":h(2),"fee":7,"size":101,"vin":[{"prevout":{"value":14,"scriptpubkey_type":"p2wpkh"}}],"vout":[{"value":7,"scriptpubkey_type":"p2wpkh"},{"value":0,"scriptpubkey_type":"op_return"}],"status":{"confirmed":true,"block_hash":h(9),"block_height":9}}])
     }
     #[test]
     fn transaction_parser_validates_scope_membership_and_sizes() {
@@ -2476,11 +2543,16 @@ mod bitcoin_transaction_parser_tests {
         let (_, coinbase, txs) = parse_bitcoin_transactions(&rows(), &b).unwrap();
         assert_eq!(coinbase, 1);
         assert_eq!(txs[0].fee_sats, 7);
+        assert_eq!(txs[0].spent_prevout_values_sats, vec![14]);
+        assert_eq!(txs[0].outputs.len(), 2);
         for f in [
             |v: &mut serde_json::Value| v[1]["status"]["confirmed"] = json!(false),
             |v: &mut serde_json::Value| v[1]["status"]["block_hash"] = json!(h(3)),
             |v: &mut serde_json::Value| v[1]["size"] = json!(0),
             |v: &mut serde_json::Value| v[1]["txid"] = json!(h(1)),
+            |v: &mut serde_json::Value| v[1]["vin"][0]["prevout"]["value"] = json!("bad"),
+            |v: &mut serde_json::Value| v[1]["vout"][0]["scriptpubkey_type"] = json!(""),
+            |v: &mut serde_json::Value| v[1]["fee"] = json!(8),
         ] {
             let mut v = rows();
             f(&mut v);

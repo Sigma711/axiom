@@ -21,6 +21,9 @@ fn uses_bitcoin_block_snapshot(id: &str) -> bool {
             | "book_transaction_rate"
             | "book_transaction_fees"
             | "book_transaction_bytes"
+            | "book_utxo_value_stats"
+            | "book_utxo_counts"
+            | "book_utxo_totals"
     )
 }
 
@@ -86,7 +89,9 @@ pub fn catalog() -> Vec<PracticeConcept> {
                 default: v.clone(),
             })
             .collect(),
-            notes: if uses_bitcoin_block_snapshot(d["id"].as_str().unwrap_or_default()) {
+            notes: if matches!(d["id"].as_str().unwrap_or_default(), "book_utxo_value_stats" | "book_utxo_counts" | "book_utxo_totals") {
+                format!("原书 PDF 第{}页；服务器固定一个已确认 Bitcoin 主网区块后，只读取 Esplora 交易首页并排除 coinbase。只报告该页创建/花费输出观察值；全网 UTXO 总量不从样本推导。{}", d["pdf_page"], text(d, "pitfalls"))
+            } else if uses_bitcoin_block_snapshot(d["id"].as_str().unwrap_or_default()) {
                 format!("原书 PDF 第{}页；服务器直接取得未缓存的10个连续Bitcoin主网区块及其 Esplora 声明的交易计数，不接受客户端输入。{}", d["pdf_page"], text(d, "pitfalls"))
             } else if uses_hourly_market_bars(d["id"].as_str().unwrap_or_default()) {
                 format!(

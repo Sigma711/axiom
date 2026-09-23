@@ -1503,6 +1503,11 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
         json!({"markets":["crypto"],"modules":["data"],"required_datasets":["server_fetched_bitcoin_mainnet_pinned_block_transaction_first_page"],"source_policy":"real_required","goal":"服务器取得已验证主网区块窗口后固定其中一个具有六个更新观测区块的区块，只请求该哈希交易列表第一页并排除coinbase。校验确认状态和区块哈希、交易ID唯一、手续费为无符号sats、正序列化字节数；样本不代表整块或全网。"})
     } else if matches!(
         concept.id.as_str(),
+        "book_utxo_value_stats" | "book_utxo_counts" | "book_utxo_totals"
+    ) {
+        json!({"markets":["crypto"],"modules":["data"],"required_datasets":["server_fetched_bitcoin_mainnet_pinned_block_transaction_first_page"],"source_policy":"real_required","goal":"服务器取得已验证主网区块窗口后固定其中一个具有六个更新观测区块的区块，只请求该哈希交易列表第一页并排除coinbase。普通交易必须有非coinbase vin.prevout.value 与 vout.value、scriptpubkey_type；只从创建输出小计排除 scriptpubkey_type=op_return，其他类型不承诺可花费或仍未花费。返回此页样本的创建/花费观察值；绝不从该样本捏造当前全网 UTXO 总数或总价值。"})
+    } else if matches!(
+        concept.id.as_str(),
         "book_block_height" | "book_block_size" | "book_block_interval" | "book_transaction_rate"
     ) {
         json!({"markets":["crypto"],"modules":["data"],"required_datasets":["server_fetched_bitcoin_mainnet_blocks"],"source_policy":"real_required","goal":"服务器从 Blockstream Esplora /api/blocks 取得未缓存的十个 Bitcoin 主网区块，主源失败时才使用 mempool Esplora。校验十个连续高度、哈希前序链接、正序列化字节数和正 tx_count；不假设区块时间单调，不接受客户端K线或输入。区块间隔保留九个有符号头时间差；交易速率以最早区块作锚点，按后九个区块的声明 tx_count（含 coinbase）除以最早至最新的声明时间跨度，跨度非正时无定义。这些短窗口统计不构成价格预测或交易信号。"})
@@ -2237,7 +2242,70 @@ async fn post_practice(
         result["bar_origin"] = json!("server_fetched_bitcoin_transaction_sample");
         result["bars"] = json!([]);
         result["transaction_sample"] = json!({"network":"bitcoin_mainnet","provider":sample.provider,"endpoint":sample.endpoint,"fetched_at":sample.fetched_at,"block_hash":sample.block.hash,"block_height":sample.block.height,"block_time":sample.block.timestamp,"page_start":0,"returned_count":sample.returned_count,"analyzed_count":sample.transactions.len(),"excluded_coinbase_count":sample.excluded_coinbase_count,"scope":"first_page_non_coinbase_transactions","observed_newer_blocks":6,"confirmation_note":"six newer blocks in this observed window; this is not a consensus-finality claim"});
-        result["transactions"] = json!(sample.transactions);
+        result["transactions"] = json!(sample
+            .transactions
+            .iter()
+            .map(|tx| json!({
+                "txid":tx.txid,"fee_sats":tx.fee_sats,"size_bytes":tx.size_bytes
+            }))
+            .collect::<Vec<_>>());
+        return Ok(Json(result));
+    }
+    if matches!(
+        concept.id.as_str(),
+        "book_utxo_value_stats" | "book_utxo_counts" | "book_utxo_totals"
+    ) {
+        if source != "binance"
+            || symbol != "BTCUSDT"
+            || req.limit.is_some_and(|n| n != 25)
+            || req.bars.is_some()
+            || !req
+                .inputs
+                .as_object()
+                .is_some_and(serde_json::Map::is_empty)
+        {
+            return Err(validate::bad("Bitcoin UTXO sample practice uses the fixed BTCUSDT selector and server-fetched first page only"));
+        }
+        if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Live market data is disabled in offline mode".into(),
+            ));
+        }
+        let sample = state
+            .feed
+            .fetch_bitcoin_mainnet_transaction_sample()
+            .await
+            .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+        let mut result =
+            crate::book::market_bitcoin_utxo_summary(&concept.id, &sample.transactions)
+                .map_err(validate::bad)?;
+        result["module"] = json!("data");
+        result["symbol"] = json!(symbol);
+        result["source"] = json!(source);
+        result["context"] = json!("selected_dataset");
+        result["bar_origin"] = json!("server_fetched_bitcoin_transaction_first_page");
+        result["bars"] = json!([]);
+        result["utxo_sample"] = json!({
+            "network":"bitcoin_mainnet","provider":sample.provider,"endpoint":sample.endpoint,
+            "fetched_at":sample.fetched_at,"block_hash":sample.block.hash,"block_height":sample.block.height,
+            "block_time":sample.block.timestamp,"page_start":0,"returned_count":sample.returned_count,
+            "sampled_noncoinbase_transaction_count":sample.transactions.len(),"excluded_coinbase_count":sample.excluded_coinbase_count,
+            "scope":"confirmed_pinned_block_first_page_noncoinbase_transactions","observed_newer_blocks":6,
+            "confirmation_note":"six newer blocks in this observed window; this is not a consensus-finality claim",
+            "total_utxo_scope":"undefined_not_derived_from_first_page_sample"
+        });
+        let utxo_transactions = sample.transactions.iter().map(|tx| -> Result<Value, String> {
+            let spent = tx.spent_prevout_values_sats.iter().try_fold(0u64, |total, value| total.checked_add(*value).ok_or("spent prevout value overflow"))?;
+            let created = tx.outputs.iter().try_fold(0u64, |total, output| total.checked_add(output.value_sats).ok_or("created output value overflow"))?;
+            let excluded = tx.outputs.iter().filter(|output| output.scriptpubkey_type == "op_return").collect::<Vec<_>>();
+            let non_op_return_output_values_sats = tx.outputs.iter().filter(|output| output.scriptpubkey_type != "op_return").map(|output| output.value_sats).collect::<Vec<_>>();
+            let excluded_value = excluded.iter().try_fold(0u64, |total, output| total.checked_add(output.value_sats).ok_or("OP_RETURN output value overflow"))?;
+            let non_op_return = created.checked_sub(excluded_value).ok_or("OP_RETURN value exceeds created output value")?;
+            let unclassified = tx.outputs.iter().filter(|output| output.scriptpubkey_type != "op_return" && !matches!(output.scriptpubkey_type.as_str(), "p2pk"|"p2pkh"|"p2sh"|"v0_p2wpkh"|"v0_p2wsh"|"v1_p2tr")).count();
+            Ok(json!({"txid":tx.txid,"input_prevout_values_sats":tx.spent_prevout_values_sats,"non_op_return_output_values_sats":non_op_return_output_values_sats,"spent_prevout_count":tx.spent_prevout_values_sats.len(),"spent_prevout_value_sats":spent,"created_output_count":tx.outputs.len(),"created_output_value_sats":created,"created_non_op_return_output_count":tx.outputs.len()-excluded.len(),"created_non_op_return_value_sats":non_op_return,"excluded_op_return_output_count":excluded.len(),"excluded_op_return_output_value_sats":excluded_value,"unclassified_non_op_return_output_count":unclassified}))
+        }).collect::<Result<Vec<_>, _>>().map_err(validate::bad)?;
+        result["utxo_transactions"] = json!(utxo_transactions);
         return Ok(Json(result));
     }
     if matches!(

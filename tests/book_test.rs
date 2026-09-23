@@ -887,22 +887,43 @@ fn bitcoin_transaction_rate_is_undefined_when_declared_span_is_nonpositive() {
 
 #[test]
 fn bitcoin_transaction_summary_uses_integer_total_and_deterministic_median() {
-    use axiom::data::BitcoinTransaction;
+    use axiom::data::{BitcoinTransaction, BitcoinTransactionOutput};
     let txs = vec![
         BitcoinTransaction {
             txid: format!("{:064x}", 1),
             fee_sats: 0,
             size_bytes: 300,
+            spent_prevout_values_sats: vec![8, 2],
+            outputs: vec![BitcoinTransactionOutput {
+                value_sats: 9,
+                scriptpubkey_type: "p2pkh".into(),
+            }],
         },
         BitcoinTransaction {
             txid: format!("{:064x}", 2),
             fee_sats: 9,
             size_bytes: 100,
+            spent_prevout_values_sats: vec![1],
+            outputs: vec![
+                BitcoinTransactionOutput {
+                    value_sats: 3,
+                    scriptpubkey_type: "op_return".into(),
+                },
+                BitcoinTransactionOutput {
+                    value_sats: 7,
+                    scriptpubkey_type: "unknown".into(),
+                },
+            ],
         },
         BitcoinTransaction {
             txid: format!("{:064x}", 3),
             fee_sats: 3,
             size_bytes: 200,
+            spent_prevout_values_sats: vec![],
+            outputs: vec![BitcoinTransactionOutput {
+                value_sats: 5,
+                scriptpubkey_type: "v1_p2tr".into(),
+            }],
         },
     ];
     let fees = book::market_bitcoin_transaction_summary("book_transaction_fees", &txs).unwrap();
@@ -913,6 +934,49 @@ fn bitcoin_transaction_summary_uses_integer_total_and_deterministic_median() {
     assert_eq!(sizes["values"]["total_size_bytes"], 600);
     assert_eq!(sizes["values"]["median_size_bytes"], 200.0);
     assert_eq!(sizes["source_ids"][0], "appendix_086");
+}
+
+#[test]
+fn bitcoin_utxo_summary_is_explicitly_scoped_and_never_fabricates_global_totals() {
+    use axiom::data::{BitcoinTransaction, BitcoinTransactionOutput};
+    let txs = vec![BitcoinTransaction {
+        txid: format!("{:064x}", 1),
+        fee_sats: 0,
+        size_bytes: 100,
+        spent_prevout_values_sats: vec![4, 8],
+        outputs: vec![
+            BitcoinTransactionOutput {
+                value_sats: 5,
+                scriptpubkey_type: "v0_p2wpkh".into(),
+            },
+            BitcoinTransactionOutput {
+                value_sats: 0,
+                scriptpubkey_type: "op_return".into(),
+            },
+            BitcoinTransactionOutput {
+                value_sats: 9,
+                scriptpubkey_type: "unknown".into(),
+            },
+        ],
+    }];
+    let stats = book::market_bitcoin_utxo_summary("book_utxo_value_stats", &txs).unwrap();
+    assert_eq!(stats["status"], "computed");
+    assert_eq!(stats["values"]["created_non_op_return_value_sats"], 14);
+    assert_eq!(stats["values"]["created_median_value_sats"], 7.0);
+    assert_eq!(stats["values"]["spent_median_value_sats"], 6.0);
+    assert_eq!(stats["values"]["excluded_op_return_output_count"], 1);
+    assert_eq!(
+        stats["values"]["unclassified_non_op_return_output_count"],
+        1
+    );
+    let counts = book::market_bitcoin_utxo_summary("book_utxo_counts", &txs).unwrap();
+    assert_eq!(counts["status"], "partial");
+    assert!(counts["values"]["total_utxo_count"].is_null());
+    let totals = book::market_bitcoin_utxo_summary("book_utxo_totals", &txs).unwrap();
+    assert!(totals["values"]["total_utxo_value_sats"].is_null());
+    let empty = book::market_bitcoin_utxo_summary("book_utxo_value_stats", &[]).unwrap();
+    assert_eq!(empty["status"], "undefined");
+    assert!(empty["values"]["created_mean_value_sats"].is_null());
 }
 
 #[test]

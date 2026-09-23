@@ -114,12 +114,16 @@ fn every_published_concept_resolves_to_an_actual_implementation_branch() {
                         | "book_transaction_rate"
                         | "book_transaction_fees"
                         | "book_transaction_bytes"
+                        | "book_utxo_value_stats"
+                        | "book_utxo_counts"
+                        | "book_utxo_totals"
                 ) {
                     assert_eq!(location.kind, "function");
                     assert!(matches!(
                         location.code_ref.as_str(),
                         "src/book.rs::market_bitcoin_block_summary"
                             | "src/book.rs::market_bitcoin_transaction_summary"
+                            | "src/book.rs::market_bitcoin_utxo_summary"
                     ));
                 } else {
                     assert!(

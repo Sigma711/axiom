@@ -80,6 +80,9 @@ async fn data_practice_accepts_only_concepts_with_a_data_plan() {
                     | "book_transaction_rate"
                     | "book_transaction_fees"
                     | "book_transaction_bytes"
+                    | "book_utxo_value_stats"
+                    | "book_utxo_counts"
+                    | "book_utxo_totals"
             )
     }) {
         let mut first: Option<Value> = None;
@@ -1987,9 +1990,66 @@ async fn mock_pinned_transactions(
     assert_eq!(hash, format!("{:064x}", 900_003));
     Json(json!([
         {"txid":format!("{:064x}",1),"fee":0,"size":150,"vin":[{"is_coinbase":true}],"status":{"confirmed":true,"block_hash":format!("{:064x}",900_003),"block_height":900_003}},
-        {"txid":format!("{:064x}",2),"fee":5,"size":101,"vin":[{}],"status":{"confirmed":true,"block_hash":format!("{:064x}",900_003),"block_height":900_003}},
-        {"txid":format!("{:064x}",3),"fee":9,"size":203,"vin":[{}],"status":{"confirmed":true,"block_hash":format!("{:064x}",900_003),"block_height":900_003}}
+        {"txid":format!("{:064x}",2),"fee":5,"size":101,"vin":[{"prevout":{"value":10,"scriptpubkey_type":"v0_p2wpkh"}}],"vout":[{"value":5,"scriptpubkey_type":"v0_p2wpkh"},{"value":0,"scriptpubkey_type":"op_return"}],"status":{"confirmed":true,"block_hash":format!("{:064x}",900_003),"block_height":900_003}},
+        {"txid":format!("{:064x}",3),"fee":9,"size":203,"vin":[{"prevout":{"value":8,"scriptpubkey_type":"p2pkh"}},{"prevout":{"value":9,"scriptpubkey_type":"p2pkh"}}],"vout":[{"value":8,"scriptpubkey_type":"unknown"}],"status":{"confirmed":true,"block_hash":format!("{:064x}",900_003),"block_height":900_003}}
     ]))
+}
+
+#[tokio::test]
+async fn bitcoin_utxo_practices_use_only_pinned_first_page_and_leave_global_totals_undefined() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            axum::Router::new()
+                .route("/api/blocks", get(mock_transaction_blocks))
+                .route("/api/block/:hash/txs/0", get(mock_pinned_transactions)),
+        )
+        .await
+        .unwrap()
+    });
+    let dir = PathBuf::from(format!("target/practice-utxo-{}", uuid::Uuid::new_v4()));
+    let mut state = AppState::new(default_config(), dir.clone());
+    let mut feed = HttpFeed::new(&dir);
+    feed.bitcoin_esplora_url = format!("http://127.0.0.1:{port}");
+    feed.bitcoin_mempool_url = format!("http://127.0.0.1:{port}");
+    state.feed = Arc::new(feed);
+    let app = api::router(Arc::new(state));
+    for id in [
+        "book_utxo_value_stats",
+        "book_utxo_counts",
+        "book_utxo_totals",
+    ] {
+        let (status, body) = request(&app, "/api/practice", json!({"concept_id":id,"module":"data","source":"binance","symbol":"BTCUSDT","limit":25,"inputs":{}})).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(
+            body["provenance"],
+            "server_fetched_bitcoin_transaction_first_page"
+        );
+        assert_eq!(body["utxo_sample"]["block_height"], 900003);
+        assert_eq!(
+            body["utxo_sample"]["sampled_noncoinbase_transaction_count"],
+            2
+        );
+        assert_eq!(body["values"]["created_non_op_return_value_sats"], 13);
+        assert_eq!(body["values"]["spent_prevout_value_sats"], 27);
+        assert_eq!(body["values"]["excluded_op_return_output_count"], 1);
+        assert_eq!(body["utxo_transactions"].as_array().unwrap().len(), 2);
+        if id == "book_utxo_value_stats" {
+            assert_eq!(body["status"], "computed");
+        } else if id == "book_utxo_counts" {
+            assert_eq!(body["status"], "partial");
+            assert!(body["values"]["total_utxo_count"].is_null());
+        } else {
+            assert_eq!(body["status"], "partial");
+            assert!(body["values"]["total_utxo_value_sats"].is_null());
+        }
+    }
+    let (status, _) = request(&app, "/api/practice", json!({"concept_id":"book_utxo_counts","module":"data","source":"binance","symbol":"BTCUSDT","limit":24,"inputs":{}})).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    server.abort();
+    std::fs::remove_dir_all(dir).unwrap();
 }
 #[tokio::test]
 async fn bitcoin_transaction_practices_use_pinned_server_sample_and_reject_client_data() {

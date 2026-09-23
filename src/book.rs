@@ -2304,3 +2304,138 @@ pub fn market_bitcoin_transaction_summary(
         json!({"concept_id":id,"input_kind":"market_bars","provenance":"server_fetched_bitcoin_transaction_sample","status":"computed","reason":null,"inputs":{},"series":[],"values":values,"units":units,"notes":["样本仅为已固定区块交易列表第一页中排除coinbase后的普通交易，不能代表整块、全网或费率预测。"],"source_ids":[if id == "book_transaction_fees" {"appendix_085"} else {"appendix_086"}]}),
     )
 }
+
+/// Summarizes values and output counts observed on one pinned Esplora block
+/// transaction page. This deliberately does not attempt to reconstruct the
+/// global Bitcoin UTXO set or assert that a non-OP_RETURN output remains
+/// unspent after the observed block.
+pub fn market_bitcoin_utxo_summary(
+    id: &str,
+    txs: &[crate::data::BitcoinTransaction],
+) -> Result<Value, String> {
+    if !matches!(
+        id,
+        "book_utxo_value_stats" | "book_utxo_counts" | "book_utxo_totals"
+    ) {
+        return Err("unsupported Bitcoin UTXO sample practice".into());
+    }
+    let mut spent = Vec::new();
+    let mut created_non_op_return = Vec::new();
+    let mut excluded_op_return_output_count = 0u64;
+    let mut excluded_op_return_output_value_sats = 0u64;
+    let mut unclassified_non_op_return_output_count = 0u64;
+    for tx in txs {
+        spent.extend_from_slice(&tx.spent_prevout_values_sats);
+        for output in &tx.outputs {
+            if output.scriptpubkey_type == "op_return" {
+                excluded_op_return_output_count = excluded_op_return_output_count
+                    .checked_add(1)
+                    .ok_or("OP_RETURN output count overflow")?;
+                excluded_op_return_output_value_sats = excluded_op_return_output_value_sats
+                    .checked_add(output.value_sats)
+                    .ok_or("OP_RETURN output value overflow")?;
+            } else {
+                created_non_op_return.push(output.value_sats);
+                if !matches!(
+                    output.scriptpubkey_type.as_str(),
+                    "p2pk" | "p2pkh" | "p2sh" | "v0_p2wpkh" | "v0_p2wsh" | "v1_p2tr"
+                ) {
+                    unclassified_non_op_return_output_count =
+                        unclassified_non_op_return_output_count
+                            .checked_add(1)
+                            .ok_or("unclassified output count overflow")?;
+                }
+            }
+        }
+    }
+    let sum = |values: &[u64], label: &str| -> Result<u64, String> {
+        values.iter().try_fold(0u64, |total, value| {
+            total
+                .checked_add(*value)
+                .ok_or_else(|| format!("{label} overflow"))
+        })
+    };
+    let median = |values: &[u64]| -> Option<f64> {
+        if values.is_empty() {
+            return None;
+        }
+        let mut sorted = values.to_vec();
+        sorted.sort_unstable();
+        let mid = sorted.len() / 2;
+        Some(if sorted.len() % 2 == 1 {
+            sorted[mid] as f64
+        } else {
+            (sorted[mid - 1] as f64 + sorted[mid] as f64) / 2.0
+        })
+    };
+    let created_value_sats = sum(&created_non_op_return, "created output value total")?;
+    let spent_value_sats = sum(&spent, "spent prevout value total")?;
+    let common_values = json!({
+        "sampled_noncoinbase_transaction_count": txs.len(),
+        "created_non_op_return_output_count": created_non_op_return.len(),
+        "spent_prevout_count": spent.len(),
+        "created_non_op_return_value_sats": created_value_sats,
+        "spent_prevout_value_sats": spent_value_sats,
+        "excluded_op_return_output_count": excluded_op_return_output_count,
+        "excluded_op_return_output_value_sats": excluded_op_return_output_value_sats,
+        "unclassified_non_op_return_output_count": unclassified_non_op_return_output_count,
+    });
+    let units = json!({
+        "sampled_noncoinbase_transaction_count":"transactions",
+        "created_non_op_return_output_count":"outputs",
+        "spent_prevout_count":"outputs",
+        "created_non_op_return_value_sats":"sats",
+        "spent_prevout_value_sats":"sats",
+        "excluded_op_return_output_count":"outputs",
+        "excluded_op_return_output_value_sats":"sats",
+        "unclassified_non_op_return_output_count":"outputs",
+        "created_mean_value_sats":"sats",
+        "created_median_value_sats":"sats",
+        "spent_mean_value_sats":"sats",
+        "spent_median_value_sats":"sats",
+        "total_utxo_count":"outputs",
+        "total_utxo_value_sats":"sats",
+    });
+    let mut values = common_values;
+    let (status, reason) = match id {
+        "book_utxo_value_stats" => {
+            values["created_mean_value_sats"] = json!((!created_non_op_return.is_empty())
+                .then(|| created_value_sats as f64 / created_non_op_return.len() as f64));
+            values["created_median_value_sats"] = json!(median(&created_non_op_return));
+            values["spent_mean_value_sats"] =
+                json!((!spent.is_empty()).then(|| spent_value_sats as f64 / spent.len() as f64));
+            values["spent_median_value_sats"] = json!(median(&spent));
+            if txs.is_empty() {
+                (
+                    "undefined",
+                    json!("固定区块交易首页排除 coinbase 后，没有普通交易。"),
+                )
+            } else {
+                ("computed", Value::Null)
+            }
+        }
+        "book_utxo_counts" => {
+            values["total_utxo_count"] = Value::Null;
+            (
+                "partial",
+                json!("本接口只观察一个固定区块交易首页，不能从中得出当前全网 UTXO 总数。"),
+            )
+        }
+        "book_utxo_totals" => {
+            values["total_utxo_value_sats"] = Value::Null;
+            (
+                "partial",
+                json!("本接口只观察一个固定区块交易首页，不能从中得出当前全网 UTXO 总价值。"),
+            )
+        }
+        _ => unreachable!(),
+    };
+    Ok(json!({
+        "concept_id":id,"input_kind":"market_bars","provenance":"server_fetched_bitcoin_transaction_first_page",
+        "status":status,"reason":reason,"inputs":{},"series":[],"values":values,"units":units,
+        "notes":[
+            "样本是一个已固定、已确认 Bitcoin 主网区块的 Esplora /txs/0 第一页：coinbase 被排除，普通交易的 vin.prevout.value 计为观察到的花费前序输出，vout.value 计为创建输出。",
+            "仅 scriptpubkey_type=op_return 的输出从创建输出小计排除；其他类型不被承诺为可花费或仍未花费。未分类非 OP_RETURN 输出单列。样本不能推导当前全网 UTXO 数量或价值，也不构成交易信号。"
+        ],"source_ids":[match id {"book_utxo_value_stats"=>"appendix_080","book_utxo_counts"=>"appendix_078",_=>"appendix_079"}]
+    }))
+}

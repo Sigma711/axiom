@@ -1195,6 +1195,68 @@ test('Bitcoin transaction practices read a pinned block page and recompute fees 
   }
 });
 
+test('Bitcoin UTXO practices independently recompute observed first-page inputs and outputs', async ({ page, request }) => {
+  test.setTimeout(180_000);
+  for (const conceptId of ['book_utxo_value_stats', 'book_utxo_counts', 'book_utxo_totals']) {
+    await page.goto(`/data?concept=${conceptId}&source=binance`);
+    const panel = page.getByLabel('概念实践');
+    await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+    const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+    await panel.getByRole('button', { name: '运行实践' }).click();
+    const response = await responsePromise;
+    expect(response.ok(), await response.text()).toBe(true);
+    const result = await response.json();
+    expect(result.provenance).toBe('server_fetched_bitcoin_transaction_first_page');
+    expect(result.utxo_sample.network).toBe('bitcoin_mainnet');
+    expect(result.utxo_sample.endpoint).toMatch(/^https:\/\/(blockstream\.info|mempool\.space)\/api\/block\/[0-9a-f]{64}\/txs\/0$/);
+    expect(result.utxo_sample.scope).toBe('confirmed_pinned_block_first_page_noncoinbase_transactions');
+    expect(result.utxo_sample.total_utxo_scope).toBe('undefined_not_derived_from_first_page_sample');
+    expect(result.utxo_transactions.length).toBe(result.utxo_sample.sampled_noncoinbase_transaction_count);
+    const provider = await request.get(result.utxo_sample.endpoint, { timeout: 30_000 });
+    expect(provider.ok()).toBe(true);
+    const raw = await provider.json();
+    expect(raw.length).toBe(result.utxo_sample.returned_count);
+    expect(raw[0].vin[0].is_coinbase).toBe(true);
+    const ordinary = raw.slice(1);
+    expect(ordinary.length).toBe(result.utxo_transactions.length);
+    const spent: number[] = [];
+    const created: number[] = [];
+    for (const [index, tx] of result.utxo_transactions.entries()) {
+      const original = ordinary[index];
+      expect(tx.txid).toBe(original.txid);
+      expect(original.status.confirmed).toBe(true);
+      expect(original.status.block_hash).toBe(result.utxo_sample.block_hash);
+      const inputValues = original.vin.map((input: { prevout: { value: number } }) => input.prevout.value);
+      const outputValues = original.vout.filter((output: { scriptpubkey_type: string }) => output.scriptpubkey_type !== 'op_return').map((output: { value: number }) => output.value);
+      expect(tx.input_prevout_values_sats).toEqual(inputValues);
+      expect(tx.non_op_return_output_values_sats).toEqual(outputValues);
+      expect(tx.spent_prevout_value_sats).toBe(inputValues.reduce((total: number, value: number) => total + value, 0));
+      expect(tx.created_non_op_return_value_sats).toBe(outputValues.reduce((total: number, value: number) => total + value, 0));
+      expect(inputValues.reduce((total: number, value: number) => total + value, 0)).toBe(original.vout.reduce((total: number, output: { value: number }) => total + output.value, original.fee));
+      spent.push(...inputValues);
+      created.push(...outputValues);
+    }
+    expect(result.values.spent_prevout_count).toBe(spent.length);
+    expect(result.values.created_non_op_return_output_count).toBe(created.length);
+    expect(result.values.spent_prevout_value_sats).toBe(spent.reduce((sum, value) => sum + value, 0));
+    expect(result.values.created_non_op_return_value_sats).toBe(created.reduce((sum, value) => sum + value, 0));
+    if (conceptId === 'book_utxo_value_stats') {
+      const median = (values: number[]) => { const sorted = [...values].sort((a, b) => a - b); return sorted.length ? sorted.length % 2 ? sorted[Math.floor(sorted.length / 2)] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2 : null; };
+      expect(result.values.spent_median_value_sats).toBe(median(spent));
+      expect(result.values.created_median_value_sats).toBe(median(created));
+      expect(result.values.spent_mean_value_sats).toBeCloseTo(spent.reduce((a, b) => a + b, 0) / spent.length, 8);
+      expect(result.values.created_mean_value_sats).toBeCloseTo(created.reduce((a, b) => a + b, 0) / created.length, 8);
+    } else {
+      expect(result.status).toBe('partial');
+      expect(result.values[conceptId === 'book_utxo_counts' ? 'total_utxo_count' : 'total_utxo_value_sats']).toBeNull();
+      await expect(panel).toContainText('全网当前 UTXO');
+    }
+    await expect(panel.locator('.ax-utxo-sample')).toBeVisible();
+    await expect(panel.locator('[data-utxo-txid]')).toHaveCount(ordinary.length);
+    await expect(panel.locator(`a[href="https://blockstream.info/block/${result.utxo_sample.block_hash}"]`)).toBeVisible();
+  }
+});
+
 test('Bitcoin block timing and transaction rate use exactly nine linked header-time intervals', async ({ page }) => {
   test.setTimeout(120_000);
   for (const conceptId of ['book_block_interval', 'book_transaction_rate']) {
