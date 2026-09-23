@@ -259,6 +259,23 @@ fn parse_binance_kline(v: &serde_json::Value) -> Option<Bar> {
     })
 }
 
+/// A Binance 1-hour candle observed before the exchange says it is closed.
+/// Its `close` is a snapshot value and never a final close.
+#[derive(Clone, Debug)]
+pub struct ProvisionalCandleSnapshot {
+    pub candle: Bar,
+    pub fetched_at: DateTime<Utc>,
+    pub expected_close_at: DateTime<Utc>,
+}
+
+/// Adjacent candles fetched from one Binance response, so cache age cannot
+/// separate the last completed candle from the live observation.
+#[derive(Clone, Debug)]
+pub struct OpenCandlePair {
+    pub last_completed: Bar,
+    pub provisional: ProvisionalCandleSnapshot,
+}
+
 pub struct HttpFeed {
     pub base_url: String,
     pub csv: CsvFeed,
@@ -275,6 +292,158 @@ impl HttpFeed {
                 .build()
                 .expect("无法创建 HTTP client"),
         }
+    }
+
+    async fn binance_server_time(&self) -> Result<DateTime<Utc>> {
+        let raw: serde_json::Value = self
+            .client
+            .get(format!("{}/api/v3/time", self.base_url))
+            .send()
+            .await
+            .context("Binance server time request failed")?
+            .error_for_status()
+            .context("Binance server time returned HTTP error")?
+            .json()
+            .await
+            .context("invalid Binance server time JSON")?;
+        let milliseconds = raw["serverTime"]
+            .as_i64()
+            .context("Binance server time is missing")?;
+        Utc.timestamp_millis_opt(milliseconds)
+            .single()
+            .context("invalid Binance server time")
+    }
+
+    /// Fetch the last completed and current active candle from one uncached
+    /// Binance response, validating the active interval against exchange time.
+    pub async fn fetch_open_candle_pair_async(&self, symbol: &str) -> Result<OpenCandlePair> {
+        let mut last_error = None;
+        for _ in 0..2 {
+            let before_request = self.binance_server_time().await?;
+            let pair = self.fetch_open_candle_pair_at(symbol, before_request).await;
+            let after_request = self.binance_server_time().await?;
+            match pair {
+                Ok(pair) if after_request < pair.provisional.expected_close_at => {
+                    return Ok(OpenCandlePair {
+                        provisional: ProvisionalCandleSnapshot {
+                            fetched_at: after_request,
+                            ..pair.provisional
+                        },
+                        ..pair
+                    })
+                }
+                Ok(_) => {
+                    last_error =
+                        Some("Binance hour changed while requesting the active candle".to_string())
+                }
+                Err(error) => last_error = Some(error.to_string()),
+            }
+        }
+        Err(anyhow::anyhow!(last_error.unwrap_or_else(|| {
+            "unable to observe an active Binance candle".to_string()
+        })))
+    }
+
+    /// Deterministic seam for a two-candle response observed at exchange time.
+    pub async fn fetch_open_candle_pair_at(
+        &self,
+        symbol: &str,
+        as_of: DateTime<Utc>,
+    ) -> Result<OpenCandlePair> {
+        let hour_start = as_of
+            .with_minute(0)
+            .and_then(|time| time.with_second(0))
+            .and_then(|time| time.with_nanosecond(0))
+            .context("invalid Binance observation time")?;
+        let raw: serde_json::Value = self
+            .client
+            .get(format!("{}/api/v3/klines", self.base_url))
+            .query(&[
+                ("symbol", symbol.replace('/', "")),
+                ("interval", "1h".to_string()),
+                (
+                    "startTime",
+                    (hour_start - Duration::hours(1))
+                        .timestamp_millis()
+                        .to_string(),
+                ),
+                ("limit", "2".to_string()),
+            ])
+            .send()
+            .await
+            .context("open-candle market request failed")?
+            .error_for_status()
+            .context("open-candle market returned HTTP error")?
+            .json()
+            .await
+            .context("invalid open-candle market JSON")?;
+        let rows = raw
+            .as_array()
+            .context("open-candle market response is not an array")?;
+        anyhow::ensure!(
+            rows.len() == 2,
+            "open-candle market response needs adjacent completed and active rows"
+        );
+        let last_completed =
+            parse_binance_kline(&rows[0]).context("invalid completed kline fields")?;
+        let candle = parse_binance_kline(&rows[1]).context("invalid provisional kline fields")?;
+        let close_time = |row: &serde_json::Value, label: &str| -> Result<DateTime<Utc>> {
+            let milliseconds = row
+                .as_array()
+                .and_then(|fields| fields.get(6))
+                .and_then(serde_json::Value::as_i64)
+                .with_context(|| format!("{label} kline is missing exchange close time"))?;
+            Utc.timestamp_millis_opt(milliseconds.saturating_add(1))
+                .single()
+                .with_context(|| format!("invalid {label} kline close time"))
+        };
+        let completed_close_at = close_time(&rows[0], "completed")?;
+        let expected_close_at = close_time(&rows[1], "provisional")?;
+        let valid_ohlcv = |bar: &Bar| {
+            bar.open.is_finite()
+                && bar.high.is_finite()
+                && bar.low.is_finite()
+                && bar.close.is_finite()
+                && bar.volume.is_finite()
+                && bar.open > 0.0
+                && bar.high > 0.0
+                && bar.low > 0.0
+                && bar.close > 0.0
+                && bar.high >= bar.low
+                && bar.high >= bar.open.max(bar.close)
+                && bar.low <= bar.open.min(bar.close)
+                && bar.volume >= 0.0
+        };
+        anyhow::ensure!(
+            valid_ohlcv(&last_completed) && valid_ohlcv(&candle),
+            "Binance open-candle rows have invalid OHLCV"
+        );
+        anyhow::ensure!(
+            last_completed.timestamp + Duration::hours(1) == candle.timestamp
+                && candle.timestamp == hour_start,
+            "open-candle rows are not adjacent current-hour candles"
+        );
+        anyhow::ensure!(
+            completed_close_at == last_completed.timestamp + Duration::hours(1)
+                && expected_close_at == candle.timestamp + Duration::hours(1),
+            "Binance kline close times do not match the 1-hour interval"
+        );
+        anyhow::ensure!(
+            completed_close_at <= as_of,
+            "previous Binance row is not completed"
+        );
+        anyhow::ensure!(
+            candle.timestamp <= as_of && as_of < expected_close_at,
+            "exchange reports this kline as closed or not yet open"
+        );
+        Ok(OpenCandlePair {
+            last_completed,
+            provisional: ProvisionalCandleSnapshot {
+                candle,
+                fetched_at: as_of,
+                expected_close_at,
+            },
+        })
     }
 
     async fn fetch_remote(

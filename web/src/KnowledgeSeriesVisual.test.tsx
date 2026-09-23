@@ -65,3 +65,22 @@ it('explains the real MACD histogram scaling conventions on one price-unit axis'
   expect(html).not.toContain('两种口径差值');
   expect((html.match(/transform="translate/g) || [])).toHaveLength(1);
 });
+
+it('labels an exchange-observed active candle as provisional against UTC candle times', () => {
+  const result = { concept_id: 'book_pitfall_open_candle', values: {
+    last_completed_timestamp: 1799920800, current_candle_open_timestamp: 1799924400,
+    as_of_timestamp: 1799925600, expected_close_timestamp: 1799928000,
+  }, series: [
+    { name: 'last_completed_close_series', values: [100, null] },
+    { name: 'current_candle_open_series', values: [null, 100] },
+    { name: 'provisional_close_series', values: [null, 102] },
+  ], units: {
+    last_completed_close_series: 'price', current_candle_open_series: 'price', provisional_close_series: 'price',
+  } } as unknown as PracticeResult;
+  const html = renderToStaticMarkup(<KnowledgeSeriesVisual name="未收盘 K 线" result={result} />);
+  expect(html).toContain('上一根已收盘价');
+  expect(html).toContain('当前临时价');
+  expect(html).toContain('2027-01-14');
+  expect(html).toContain('尚未收盘');
+  expect((html.match(/data-series-marker=/g) || [])).toHaveLength(3);
+});

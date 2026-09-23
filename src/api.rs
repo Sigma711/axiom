@@ -1490,7 +1490,14 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
                 | "book_second_order_greeks"
         );
     let performance = concept.category == "风险-绩效";
-    if concept.id == "book_pitfall_formula_variant" {
+    if concept.id == "book_pitfall_open_candle" {
+        json!({
+            "markets":["crypto"], "modules":["data"],
+            "required_datasets":["server_fetched_binance_active_1h_snapshot","last_completed_binance_1h_bar"],
+            "source_policy":"real_required",
+            "goal":"服务器用 Binance 交易所时间取得当前1小时未收盘K线及其预计收盘时刻，并与最后一根已收盘K线并列。临时收盘只是 as-of 快照，预计收盘前可能变化；不接收手填事件或未来最终收盘，也不将其当作收盘价策略信号。"
+        })
+    } else if concept.id == "book_pitfall_formula_variant" {
         json!({
             "markets":["crypto","cn_equity","us_equity"], "modules":["data"],
             "required_datasets":["server_fetched_completed_ohlcv_with_source_cadence"],
@@ -2025,6 +2032,16 @@ async fn post_practice(
             "real_required practice does not accept synthetic market bars",
         ));
     }
+    if concept.id == "book_pitfall_open_candle" && source != "binance" {
+        return Err(validate::bad(
+            "open-candle practice requires the Binance 1-hour source",
+        ));
+    }
+    if concept.id == "book_pitfall_open_candle" && req.bars.is_some() {
+        return Err(validate::bad(
+            "this practice uses a server-fetched active Binance snapshot and does not accept caller-supplied bars",
+        ));
+    }
     if matches!(
         concept.id.as_str(),
         "book_pitfall_repainting" | "book_pitfall_timeframe" | "book_pitfall_formula_variant"
@@ -2036,10 +2053,10 @@ async fn post_practice(
     }
     let independent = concept.input_kind != "market_bars";
     let provided_bars = req.bars.is_some();
-    let bars = if let Some(bars) = req.bars {
+    let mut bars = if let Some(bars) = req.bars {
         validate::bars(&bars)?;
         bars
-    } else if independent {
+    } else if independent || concept.id == "book_pitfall_open_candle" {
         Vec::new()
     } else {
         market_bars(&state, &symbol, &source, limit).await?
@@ -2053,6 +2070,28 @@ async fn post_practice(
     if concept.id == "book_relative_volume_at_time" {
         relative_volume_requires_continuous_binance_hours(&bars, &source)?;
     }
+    let open_candle_pair = if concept.id == "book_pitfall_open_candle" {
+        Some(
+            state
+                .feed
+                .fetch_open_candle_pair_async(&symbol)
+                .await
+                .map_err(|error| (StatusCode::BAD_GATEWAY, error.to_string()))?,
+        )
+    } else {
+        None
+    };
+    if let Some(pair) = open_candle_pair.as_ref() {
+        bars = vec![pair.last_completed];
+    }
+    let open_candle_summary = if let Some(pair) = open_candle_pair.as_ref() {
+        Some(
+            crate::book::market_open_candle_summary(&pair.last_completed, &pair.provisional)
+                .map_err(validate::bad)?,
+        )
+    } else {
+        None
+    };
     let formula_variant_summary = if concept.id == "book_pitfall_formula_variant" {
         Some(crate::book::market_formula_variant_summary(&bars, &source).map_err(validate::bad)?)
     } else {
@@ -2117,22 +2156,27 @@ async fn post_practice(
             }
         }
     }
-    let mut result = match formula_variant_summary {
+    let mut result = match open_candle_summary {
         Some(summary) => summary,
-        None => match timeframe_summary {
+        None => match formula_variant_summary {
             Some(summary) => summary,
-            None => match period_summary {
+            None => match timeframe_summary {
                 Some(summary) => summary,
-                None => match annualization {
-                    Some(annualization) => crate::practice::evaluate_with_annualization(
-                        &req.concept_id,
-                        &bars,
-                        &evaluator_inputs,
-                        annualization,
-                    ),
-                    None => crate::practice::evaluate(&req.concept_id, &bars, &evaluator_inputs),
-                }
-                .map_err(validate::bad)?,
+                None => match period_summary {
+                    Some(summary) => summary,
+                    None => match annualization {
+                        Some(annualization) => crate::practice::evaluate_with_annualization(
+                            &req.concept_id,
+                            &bars,
+                            &evaluator_inputs,
+                            annualization,
+                        ),
+                        None => {
+                            crate::practice::evaluate(&req.concept_id, &bars, &evaluator_inputs)
+                        }
+                    }
+                    .map_err(validate::bad)?,
+                },
             },
         },
     };
@@ -2140,7 +2184,20 @@ async fn post_practice(
     result["symbol"] = json!(symbol);
     result["source"] = json!(source);
     result["context"] = json!(context);
-    if matches!(
+    if let Some(pair) = open_candle_pair.as_ref() {
+        result["bar_origin"] = json!("server_fetched_binance_provisional_snapshot");
+        result["bars"] = json!([pair.last_completed]);
+        result["provisional_snapshot"] = json!({
+            "candle": pair.provisional.candle,
+            "is_closed": false,
+            "fetched_at": pair.provisional.fetched_at,
+            "expected_close_at": pair.provisional.expected_close_at,
+            "completion_evidence": "timestamp-derived: Binance REST closeTime compared with Binance serverTime after fetching"
+        });
+        if let Some(notes) = result["notes"].as_array_mut() {
+            notes.push(json!("当前小时由 Binance 交易所服务器时间验证为未收盘；bars 只含最后已收盘K线，未收盘行情单独放在 provisional_snapshot，不能混作策略输入。"));
+        }
+    } else if matches!(
         concept.id.as_str(),
         "book_pitfall_repainting" | "book_pitfall_timeframe" | "book_pitfall_formula_variant"
     ) {
@@ -2152,7 +2209,9 @@ async fn post_practice(
     if result_required {
         result["provenance"] = json!("provided_result_context");
     }
-    result["bars"] = json!(bars);
+    if open_candle_pair.is_none() {
+        result["bars"] = json!(bars);
+    }
     Ok(Json(result))
 }
 

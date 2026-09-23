@@ -1066,6 +1066,69 @@ pub fn market_period_summary(bars: &[Bar], source: &str) -> Result<Value, String
     }))
 }
 
+/// Presents one exchange-observed open candle without inventing its final close.
+pub fn market_open_candle_summary(
+    last_completed: &Bar,
+    provisional: &crate::data::ProvisionalCandleSnapshot,
+) -> Result<Value, String> {
+    if provisional.candle.timestamp != last_completed.timestamp + chrono::Duration::hours(1) {
+        return Err("当前未收盘K线必须紧接最后已收盘K线".into());
+    }
+    if !(provisional.candle.timestamp <= provisional.fetched_at
+        && provisional.fetched_at < provisional.expected_close_at)
+    {
+        return Err("当前K线快照不在其未收盘区间内".into());
+    }
+    for bar in [last_completed, &provisional.candle] {
+        if !(bar.open.is_finite()
+            && bar.high.is_finite()
+            && bar.low.is_finite()
+            && bar.close.is_finite()
+            && bar.volume.is_finite()
+            && bar.open > 0.0
+            && bar.high > 0.0
+            && bar.low > 0.0
+            && bar.close > 0.0
+            && bar.high >= bar.low
+            && bar.high >= bar.open.max(bar.close)
+            && bar.low <= bar.open.min(bar.close)
+            && bar.volume >= 0.0)
+        {
+            return Err("K线 OHLCV 必须有效".into());
+        }
+    }
+    Ok(json!({
+        "concept_id":"book_pitfall_open_candle", "input_kind":"market_bars",
+        "provenance":"server_fetched_provisional_snapshot", "status":"computed", "reason":null,
+        "values":{
+            "last_completed_close":last_completed.close,
+            "current_candle_open":provisional.candle.open,
+            "provisional_close":provisional.candle.close,
+            "is_current_candle_closed":0.0,
+            "last_completed_timestamp":last_completed.timestamp.timestamp(),
+            "current_candle_open_timestamp":provisional.candle.timestamp.timestamp(),
+            "as_of_timestamp":provisional.fetched_at.timestamp(),
+            "expected_close_timestamp":provisional.expected_close_at.timestamp()
+        },
+        "units":{
+            "last_completed_close":"price", "current_candle_open":"price", "provisional_close":"price",
+            "is_current_candle_closed":"布尔值（1/0）", "last_completed_timestamp":"UTC 秒",
+            "current_candle_open_timestamp":"UTC 秒", "as_of_timestamp":"UTC 秒", "expected_close_timestamp":"UTC 秒",
+            "last_completed_close_series":"price", "current_candle_open_series":"price", "provisional_close_series":"price"
+        },
+        "series":[
+            {"name":"last_completed_close_series","values":[last_completed.close,null]},
+            {"name":"current_candle_open_series","values":[null,provisional.candle.open]},
+            {"name":"provisional_close_series","values":[null,provisional.candle.close]}
+        ],
+        "completion_evidence":"timestamp-derived: Binance REST closeTime is later than Binance serverTime at observation",
+        "notes":[
+            "未收盘状态按 Binance REST 的 closeTime 与 Binance serverTime 比较得出（timestamp-derived），不是 REST 返回的 closed 标志。临时收盘、最高、最低和成交量在预计收盘前都可能继续变化。",
+            "临时收盘价不是最终收盘价；本练习不推测未来收盘，也不把当前K线用于收盘价策略信号。"
+        ], "inputs":{}, "source_ids":["book_28_13"]
+    }))
+}
+
 /// Evaluates two fixed horizons from one completed, source-bound series.
 /// The source only supplies one native cadence, so this intentionally does not
 /// pretend to compare a five-minute feed with a daily feed or infer independent

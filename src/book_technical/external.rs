@@ -435,19 +435,6 @@ pub(super) fn evaluate(id: &str, v: &Value, o: &mut Output) -> Result<(), String
                 "fraction"
             );
         }
-        "pitfall_open_candle" => {
-            let p = positive(v, "previous_close")?;
-            o.number(
-                "provisional_return",
-                x("provisional_close")? / p - 1.0,
-                "fraction",
-            );
-            o.number("final_return", x("final_close")? / p - 1.0, "fraction");
-            o.flag(
-                "eligible_for_close_based_strategy",
-                boolean(v, "is_closed")?,
-            );
-        }
         "pitfall_adjustment" => {
             let p = positive(v, "previous_price")?;
             let c = positive(v, "current_price")?;

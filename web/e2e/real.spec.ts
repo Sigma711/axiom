@@ -787,3 +787,36 @@ test('formula convention practice server-fetches one real MACD series and draws 
   await expect(panel).toContainText('最新两种柱体约定之差');
   await expect(panel.locator('.ax-series-illustration svg')).toBeVisible();
 });
+
+test('open-candle practice shows an exchange-timed provisional snapshot without a fabricated final price', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/');
+  await page.getByRole('textbox', { name: '搜索 概念 / 公式 / 关键词' }).fill('未收盘 K 线会变化');
+  const card = page.locator('.ax-kb-card').filter({ hasText: '未收盘 K 线会变化' });
+  await expect(card).toHaveCount(1, { timeout: 30_000 });
+  await card.getByRole('button', { name: '在数据探索中实践' }).click();
+  const panel = page.getByLabel('概念实践');
+  await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+  const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+  const requestPromise = page.waitForRequest(request => request.url().includes('/api/practice') && request.method() === 'POST');
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  const [request, response] = await Promise.all([requestPromise, responsePromise]);
+  expect(request.postDataJSON()).toMatchObject({ concept_id: 'book_pitfall_open_candle', source: 'binance', inputs: {} });
+  expect(request.postDataJSON().bars).toBeUndefined();
+  expect(response.ok(), await response.text()).toBe(true);
+  const payload = await response.json();
+  expect(payload.bar_origin).toBe('server_fetched_binance_provisional_snapshot');
+  expect(payload.bars).toHaveLength(1);
+  expect(payload.provisional_snapshot.is_closed).toBe(false);
+  expect(payload.provisional_snapshot.completion_evidence).toContain('timestamp-derived');
+  expect(payload.values.is_current_candle_closed).toBe(0);
+  expect(payload.values.final_close).toBeUndefined();
+  expect(payload.values.last_completed_close).toBe(payload.bars[0].close);
+  expect(payload.values.provisional_close).toBe(payload.provisional_snapshot.candle.close);
+  expect(payload.values.current_candle_open_timestamp - payload.values.last_completed_timestamp).toBe(3600);
+  expect(payload.values.as_of_timestamp).toBeGreaterThanOrEqual(payload.values.current_candle_open_timestamp);
+  expect(payload.values.as_of_timestamp).toBeLessThan(payload.values.expected_close_timestamp);
+  await expect(panel).toContainText('临时价尚未收盘');
+  await expect(panel).toContainText('不能当作最终收盘价');
+  await expect(panel.locator('.ax-series-illustration svg')).toBeVisible();
+});

@@ -475,3 +475,39 @@ fn period_summary_rejects_untrusted_source_empty_disordered_or_future_bars() {
     assert!(book::market_period_summary(&bars, "binance").is_err());
     assert!(book::market_period_summary(&closed_bars(&[100.0]), "synthetic").is_err());
 }
+
+#[test]
+fn open_candle_summary_exposes_only_snapshot_and_expiry_not_a_final_close() {
+    let last = Bar {
+        timestamp: Utc.with_ymd_and_hms(2024, 1, 1, 9, 0, 0).unwrap(),
+        open: 98.0,
+        high: 101.0,
+        low: 97.0,
+        close: 100.0,
+        volume: 10.0,
+    };
+    let provisional = axiom::data::ProvisionalCandleSnapshot {
+        candle: Bar {
+            timestamp: Utc.with_ymd_and_hms(2024, 1, 1, 10, 0, 0).unwrap(),
+            open: 100.0,
+            high: 103.0,
+            low: 99.0,
+            close: 102.0,
+            volume: 4.0,
+        },
+        fetched_at: Utc.with_ymd_and_hms(2024, 1, 1, 10, 20, 0).unwrap(),
+        expected_close_at: Utc.with_ymd_and_hms(2024, 1, 1, 11, 0, 0).unwrap(),
+    };
+    let result = book::market_open_candle_summary(&last, &provisional).unwrap();
+    assert_eq!(result["concept_id"], "book_pitfall_open_candle");
+    assert_eq!(result["values"]["last_completed_close"], 100.0);
+    assert_eq!(result["values"]["provisional_close"], 102.0);
+    assert_eq!(result["values"]["is_current_candle_closed"], 0.0);
+    assert!(result["values"].get("final_close").is_none());
+    assert_eq!(result["series"].as_array().unwrap().len(), 3);
+    assert!(result["completion_evidence"]
+        .as_str()
+        .unwrap()
+        .contains("timestamp-derived"));
+    assert!(result["notes"].to_string().contains("不是最终收盘价"));
+}

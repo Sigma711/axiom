@@ -22,6 +22,15 @@ pub(super) fn evaluate(
         };
     }
     match id {
+        "pitfall_open_candle" => {
+            o.value(
+                "provisional_close",
+                None,
+                "price",
+                "需要 Binance 当前未收盘1小时K线的服务器快照",
+            );
+            o.note("离线传入的已收盘K线不能替代当前未收盘快照；实际练习由API验证交易所时间与预计收盘时刻。");
+        }
         "pitfall_formula_variant" => {
             let m = trend::macd(&c, 12, 26, 9);
             let twice = m

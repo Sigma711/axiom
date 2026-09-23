@@ -957,16 +957,11 @@
     {
       "id": "book_pitfall_open_candle",
       "name": "未收盘 K 线会变化",
-      "summary": "同一根未收盘K线的临时收盘变化会改变观察值。",
-      "example": "暂收102变99，涨跌方向也会翻转。",
+      "summary": "从 Binance 取得当前1小时未收盘K线的服务器快照，与最后一根已收盘K线并列；临时收盘会变化，不能当最终收盘。",
+      "example": "当前小时的临时收盘在预计收盘前可能变动；页面只显示快照、交易所 as-of 与预计收盘时刻，不编造未来收盘。",
       "formula": "",
-      "input_kind": "independent_inputs",
-      "defaults": {
-        "previous_close": 100.0,
-        "provisional_close": 102.0,
-        "final_close": 99.0,
-        "is_closed": false
-      },
+      "input_kind": "market_bars",
+      "defaults": {},
       "source_ids": [
         "book_28_13"
       ]

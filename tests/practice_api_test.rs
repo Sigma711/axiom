@@ -60,6 +60,7 @@ async fn data_practice_accepts_only_concepts_with_a_data_plan() {
                     | "book_pitfall_repainting"
                     | "book_pitfall_timeframe"
                     | "book_pitfall_formula_variant"
+                    | "book_pitfall_open_candle"
             )
     }) {
         let mut first: Option<Value> = None;
@@ -265,6 +266,38 @@ async fn timeframe_practice_requires_server_fetched_real_source_bars() {
 }
 
 #[tokio::test]
+async fn open_candle_practice_requires_server_fetched_provisional_binance_snapshot() {
+    let app = app();
+    let response = app
+        .clone()
+        .oneshot(Request::get("/api/practice").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let catalog: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), 10_000_000).await.unwrap()).unwrap();
+    let concept = catalog["concepts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == "book_pitfall_open_candle")
+        .unwrap();
+    assert_eq!(concept["input_kind"], "market_bars");
+    assert_eq!(concept["inputs"], json!([]));
+    assert_eq!(concept["plan"]["markets"], json!(["crypto"]));
+    assert_eq!(concept["plan"]["source_policy"], "real_required");
+    let bars = SyntheticFeed::new(31)
+        .fetch_historical(
+            "BTCUSDT",
+            Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+            2,
+        )
+        .unwrap();
+    let (status, body) = request(&app, "/api/practice", json!({"concept_id":"book_pitfall_open_candle","module":"data","symbol":"BTCUSDT","source":"binance","bars":bars,"inputs":{"final_close":99}})).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(body.to_string().contains("server-fetched"));
+}
+
+#[tokio::test]
 async fn formula_variant_practice_requires_server_fetched_completed_market_bars() {
     let app = app();
     let response = app
@@ -320,6 +353,46 @@ async fn mock_completed_klines(Query(q): Query<HashMap<String, String>>) -> Json
     ))
 }
 
+async fn mock_binance_time() -> Json<Value> {
+    Json(json!({"serverTime": Utc::now().timestamp_millis()}))
+}
+
+#[tokio::test]
+async fn open_candle_practice_reports_upstream_time_failure_without_a_stale_snapshot() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            axum::Router::new().route("/api/v3/time", get(|| async { StatusCode::BAD_GATEWAY })),
+        )
+        .await
+        .unwrap()
+    });
+    let dir = PathBuf::from(format!(
+        "target/practice-open-failure-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let mut state = AppState::new(default_config(), dir.clone());
+    let mut feed = HttpFeed::new(&dir);
+    feed.base_url = format!("http://127.0.0.1:{port}");
+    state.feed = Arc::new(feed);
+    let app = api::router(Arc::new(state));
+    let (status, body) = request(
+        &app,
+        "/api/practice",
+        json!({"concept_id":"book_pitfall_open_candle","module":"data","symbol":"BTCUSDT","source":"binance","limit":2,"inputs":{}}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert!(body
+        .to_string()
+        .contains("Binance server time returned HTTP error"));
+    assert!(body.get("provisional_snapshot").is_none());
+    server.abort();
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 #[tokio::test]
 async fn server_fetched_knowledge_practices_execute_against_completed_mock_market() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -327,7 +400,9 @@ async fn server_fetched_knowledge_practices_execute_against_completed_mock_marke
     let server = tokio::spawn(async move {
         axum::serve(
             listener,
-            axum::Router::new().route("/api/v3/klines", get(mock_completed_klines)),
+            axum::Router::new()
+                .route("/api/v3/klines", get(mock_completed_klines))
+                .route("/api/v3/time", get(mock_binance_time)),
         )
         .await
         .unwrap()
@@ -342,6 +417,7 @@ async fn server_fetched_knowledge_practices_execute_against_completed_mock_marke
         "book_pitfall_repainting",
         "book_pitfall_timeframe",
         "book_pitfall_formula_variant",
+        "book_pitfall_open_candle",
     ] {
         let (status, body) = request(
             &app,
@@ -354,8 +430,27 @@ async fn server_fetched_knowledge_practices_execute_against_completed_mock_marke
         .await;
         assert_eq!(status, StatusCode::OK, "{concept_id}: {body}");
         assert_eq!(body["status"], "computed");
-        assert_eq!(body["bar_origin"], "server_fetched_completed_source_bars");
-        assert_eq!(body["bars"].as_array().unwrap().len(), 200);
+        if concept_id == "book_pitfall_open_candle" {
+            assert_eq!(
+                body["bar_origin"],
+                "server_fetched_binance_provisional_snapshot"
+            );
+            assert_eq!(body["bars"].as_array().unwrap().len(), 1);
+            assert_eq!(body["provisional_snapshot"]["is_closed"], false);
+            assert_eq!(
+                body["provisional_snapshot"]["candle"]["close"],
+                body["values"]["provisional_close"]
+            );
+            assert_eq!(body["values"]["is_current_candle_closed"], 0.0);
+            assert!(body["values"].get("final_close").is_none());
+            assert!(body["completion_evidence"]
+                .as_str()
+                .unwrap()
+                .contains("timestamp-derived"));
+        } else {
+            assert_eq!(body["bar_origin"], "server_fetched_completed_source_bars");
+            assert_eq!(body["bars"].as_array().unwrap().len(), 200);
+        }
         assert_eq!(body["context"], "selected_dataset");
     }
     server.abort();

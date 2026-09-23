@@ -119,7 +119,9 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
         }
         for c in crate::book_technical::catalog() {
             let id = c.id.strip_prefix("book_").unwrap_or(&c.id);
-            let candidates = if c.id == "book_pitfall_formula_variant" {
+            let candidates = if c.id == "book_pitfall_open_candle" {
+                vec!["src/book.rs::market_open_candle_summary".to_string()]
+            } else if c.id == "book_pitfall_formula_variant" {
                 vec!["src/book.rs::market_formula_variant_summary".to_string()]
             } else if c.id == "book_pitfall_timeframe" {
                 vec!["src/book.rs::market_timeframe_summary".to_string()]
