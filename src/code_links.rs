@@ -178,8 +178,20 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
         }
         for d in crate::supplement::definitions() {
             if let (Some(id), Some(op)) = (d["id"].as_str(), d["op"].as_str()) {
-                let candidates = if matches!(id, "book_block_height" | "book_block_size") {
-                    vec!["src/book.rs::market_bitcoin_block_summary".to_string()]
+                let candidates = if matches!(
+                    id,
+                    "book_block_height"
+                        | "book_block_size"
+                        | "book_transaction_fees"
+                        | "book_transaction_bytes"
+                ) {
+                    vec![
+                        if matches!(id, "book_transaction_fees" | "book_transaction_bytes") {
+                            "src/book.rs::market_bitcoin_transaction_summary".to_string()
+                        } else {
+                            "src/book.rs::market_bitcoin_block_summary".to_string()
+                        },
+                    ]
                 } else {
                     vec![format!("src/supplement.rs::evaluate::{op}")]
                 };

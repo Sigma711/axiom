@@ -1496,6 +1496,11 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
     let performance = concept.category == "风险-绩效";
     if matches!(concept.id.as_str(), "book_net_volume" | "volume_profile") {
         json!({"markets":["crypto"],"modules":["data"],"required_datasets":["server_fetched_binance_usdt_spot_recent_trades"],"source_policy":"real_required","goal":"服务器直接取得最近最多1000笔Binance USDT现货逐笔成交，校验连续交易ID与非递减毫秒时间。Net Volume按相邻成交价分类，首笔作锚点、等价量单列；Volume Profile按实际价格汇总数量并按已披露算法计算70%价值区。不接收客户端K线或输入，不把近期记录冒称完整小时、交易日或资金净流入。"})
+    } else if matches!(
+        concept.id.as_str(),
+        "book_transaction_fees" | "book_transaction_bytes"
+    ) {
+        json!({"markets":["crypto"],"modules":["data"],"required_datasets":["server_fetched_bitcoin_mainnet_pinned_block_transaction_first_page"],"source_policy":"real_required","goal":"服务器取得已验证主网区块窗口后固定其中一个具有六个更新观测区块的区块，只请求该哈希交易列表第一页并排除coinbase。校验确认状态和区块哈希、交易ID唯一、手续费为无符号sats、正序列化字节数；样本不代表整块或全网。"})
     } else if matches!(concept.id.as_str(), "book_block_height" | "book_block_size") {
         json!({"markets":["crypto"],"modules":["data"],"required_datasets":["server_fetched_bitcoin_mainnet_blocks"],"source_policy":"real_required","goal":"服务器从 Blockstream Esplora /api/blocks 取得未缓存的十个 Bitcoin 主网区块，主源失败时才使用 mempool Esplora。校验十个连续高度、哈希前序链接和正序列化字节数；不假设区块时间单调，不接受客户端K线或输入。高度差为最后高度减第一高度（9）；大小统计为十块总字节数和平均字节数，不构成价格预测或交易信号。"})
     } else if concept.id == "book_52w_range" {
@@ -2192,6 +2197,45 @@ async fn post_practice(
         return Err(validate::bad(
             "practice source is not applicable to this concept",
         ));
+    }
+    if matches!(
+        concept.id.as_str(),
+        "book_transaction_fees" | "book_transaction_bytes"
+    ) {
+        if source != "binance"
+            || symbol != "BTCUSDT"
+            || req.limit.is_some_and(|n| n != 25)
+            || req.bars.is_some()
+            || !req
+                .inputs
+                .as_object()
+                .is_some_and(serde_json::Map::is_empty)
+        {
+            return Err(validate::bad("Bitcoin transaction practice uses the fixed BTCUSDT selector and server-fetched first page only"));
+        }
+        if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Live market data is disabled in offline mode".into(),
+            ));
+        }
+        let sample = state
+            .feed
+            .fetch_bitcoin_mainnet_transaction_sample()
+            .await
+            .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+        let mut result =
+            crate::book::market_bitcoin_transaction_summary(&concept.id, &sample.transactions)
+                .map_err(validate::bad)?;
+        result["module"] = json!("data");
+        result["symbol"] = json!(symbol);
+        result["source"] = json!(source);
+        result["context"] = json!("selected_dataset");
+        result["bar_origin"] = json!("server_fetched_bitcoin_transaction_sample");
+        result["bars"] = json!([]);
+        result["transaction_sample"] = json!({"network":"bitcoin_mainnet","provider":sample.provider,"endpoint":sample.endpoint,"fetched_at":sample.fetched_at,"block_hash":sample.block.hash,"block_height":sample.block.height,"block_time":sample.block.timestamp,"page_start":0,"returned_count":sample.returned_count,"analyzed_count":sample.transactions.len(),"excluded_coinbase_count":sample.excluded_coinbase_count,"scope":"first_page_non_coinbase_transactions","observed_newer_blocks":6,"confirmation_note":"six newer blocks in this observed window; this is not a consensus-finality claim"});
+        result["transactions"] = json!(sample.transactions);
+        return Ok(Json(result));
     }
     if matches!(concept.id.as_str(), "book_block_height" | "book_block_size") {
         if source != "binance"

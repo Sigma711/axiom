@@ -13,7 +13,13 @@ fn uses_hourly_market_bars(id: &str) -> bool {
     id == "book_volume_24h"
 }
 fn uses_bitcoin_block_snapshot(id: &str) -> bool {
-    matches!(id, "book_block_height" | "book_block_size")
+    matches!(
+        id,
+        "book_block_height"
+            | "book_block_size"
+            | "book_transaction_fees"
+            | "book_transaction_bytes"
+    )
 }
 
 pub fn definitions() -> &'static Vec<Value> {

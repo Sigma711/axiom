@@ -2134,3 +2134,72 @@ pub fn market_bitcoin_block_summary(
         json!({"concept_id":concept_id,"input_kind":"market_bars","provenance":"server_fetched_bitcoin_block_snapshot","status":"computed","reason":null,"values":values,"units":units,"series":[],"inputs":{},"notes":["窗口是当前观察到的10个连续 Bitcoin 主网区块（最早到最新）。高度差为9；区块时间只按提供者原样展示，未假设其单调。","区块高度和序列化字节数描述网络进度与数据大小，不说明资产估值、未来价格或交易信号。"],"source_ids":[if concept_id == "book_block_height" {"appendix_074"} else {"appendix_077"}]}),
     )
 }
+
+pub fn market_bitcoin_transaction_summary(
+    id: &str,
+    txs: &[crate::data::BitcoinTransaction],
+) -> Result<Value, String> {
+    if !matches!(id, "book_transaction_fees" | "book_transaction_bytes") {
+        return Err("unsupported Bitcoin transaction practice".into());
+    }
+    if txs.is_empty() {
+        let mut values = json!({"sample_count":0});
+        let mut units = json!({"sample_count":"transactions"});
+        for key in if id == "book_transaction_fees" {
+            ["total_fee_sats", "mean_fee_sats", "median_fee_sats"]
+        } else {
+            ["total_size_bytes", "mean_size_bytes", "median_size_bytes"]
+        } {
+            values[key] = Value::Null;
+            units[key] = json!(if id == "book_transaction_fees" {
+                "sats"
+            } else {
+                "bytes"
+            });
+        }
+        return Ok(
+            json!({"concept_id":id,"input_kind":"market_bars","provenance":"server_fetched_bitcoin_transaction_sample","status":"insufficient_data","reason":"pinned block page contains no ordinary transactions after coinbase exclusion","inputs":{},"series":[],"values":values,"units":units,"notes":["样本仅为已固定区块交易列表第一页中排除coinbase后的普通交易，不能代表整块、全网或费率预测。"],"source_ids":[if id == "book_transaction_fees" {"appendix_085"} else {"appendix_086"}]}),
+        );
+    }
+    let nums: Vec<u64> = txs
+        .iter()
+        .map(|t| {
+            if id == "book_transaction_fees" {
+                t.fee_sats
+            } else {
+                t.size_bytes
+            }
+        })
+        .collect();
+    let total = nums
+        .iter()
+        .try_fold(0u64, |a, b| a.checked_add(*b))
+        .ok_or("transaction total overflow")?;
+    let mut sorted = nums.clone();
+    sorted.sort_unstable();
+    let median = if sorted.len() % 2 == 1 {
+        sorted[sorted.len() / 2] as f64
+    } else {
+        (sorted[sorted.len() / 2 - 1] as f64 + sorted[sorted.len() / 2] as f64) / 2.0
+    };
+    let mut values = json!({"sample_count":txs.len()});
+    let mut units = json!({"sample_count":"transactions"});
+    if id == "book_transaction_fees" {
+        values["total_fee_sats"] = json!(total);
+        values["mean_fee_sats"] = json!(total as f64 / txs.len() as f64);
+        values["median_fee_sats"] = json!(median);
+        units["total_fee_sats"] = json!("sats");
+        units["mean_fee_sats"] = json!("sats");
+        units["median_fee_sats"] = json!("sats");
+    } else {
+        values["total_size_bytes"] = json!(total);
+        values["mean_size_bytes"] = json!(total as f64 / txs.len() as f64);
+        values["median_size_bytes"] = json!(median);
+        units["total_size_bytes"] = json!("bytes");
+        units["mean_size_bytes"] = json!("bytes");
+        units["median_size_bytes"] = json!("bytes");
+    }
+    Ok(
+        json!({"concept_id":id,"input_kind":"market_bars","provenance":"server_fetched_bitcoin_transaction_sample","status":"computed","reason":null,"inputs":{},"series":[],"values":values,"units":units,"notes":["样本仅为已固定区块交易列表第一页中排除coinbase后的普通交易，不能代表整块、全网或费率预测。"],"source_ids":[if id == "book_transaction_fees" {"appendix_085"} else {"appendix_086"}]}),
+    )
+}

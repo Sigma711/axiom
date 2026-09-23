@@ -1147,3 +1147,49 @@ test('Bitcoin block practices read linked mainnet blocks and independently recom
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.locator('.ax-block-scroll').evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
 });
+
+test('Bitcoin transaction practices read a pinned block page and recompute fees and bytes in the browser', async ({ page }) => {
+  test.setTimeout(180_000);
+  for (const conceptId of ['book_transaction_fees', 'book_transaction_bytes']) {
+    await page.goto(`/data?concept=${conceptId}&source=binance`);
+    const panel = page.getByLabel('概念实践');
+    await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+    const requestPromise = page.waitForRequest(request => request.url().includes('/api/practice') && request.method() === 'POST');
+    const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+    await panel.getByRole('button', { name: '运行实践' }).click();
+    const [request, response] = await Promise.all([requestPromise, responsePromise]);
+    const body = request.postDataJSON();
+    expect(body).toMatchObject({ concept_id: conceptId, module: 'data', source: 'binance', symbol: 'BTCUSDT', limit: 25, inputs: {} });
+    expect(body.bars).toBeUndefined();
+    expect(response.ok(), await response.text()).toBe(true);
+    const result = await response.json();
+    expect(result.provenance).toBe('server_fetched_bitcoin_transaction_sample');
+    expect(result.transaction_sample.network).toBe('bitcoin_mainnet');
+    expect(result.transaction_sample.endpoint).toMatch(/^https:\/\/(blockstream\.info|mempool\.space)\/api\/block\/[0-9a-f]{64}\/txs\/0$/);
+    expect(result.transaction_sample.block_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(result.transaction_sample.block_height).toBeGreaterThan(0);
+    expect(result.transaction_sample.page_start).toBe(0);
+    expect(result.transaction_sample.returned_count).toBe(result.transaction_sample.analyzed_count + result.transaction_sample.excluded_coinbase_count);
+    expect(result.transaction_sample.excluded_coinbase_count).toBe(1);
+    expect(result.transaction_sample.scope).toBe('first_page_non_coinbase_transactions');
+    expect(result.transaction_sample.observed_newer_blocks).toBe(6);
+    expect(result.transactions.length).toBeGreaterThan(0);
+    expect(result.transactions.length).toBeLessThanOrEqual(24);
+    expect(new Set(result.transactions.map((tx: { txid: string }) => tx.txid)).size).toBe(result.transactions.length);
+    expect(result.transactions.every((tx: { txid: string; fee_sats: number; size_bytes: number }) => /^[0-9a-f]{64}$/.test(tx.txid) && Number.isInteger(tx.fee_sats) && tx.fee_sats >= 0 && Number.isInteger(tx.size_bytes) && tx.size_bytes > 0)).toBe(true);
+    const values = result.transactions.map((tx: { fee_sats: number; size_bytes: number }) => conceptId === 'book_transaction_fees' ? tx.fee_sats : tx.size_bytes);
+    const total = values.reduce((sum: number, value: number) => sum + value, 0);
+    const sorted = [...values].sort((a, b) => a - b);
+    const median = sorted.length % 2 ? sorted[Math.floor(sorted.length / 2)] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+    const prefix = conceptId === 'book_transaction_fees' ? 'fee' : 'size';
+    expect(result.values[`total_${prefix === 'fee' ? 'fee_sats' : 'size_bytes'}`]).toBe(total);
+    expect(result.values[`mean_${prefix === 'fee' ? 'fee_sats' : 'size_bytes'}`]).toBeCloseTo(total / values.length, 9);
+    expect(result.values[`median_${prefix === 'fee' ? 'fee_sats' : 'size_bytes'}`]).toBe(median);
+    await expect(panel.locator('.ax-transaction-sample')).toBeVisible();
+    await expect(panel.locator('svg[role="img"]')).toBeVisible();
+    await expect(panel.locator('[data-txid]')).toHaveCount(values.length);
+    await expect(panel.locator('a[href*="blockstream.info/block/"]')).toHaveAttribute('href', `https://blockstream.info/block/${result.transaction_sample.block_hash}`);
+    await expect(panel).toContainText('固定区块首页');
+    await expect(panel).toContainText('不是完整区块');
+  }
+});

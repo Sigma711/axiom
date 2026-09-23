@@ -281,6 +281,71 @@ test('Bitcoin block practices draw the observed chain and byte distribution in b
   expect(await page.locator('.ax-block-scroll').evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
 });
 
+test('Bitcoin transaction practices navigate to a scoped sample chart in both themes and on mobile', async ({ page }) => {
+  const concepts = [
+    { id: 'book_transaction_fees', name: 'Mean / Median transaction fees / Transaction fees', summary: '每笔交易平均/中位手续费，或某段时间手续费总额。', formula: '总量=Σ样本；均值=总量/样本数；中位数=排序后中间值', meaning: '每笔交易平均/中位手续费。', example: '样本手续费统计', signals: '观察样本分布', pitfalls: '样本不代表全网', related: [], code_url: 'https://example.test/src/book.rs', implementation: 'src/book.rs::market_bitcoin_transaction_summary' },
+    { id: 'book_transaction_bytes', name: 'Mean transaction size in bytes / Total transactions size in bytes', summary: '统计单笔交易平均字节数及全部交易字节量。', formula: '总量=Σ样本；均值=总量/样本数；中位数=排序后中间值', meaning: '统计单笔交易平均字节数。', example: '样本字节统计', signals: '观察数据负载', pitfalls: '不等于虚拟字节', related: [], code_url: 'https://example.test/src/book.rs', implementation: 'src/book.rs::market_bitcoin_transaction_summary' },
+  ];
+  const transactions = [
+    { txid: '1'.repeat(64), fee_sats: 1, size_bytes: 180 },
+    { txid: '2'.repeat(64), fee_sats: 3, size_bytes: 220 },
+    { txid: '3'.repeat(64), fee_sats: 4, size_bytes: 260 },
+    { txid: '4'.repeat(64), fee_sats: 7, size_bytes: 310 },
+    { txid: '5'.repeat(64), fee_sats: 12, size_bytes: 500 },
+    { txid: '6'.repeat(64), fee_sats: 20, size_bytes: 900 },
+  ];
+  const sample = { network: 'bitcoin_mainnet', provider: 'Blockstream Esplora', endpoint: 'https://blockstream.info/api/block/' + 'a'.repeat(64) + '/txs/0', fetched_at: '2026-09-23T00:00:00Z', block_hash: 'a'.repeat(64), block_height: 840000, block_time: 1_700_000_000, page_start: 0, returned_count: 7, analyzed_count: 6, excluded_coinbase_count: 1, scope: 'first_page_non_coinbase_transactions', observed_newer_blocks: 6, confirmation_note: 'six newer blocks in this observed window; this is not a consensus-finality claim' };
+  await page.route('**/api/knowledge', route => route.fulfill({ json: { total: concepts.length, categories: { '衍生品与链上': concepts } } }));
+  await page.route('**/api/practice', async route => {
+    if (route.request().method() === 'GET') {
+      return route.fulfill({ json: { concepts: concepts.map(concept => ({ ...concept, category: '衍生品与链上', input_kind: 'market_bars', inputs: [], notes: ['服务器读取固定区块交易首页'], plan: { markets: ['crypto'], modules: ['data'], required_datasets: ['server_fetched_bitcoin_mainnet_pinned_block_transaction_first_page'], source_policy: 'real_required', goal: '固定区块首页样本' } })), modules: ['data'], total: concepts.length } });
+    }
+    const request = route.request().postDataJSON();
+    expect(request).toMatchObject({ module: 'data', source: 'binance', symbol: 'BTCUSDT', limit: 25, inputs: {} });
+    expect(request.bars).toBeUndefined();
+    const fees = request.concept_id === 'book_transaction_fees';
+    const values = transactions.map(tx => fees ? tx.fee_sats : tx.size_bytes);
+    const total = values.reduce((sum, value) => sum + value, 0);
+    const sorted = [...values].sort((a, b) => a - b);
+    const median = (sorted[2] + sorted[3]) / 2;
+    return route.fulfill({ json: { concept_id: request.concept_id, input_kind: 'market_bars', status: 'computed', reason: null, provenance: 'server_fetched_bitcoin_transaction_sample', values: fees ? { sample_count: values.length, total_fee_sats: total, mean_fee_sats: total / values.length, median_fee_sats: median } : { sample_count: values.length, total_size_bytes: total, mean_size_bytes: total / values.length, median_size_bytes: median }, units: {}, series: [], notes: [], module: 'data', source: 'binance', symbol: 'BTCUSDT', bars: [], transaction_sample: sample, transactions } });
+  });
+
+  await page.goto('/');
+  const feeCard = page.locator('.ax-kb-card').filter({ hasText: concepts[0].name });
+  await expect(feeCard).toHaveCount(1);
+  await feeCard.getByRole('button', { name: '在数据探索中实践' }).click();
+  await expect(page).toHaveURL(/\/data\?concept=book_transaction_fees&source=binance/);
+  const panel = page.getByLabel('概念实践');
+  await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  await expect(panel.locator('.ax-transaction-sample')).toBeVisible();
+  await expect(panel.locator('svg[role="img"]')).toBeVisible();
+  await expect(panel.locator('[data-txid]')).toHaveCount(transactions.length);
+  await expect(panel).toContainText('Bitcoin 主网');
+  await expect(panel).toContainText('区块 #840,000');
+  await expect(panel).toContainText('排除 1 笔 coinbase');
+  await expect(panel.locator('a[href*="blockstream.info/block/"]')).toHaveAttribute('href', `https://blockstream.info/block/${sample.block_hash}`);
+  await expect(panel).toContainText('合计 47 sat');
+  await expect(panel).toContainText('均值 7.83 sat');
+  await expect(panel).toContainText('中位数 5.5 sat');
+  await expect(panel.locator('.ax-transaction-sample')).toHaveScreenshot('transaction-sample-dark.png', { maxDiffPixelRatio: 0.02 });
+  await page.getByLabel('切换到浅色模式').click();
+  await expect(panel.locator('.ax-transaction-sample')).toHaveScreenshot('transaction-sample-light.png', { maxDiffPixelRatio: 0.02 });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => panel.locator('.ax-transaction-scroll').evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+  await expect(panel.locator('.ax-transaction-sample')).toHaveScreenshot('transaction-sample-mobile.png', { maxDiffPixelRatio: 0.02 });
+
+  await page.goto('/data?concept=book_transaction_bytes&source=binance');
+  await page.getByLabel('概念实践').getByRole('button', { name: '运行实践' }).click();
+  const bytesPanel = page.getByLabel('概念实践');
+  await expect(bytesPanel.locator('.ax-transaction-sample')).toBeVisible();
+  await expect(bytesPanel.locator('[data-txid]')).toHaveCount(transactions.length);
+  await expect(bytesPanel).toContainText('合计 2,370 字节');
+  await expect(bytesPanel).toContainText('均值 395 字节');
+  await expect(bytesPanel).toContainText('中位数 285 字节');
+});
+
 test('changing the backtest market discards a delayed result from the previous market', async ({ page }) => {
   let releaseFirst: () => void = () => {};
   const firstHeld = new Promise<void>(resolve => { releaseFirst = resolve; });

@@ -130,7 +130,7 @@ export interface PracticeResult {
   status: 'computed' | 'undefined';
   reason: string | null;
   input_kind: PracticeConcept['input_kind'];
-  provenance: 'provided_market_bars' | 'provided_result_context' | 'editable_teaching_inputs' | 'server_fetched_provisional_snapshot' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_spot_order_book' | 'server_fetched_completed_stock_daily_bars' | 'server_fetched_binance_recent_trades' | 'server_fetched_bitcoin_block_snapshot';
+  provenance: 'provided_market_bars' | 'provided_result_context' | 'editable_teaching_inputs' | 'server_fetched_provisional_snapshot' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_spot_order_book' | 'server_fetched_completed_stock_daily_bars' | 'server_fetched_binance_recent_trades' | 'server_fetched_bitcoin_block_snapshot' | 'server_fetched_bitcoin_transaction_sample';
   values: Record<string, number | null>;
   units?: Record<string, string>;
   series: Array<{ name: string; unit?: string; values: Array<number | null> }>;
@@ -148,6 +148,8 @@ export interface PracticeResult {
   profile_levels?: Array<{ price: number; volume: number; in_value_area: boolean; is_poc: boolean }>;
   block_snapshot?: { network: 'bitcoin_mainnet'; provider: string; endpoint: string; fetched_at: string; first_height: number; last_height: number; observed_block_count: number; first_hash: string; last_hash: string };
   blocks?: Array<{ height: number; hash: string; previous_hash: string; timestamp: string | number; size_bytes: number }>;
+  transaction_sample?: { network: 'bitcoin_mainnet'; provider: string; endpoint: string; fetched_at: string; block_hash: string; block_height: number; block_time: string | number; page_start: 0; returned_count: number; analyzed_count: number; excluded_coinbase_count: number; scope: 'first_page_non_coinbase_transactions'; observed_newer_blocks: number; confirmation_note: string };
+  transactions?: Array<{ txid: string; fee_sats: number; size_bytes: number }>;
   asset_units?: { base_asset: string; quote_asset: string };
   levels?: { bids: Array<{ price: number; quantity: number }>; asks: Array<{ price: number; quantity: number }> };
   depth_snapshot?: { source: string; endpoint: string; symbol: string; depth_limit: number; update_id: number; timestamp: null; timestamp_note: string };

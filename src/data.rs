@@ -489,6 +489,88 @@ fn parse_bitcoin_block_snapshot(raw: &serde_json::Value) -> Result<Vec<BitcoinBl
     Ok(blocks)
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct BitcoinTransaction {
+    pub txid: String,
+    pub fee_sats: u64,
+    pub size_bytes: u64,
+}
+#[derive(Clone, Debug, Serialize)]
+pub struct BitcoinTransactionSample {
+    pub provider: String,
+    pub endpoint: String,
+    pub fetched_at: DateTime<Utc>,
+    pub block: BitcoinBlock,
+    pub returned_count: usize,
+    pub excluded_coinbase_count: usize,
+    pub transactions: Vec<BitcoinTransaction>,
+}
+fn parse_bitcoin_transactions(
+    raw: &serde_json::Value,
+    block: &BitcoinBlock,
+) -> Result<(usize, usize, Vec<BitcoinTransaction>)> {
+    let rows = raw
+        .as_array()
+        .context("Bitcoin transaction response must be an array")?;
+    anyhow::ensure!(
+        !rows.is_empty() && rows.len() <= 25,
+        "Bitcoin transaction first page must contain 1..25 rows"
+    );
+    let mut seen = std::collections::HashSet::new();
+    let mut excluded = 0;
+    let mut out = Vec::new();
+    for (index, row) in rows.iter().enumerate() {
+        let vin = row["vin"]
+            .as_array()
+            .context("transaction vin must be a nonempty array")?;
+        anyhow::ensure!(!vin.is_empty(), "transaction vin must be nonempty");
+        let txid = row["txid"]
+            .as_str()
+            .context("Bitcoin transaction txid must be a string")?
+            .to_owned();
+        anyhow::ensure!(
+            valid_bitcoin_hash(&txid) && seen.insert(txid.clone()),
+            "Bitcoin transaction txids must be unique hashes"
+        );
+        anyhow::ensure!(
+            row["status"]["confirmed"].as_bool() == Some(true)
+                && row["status"]["block_hash"].as_str() == Some(&block.hash)
+                && row["status"]["block_height"].as_u64() == Some(block.height),
+            "transaction must be confirmed in the pinned block"
+        );
+        let coinbase = vin.first().and_then(|x| x["is_coinbase"].as_bool()) == Some(true);
+        if coinbase {
+            anyhow::ensure!(
+                index == 0,
+                "coinbase must be the first transaction on page zero"
+            );
+            excluded += 1;
+            continue;
+        }
+        anyhow::ensure!(
+            index != 0,
+            "first transaction on page zero must be coinbase"
+        );
+        let fee_sats = row["fee"]
+            .as_u64()
+            .context("transaction fee must be unsigned sats")?;
+        let size_bytes = row["size"]
+            .as_u64()
+            .filter(|x| *x > 0)
+            .context("transaction size must be positive bytes")?;
+        out.push(BitcoinTransaction {
+            txid,
+            fee_sats,
+            size_bytes,
+        });
+    }
+    anyhow::ensure!(
+        excluded == 1 && out.len() <= 24,
+        "first page must contain 1..24 non-coinbase transactions and at most one coinbase"
+    );
+    Ok((rows.len(), excluded, out))
+}
+
 fn parse_binance_depth_snapshot(raw: &serde_json::Value) -> Result<BinanceDepthSnapshot> {
     let update_id = raw["lastUpdateId"]
         .as_u64()
@@ -617,6 +699,68 @@ impl HttpFeed {
                 .fetch_bitcoin_blocks_from("mempool_esplora", &self.bitcoin_mempool_url)
                 .await
                 .with_context(|| format!("Blockstream failed: {primary}")),
+        }
+    }
+
+    async fn fetch_bitcoin_transactions_from(
+        &self,
+        provider: &str,
+        base: &str,
+        block: &BitcoinBlock,
+    ) -> Result<BitcoinTransactionSample> {
+        let base = base.trim_end_matches('/');
+        let endpoint = format!("{}/api/block/{}/txs/0", base, block.hash);
+        let raw: serde_json::Value = self
+            .client
+            .get(&endpoint)
+            .send()
+            .await
+            .context("Bitcoin transaction request failed")?
+            .error_for_status()
+            .context("Bitcoin transaction response failed")?
+            .json()
+            .await
+            .context("invalid Bitcoin transactions JSON")?;
+        let (returned_count, excluded_coinbase_count, transactions) =
+            parse_bitcoin_transactions(&raw, block)?;
+        Ok(BitcoinTransactionSample {
+            provider: provider.into(),
+            endpoint,
+            fetched_at: Utc::now(),
+            block: block.clone(),
+            returned_count,
+            excluded_coinbase_count,
+            transactions,
+        })
+    }
+    pub async fn fetch_bitcoin_mainnet_transaction_sample(
+        &self,
+    ) -> Result<BitcoinTransactionSample> {
+        let snapshot = self.fetch_bitcoin_mainnet_blocks().await?;
+        let block = snapshot
+            .blocks
+            .get(3)
+            .context("validated Bitcoin snapshot lacks confirmation-depth block")?;
+        let primary = &snapshot.provider;
+        let primary_base = if primary == "blockstream_esplora" {
+            &self.bitcoin_esplora_url
+        } else {
+            &self.bitcoin_mempool_url
+        };
+        match self
+            .fetch_bitcoin_transactions_from(primary, primary_base, block)
+            .await
+        {
+            Ok(sample) => Ok(sample),
+            Err(error) if primary == "blockstream_esplora" => self
+                .fetch_bitcoin_transactions_from(
+                    "mempool_esplora",
+                    &self.bitcoin_mempool_url,
+                    block,
+                )
+                .await
+                .with_context(|| format!("Blockstream transaction page failed: {error}")),
+            Err(error) => Err(error),
         }
     }
 
@@ -2291,6 +2435,44 @@ mod bitcoin_block_snapshot_tests {
         cases.push(bad_hash);
         for value in cases {
             assert!(parse_bitcoin_block_snapshot(&value).is_err());
+        }
+    }
+}
+
+#[cfg(test)]
+mod bitcoin_transaction_parser_tests {
+    use super::*;
+    use serde_json::json;
+    fn h(n: u8) -> String {
+        format!("{n:064x}")
+    }
+    fn block() -> BitcoinBlock {
+        BitcoinBlock {
+            height: 9,
+            hash: h(9),
+            previous_hash: h(8),
+            timestamp: Utc::now(),
+            size_bytes: 1,
+        }
+    }
+    fn rows() -> serde_json::Value {
+        json!([{"txid":h(1),"fee":0,"size":100,"vin":[{"is_coinbase":true}],"status":{"confirmed":true,"block_hash":h(9),"block_height":9}},{"txid":h(2),"fee":7,"size":101,"vin":[{}],"status":{"confirmed":true,"block_hash":h(9),"block_height":9}}])
+    }
+    #[test]
+    fn transaction_parser_validates_scope_membership_and_sizes() {
+        let b = block();
+        let (_, coinbase, txs) = parse_bitcoin_transactions(&rows(), &b).unwrap();
+        assert_eq!(coinbase, 1);
+        assert_eq!(txs[0].fee_sats, 7);
+        for f in [
+            |v: &mut serde_json::Value| v[1]["status"]["confirmed"] = json!(false),
+            |v: &mut serde_json::Value| v[1]["status"]["block_hash"] = json!(h(3)),
+            |v: &mut serde_json::Value| v[1]["size"] = json!(0),
+            |v: &mut serde_json::Value| v[1]["txid"] = json!(h(1)),
+        ] {
+            let mut v = rows();
+            f(&mut v);
+            assert!(parse_bitcoin_transactions(&v, &b).is_err());
         }
     }
 }

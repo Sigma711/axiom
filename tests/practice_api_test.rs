@@ -76,6 +76,8 @@ async fn data_practice_accepts_only_concepts_with_a_data_plan() {
                     | "book_pitfall_order_imbalance"
                     | "book_block_height"
                     | "book_block_size"
+                    | "book_transaction_fees"
+                    | "book_transaction_bytes"
             )
     }) {
         let mut first: Option<Value> = None;
@@ -1948,6 +1950,81 @@ async fn bitcoin_block_practices_use_server_mainnet_snapshot_and_reject_client_d
         json!({"concept_id":"book_block_height","module":"data","source":"binance","symbol":"BTCUSDT","bars":[],"inputs":{}}),
         json!({"concept_id":"book_block_height","module":"data","source":"binance","symbol":"BTCUSDT","inputs":{"height":1}}),
         json!({"concept_id":"book_block_height","module":"data","source":"binance","symbol":"BTCUSDT","limit":9,"inputs":{}}),
+    ] {
+        let (status, _) = request(&app, "/api/practice", bad).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+    server.abort();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+async fn mock_transaction_blocks() -> Json<Value> {
+    Json(json!((0..10).map(|i| {
+        let height = 900_009 - i;
+        json!({"id":format!("{height:064x}"),"height":height,"previousblockhash":format!("{:064x}",height-1),"timestamp":1_700_000_000+i*10,"size":1000})
+    }).collect::<Vec<_>>()))
+}
+async fn mock_pinned_transactions(
+    axum::extract::Path(hash): axum::extract::Path<String>,
+) -> Json<Value> {
+    assert_eq!(hash, format!("{:064x}", 900_003));
+    Json(json!([
+        {"txid":format!("{:064x}",1),"fee":0,"size":150,"vin":[{"is_coinbase":true}],"status":{"confirmed":true,"block_hash":format!("{:064x}",900_003),"block_height":900_003}},
+        {"txid":format!("{:064x}",2),"fee":5,"size":101,"vin":[{}],"status":{"confirmed":true,"block_hash":format!("{:064x}",900_003),"block_height":900_003}},
+        {"txid":format!("{:064x}",3),"fee":9,"size":203,"vin":[{}],"status":{"confirmed":true,"block_hash":format!("{:064x}",900_003),"block_height":900_003}}
+    ]))
+}
+#[tokio::test]
+async fn bitcoin_transaction_practices_use_pinned_server_sample_and_reject_client_data() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            axum::Router::new()
+                .route("/api/blocks", get(mock_transaction_blocks))
+                .route("/api/block/:hash/txs/0", get(mock_pinned_transactions)),
+        )
+        .await
+        .unwrap()
+    });
+    let dir = PathBuf::from(format!(
+        "target/practice-transactions-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let mut state = AppState::new(default_config(), dir.clone());
+    let mut feed = HttpFeed::new(&dir);
+    feed.bitcoin_esplora_url = format!("http://127.0.0.1:{port}");
+    feed.bitcoin_mempool_url = format!("http://127.0.0.1:{port}");
+    state.feed = Arc::new(feed);
+    let app = api::router(Arc::new(state));
+    for id in ["book_transaction_fees", "book_transaction_bytes"] {
+        let(status,body)=request(&app,"/api/practice",json!({"concept_id":id,"module":"data","source":"binance","symbol":"BTCUSDT","limit":25,"inputs":{}})).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["transaction_sample"]["network"], "bitcoin_mainnet");
+        assert_eq!(body["transaction_sample"]["block_height"], 900003);
+        assert_eq!(body["transaction_sample"]["observed_newer_blocks"], 6);
+        assert_eq!(body["transaction_sample"]["returned_count"], 3);
+        assert_eq!(body["transaction_sample"]["excluded_coinbase_count"], 1);
+        assert_eq!(body["transaction_sample"]["analyzed_count"], 2);
+        assert_eq!(
+            body["transactions"],
+            json!([{"txid":format!("{:064x}",2),"fee_sats":5,"size_bytes":101},{"txid":format!("{:064x}",3),"fee_sats":9,"size_bytes":203}])
+        );
+        if id == "book_transaction_fees" {
+            assert_eq!(body["values"]["total_fee_sats"], 14);
+            assert_eq!(body["values"]["median_fee_sats"], 7.0);
+        } else {
+            assert_eq!(body["values"]["total_size_bytes"], 304);
+            assert_eq!(body["values"]["median_size_bytes"], 152.0);
+        }
+    }
+    for bad in [
+        json!({"concept_id":"book_transaction_fees","module":"data","source":"synthetic","symbol":"BTCUSDT","inputs":{}}),
+        json!({"concept_id":"book_transaction_fees","module":"data","source":"binance","symbol":"ETHUSDT","inputs":{}}),
+        json!({"concept_id":"book_transaction_fees","module":"data","source":"binance","symbol":"BTCUSDT","limit":24,"inputs":{}}),
+        json!({"concept_id":"book_transaction_fees","module":"data","source":"binance","symbol":"BTCUSDT","bars":[],"inputs":{}}),
+        json!({"concept_id":"book_transaction_fees","module":"data","source":"binance","symbol":"BTCUSDT","inputs":{"fee":1}}),
     ] {
         let (status, _) = request(&app, "/api/practice", bad).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);

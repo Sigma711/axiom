@@ -50,7 +50,13 @@ fn address_deduplication_and_net_issuance_are_not_transaction_counts() {
 #[test]
 fn every_supplement_has_working_inputs_and_units() {
     for concept in supplement::catalog() {
-        if matches!(concept.id.as_str(), "book_block_height" | "book_block_size") {
+        if matches!(
+            concept.id.as_str(),
+            "book_block_height"
+                | "book_block_size"
+                | "book_transaction_fees"
+                | "book_transaction_bytes"
+        ) {
             assert_eq!(concept.input_kind, "market_bars");
             assert!(concept.inputs.is_empty());
             continue;

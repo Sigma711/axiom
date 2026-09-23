@@ -829,3 +829,42 @@ fn bitcoin_block_snapshot_summary_uses_ten_linked_blocks_and_correct_byte_math()
     broken[4].previous_hash = "wrong".into();
     assert!(book::market_bitcoin_block_summary("book_block_size", &broken).is_err());
 }
+
+#[test]
+fn bitcoin_transaction_summary_uses_integer_total_and_deterministic_median() {
+    use axiom::data::BitcoinTransaction;
+    let txs = vec![
+        BitcoinTransaction {
+            txid: format!("{:064x}", 1),
+            fee_sats: 0,
+            size_bytes: 300,
+        },
+        BitcoinTransaction {
+            txid: format!("{:064x}", 2),
+            fee_sats: 9,
+            size_bytes: 100,
+        },
+        BitcoinTransaction {
+            txid: format!("{:064x}", 3),
+            fee_sats: 3,
+            size_bytes: 200,
+        },
+    ];
+    let fees = book::market_bitcoin_transaction_summary("book_transaction_fees", &txs).unwrap();
+    assert_eq!(fees["values"]["total_fee_sats"], 12);
+    assert_eq!(fees["values"]["median_fee_sats"], 3.0);
+    assert_eq!(fees["source_ids"][0], "appendix_085");
+    let sizes = book::market_bitcoin_transaction_summary("book_transaction_bytes", &txs).unwrap();
+    assert_eq!(sizes["values"]["total_size_bytes"], 600);
+    assert_eq!(sizes["values"]["median_size_bytes"], 200.0);
+    assert_eq!(sizes["source_ids"][0], "appendix_086");
+}
+
+#[test]
+fn bitcoin_transaction_summary_preserves_coinbase_only_as_insufficient_data() {
+    let out = book::market_bitcoin_transaction_summary("book_transaction_fees", &[]).unwrap();
+    assert_eq!(out["status"], "insufficient_data");
+    assert_eq!(out["values"]["sample_count"], 0);
+    assert!(out["values"]["mean_fee_sats"].is_null());
+    assert_eq!(out["source_ids"][0], "appendix_085");
+}
