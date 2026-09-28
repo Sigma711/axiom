@@ -1,0 +1,1342 @@
+{
+  "concepts": [
+    {
+      "category": "行业",
+      "id": "bank_nim",
+      "input_kind": "industry_case",
+      "inputs": [],
+      "name": "银行净息差 NIM",
+      "notes": "固定发行人历史披露案例：服务器验证官方原始 PDF 的完整字节数与 SHA-256 后，按逐字段页码和实体口径计算；不接受当前行情、任意 symbol、selected_dataset 或手填事实。",
+      "plan": {
+        "fixed_source": "issuer_disclosure",
+        "fixed_symbol": "2318.HK",
+        "goal": "服务器取得固定发行人历史披露 PDF，严格核对完整字节数与 SHA-256 后，按逐字段页码和实体口径计算行业指标。它不是当前行情、全市场行业数据库或任意股票查询。",
+        "markets": [
+          "issuer_disclosure"
+        ],
+        "modules": [
+          "data"
+        ],
+        "required_datasets": [
+          "server_verified_issuer_filing_pdf",
+          "embedded_page_cited_industry_facts"
+        ],
+        "source_policy": "real_required"
+      }
+    },
+    {
+      "category": "原书行业专属指标",
+      "id": "book_bank_nim",
+      "input_kind": "industry_case",
+      "inputs": [],
+      "name": "银行净息差 NIM",
+      "notes": "固定发行人历史披露案例：服务器验证官方原始 PDF 的完整字节数与 SHA-256 后，按逐字段页码和实体口径计算；不接受当前行情、任意 symbol、selected_dataset 或手填事实。",
+      "plan": {
+        "fixed_source": "issuer_disclosure",
+        "fixed_symbol": "2318.HK",
+        "goal": "服务器取得固定发行人历史披露 PDF，严格核对完整字节数与 SHA-256 后，按逐字段页码和实体口径计算行业指标。它不是当前行情、全市场行业数据库或任意股票查询。",
+        "markets": [
+          "issuer_disclosure"
+        ],
+        "modules": [
+          "data"
+        ],
+        "required_datasets": [
+          "server_verified_issuer_filing_pdf",
+          "embedded_page_cited_industry_facts"
+        ],
+        "source_policy": "real_required"
+      }
+    },
+    {
+      "category": "原书行业专属指标",
+      "id": "book_bank_npl_ratio",
+      "input_kind": "industry_case",
+      "inputs": [],
+      "name": "银行不良贷款率 NPL",
+      "notes": "固定发行人历史披露案例：服务器验证官方原始 PDF 的完整字节数与 SHA-256 后，按逐字段页码和实体口径计算；不接受当前行情、任意 symbol、selected_dataset 或手填事实。",
+      "plan": {
+        "fixed_source": "issuer_disclosure",
+        "fixed_symbol": "2318.HK",
+        "goal": "服务器取得固定发行人历史披露 PDF，严格核对完整字节数与 SHA-256 后，按逐字段页码和实体口径计算行业指标。它不是当前行情、全市场行业数据库或任意股票查询。",
+        "markets": [
+          "issuer_disclosure"
+        ],
+        "modules": [
+          "data"
+        ],
+        "required_datasets": [
+          "server_verified_issuer_filing_pdf",
+          "embedded_page_cited_industry_facts"
+        ],
+        "source_policy": "real_required"
+      }
+    },
+    {
+      "category": "原书行业专属指标",
+      "id": "book_bank_cost_income",
+      "input_kind": "industry_case",
+      "inputs": [],
+      "name": "银行成本收入比",
+      "notes": "固定发行人历史披露案例：服务器验证官方原始 PDF 的完整字节数与 SHA-256 后，按逐字段页码和实体口径计算；不接受当前行情、任意 symbol、selected_dataset 或手填事实。",
+      "plan": {
+        "fixed_source": "issuer_disclosure",
+        "fixed_symbol": "2318.HK",
+        "goal": "服务器取得固定发行人历史披露 PDF，严格核对完整字节数与 SHA-256 后，按逐字段页码和实体口径计算行业指标。它不是当前行情、全市场行业数据库或任意股票查询。",
+        "markets": [
+          "issuer_disclosure"
+        ],
+        "modules": [
+          "data"
+        ],
+        "required_datasets": [
+          "server_verified_issuer_filing_pdf",
+          "embedded_page_cited_industry_facts"
+        ],
+        "source_policy": "real_required"
+      }
+    },
+    {
+      "category": "原书行业专属指标",
+      "id": "book_insurance_solvency_ratio",
+      "input_kind": "industry_case",
+      "inputs": [],
+      "name": "保险偿付能力充足率",
+      "notes": "固定发行人历史披露案例：服务器验证官方原始 PDF 的完整字节数与 SHA-256 后，按逐字段页码和实体口径计算；不接受当前行情、任意 symbol、selected_dataset 或手填事实。",
+      "plan": {
+        "fixed_source": "issuer_disclosure",
+        "fixed_symbol": "2318.HK",
+        "goal": "服务器取得固定发行人历史披露 PDF，严格核对完整字节数与 SHA-256 后，按逐字段页码和实体口径计算行业指标。它不是当前行情、全市场行业数据库或任意股票查询。",
+        "markets": [
+          "issuer_disclosure"
+        ],
+        "modules": [
+          "data"
+        ],
+        "required_datasets": [
+          "server_verified_issuer_filing_pdf",
+          "embedded_page_cited_industry_facts"
+        ],
+        "source_policy": "real_required"
+      }
+    },
+    {
+      "category": "原书行业专属指标",
+      "id": "book_reit_occupancy",
+      "input_kind": "industry_case",
+      "inputs": [],
+      "name": "REIT 入住率",
+      "notes": "固定发行人历史披露案例：服务器验证官方原始 PDF 的完整字节数与 SHA-256 后，按逐字段页码和实体口径计算；不接受当前行情、任意 symbol、selected_dataset 或手填事实。",
+      "plan": {
+        "fixed_source": "issuer_disclosure",
+        "fixed_symbol": "O",
+        "goal": "服务器取得固定发行人历史披露 PDF，严格核对完整字节数与 SHA-256 后，按逐字段页码和实体口径计算行业指标。它不是当前行情、全市场行业数据库或任意股票查询。",
+        "markets": [
+          "issuer_disclosure"
+        ],
+        "modules": [
+          "data"
+        ],
+        "required_datasets": [
+          "server_verified_issuer_filing_pdf",
+          "embedded_page_cited_industry_facts"
+        ],
+        "source_policy": "real_required"
+      }
+    },
+    {
+      "category": "原书行业专属指标",
+      "id": "book_saas_arr",
+      "input_kind": "industry_case",
+      "inputs": [],
+      "name": "SaaS ARR",
+      "notes": "固定发行人历史披露案例：服务器验证官方原始 PDF 的完整字节数与 SHA-256 后，按逐字段页码和实体口径计算；不接受当前行情、任意 symbol、selected_dataset 或手填事实。",
+      "plan": {
+        "fixed_source": "issuer_disclosure",
+        "fixed_symbol": "SHOP",
+        "goal": "服务器取得固定发行人历史披露 PDF，严格核对完整字节数与 SHA-256 后，按逐字段页码和实体口径计算行业指标。它不是当前行情、全市场行业数据库或任意股票查询。",
+        "markets": [
+          "issuer_disclosure"
+        ],
+        "modules": [
+          "data"
+        ],
+        "required_datasets": [
+          "server_verified_issuer_filing_pdf",
+          "embedded_page_cited_industry_facts"
+        ],
+        "source_policy": "real_required"
+      }
+    },
+    {
+      "category": "原书行业专属指标",
+      "id": "book_saas_rule_of_40",
+      "input_kind": "industry_case",
+      "inputs": [],
+      "name": "SaaS Rule of 40",
+      "notes": "固定发行人历史披露案例：服务器验证官方原始 PDF 的完整字节数与 SHA-256 后，按逐字段页码和实体口径计算；不接受当前行情、任意 symbol、selected_dataset 或手填事实。",
+      "plan": {
+        "fixed_source": "issuer_disclosure",
+        "fixed_symbol": "SHOP",
+        "goal": "服务器取得固定发行人历史披露 PDF，严格核对完整字节数与 SHA-256 后，按逐字段页码和实体口径计算行业指标。它不是当前行情、全市场行业数据库或任意股票查询。",
+        "markets": [
+          "issuer_disclosure"
+        ],
+        "modules": [
+          "data"
+        ],
+        "required_datasets": [
+          "server_verified_issuer_filing_pdf",
+          "embedded_page_cited_industry_facts"
+        ],
+        "source_policy": "real_required"
+      }
+    },
+    {
+      "category": "原书行业专属指标",
+      "id": "book_platform_gmv",
+      "input_kind": "industry_case",
+      "inputs": [],
+      "name": "平台 GMV",
+      "notes": "固定发行人历史披露案例：服务器验证官方原始 PDF 的完整字节数与 SHA-256 后，按逐字段页码和实体口径计算；不接受当前行情、任意 symbol、selected_dataset 或手填事实。",
+      "plan": {
+        "fixed_source": "issuer_disclosure",
+        "fixed_symbol": "SHOP",
+        "goal": "服务器取得固定发行人历史披露 PDF，严格核对完整字节数与 SHA-256 后，按逐字段页码和实体口径计算行业指标。它不是当前行情、全市场行业数据库或任意股票查询。",
+        "markets": [
+          "issuer_disclosure"
+        ],
+        "modules": [
+          "data"
+        ],
+        "required_datasets": [
+          "server_verified_issuer_filing_pdf",
+          "embedded_page_cited_industry_facts"
+        ],
+        "source_policy": "real_required"
+      }
+    },
+    {
+      "category": "原书行业专属指标",
+      "id": "book_platform_take_rate",
+      "input_kind": "industry_case",
+      "inputs": [],
+      "name": "平台 Take Rate",
+      "notes": "固定发行人历史披露案例：服务器验证官方原始 PDF 的完整字节数与 SHA-256 后，按逐字段页码和实体口径计算；不接受当前行情、任意 symbol、selected_dataset 或手填事实。",
+      "plan": {
+        "fixed_source": "issuer_disclosure",
+        "fixed_symbol": "EBAY",
+        "goal": "服务器取得固定发行人历史披露 PDF，严格核对完整字节数与 SHA-256 后，按逐字段页码和实体口径计算行业指标。它不是当前行情、全市场行业数据库或任意股票查询。",
+        "markets": [
+          "issuer_disclosure"
+        ],
+        "modules": [
+          "data"
+        ],
+        "required_datasets": [
+          "server_verified_issuer_filing_pdf",
+          "embedded_page_cited_industry_facts"
+        ],
+        "source_policy": "real_required"
+      }
+    }
+  ],
+  "results": {
+    "bank_nim": {
+      "bar_origin": "server_verified_issuer_filing_pdf",
+      "bars": [],
+      "concept_id": "bank_nim",
+      "context": "historical_industry_disclosure",
+      "industry_case": {
+        "audit_boundary": "Management discussion facts on PDF pages 57-58 are outside EY's audit opinion covering the financial statements",
+        "audited": false,
+        "bytes": 14886158,
+        "case_id": "ping_an_group_fy2024_annual_report",
+        "issuer": {
+          "alternate_tickers": [
+            "601318.SS"
+          ],
+          "metric_entity": "Ping An Bank",
+          "name": "Ping An Insurance (Group) Company of China, Ltd.",
+          "reporting_entity": "Ping An Insurance (Group) Company of China, Ltd. and its subsidiaries",
+          "ticker": "2318.HK"
+        },
+        "pdf_pages": [
+          57
+        ],
+        "period": {
+          "end": "2024-12-31",
+          "label": "FY2024",
+          "start": "2024-01-01"
+        },
+        "published": "2025-03-19",
+        "sha256": "62a5bd793ef9a787cc95750d65e52803aa58fa424b01d94e754ea0120d5be8a3",
+        "source_kind": "issuer_official_annual_report_pdf",
+        "status": "Annual report containing audited financial statements; each metric states whether its cited page is inside the audit boundary",
+        "url": "https://pagroup.pingan.com/resource/pingan/IR-Docs/2025/pingan-ar24-report.pdf",
+        "verification": {
+          "matched_bytes": 14886158,
+          "matched_sha256": "62a5bd793ef9a787cc95750d65e52803aa58fa424b01d94e754ea0120d5be8a3",
+          "requested_url": "https://pagroup.pingan.com/resource/pingan/IR-Docs/2025/pingan-ar24-report.pdf",
+          "status": "verified_immutable_cache",
+          "verified_at": "2026-09-28T18:39:40.022318428Z"
+        }
+      },
+      "industry_facts": {
+        "calculation": {
+          "formula": "NIM=净利息收入/平均生息资产",
+          "operands": [
+            "net_interest_income",
+            "average_earning_assets"
+          ],
+          "result_key": "net_interest_margin",
+          "symbol_mapping": {
+            "average_earning_assets": "average_earning_assets",
+            "net_interest_income": "net_interest_income"
+          }
+        },
+        "currency": "CNY",
+        "definitions": {
+          "case_boundary": "Fixed issuer and reporting period; never generalized from the caller's selected symbol or dataset.",
+          "metric": "平均生息资产与净利息收入均来自 Ping An Bank 的同一 FY2024 管理层讨论表。"
+        },
+        "field_provenance": {
+          "average_earning_assets": {
+            "kind": "reported",
+            "note": "Issuer-reported as average interest-earning assets",
+            "pdf_page": 57
+          },
+          "net_interest_income": {
+            "kind": "reported",
+            "note": "Issuer-reported as net interest income",
+            "pdf_page": 57
+          },
+          "net_interest_margin": {
+            "kind": "derived",
+            "note": "Calculated from reviewed reported facts using NIM=净利息收入/平均生息资产"
+          }
+        },
+        "reported_facts": [
+          {
+            "key": "net_interest_income",
+            "label": "net interest income",
+            "pdf_page": 57,
+            "unit": "CNY millions",
+            "value": 93427.0
+          },
+          {
+            "key": "average_earning_assets",
+            "label": "average interest-earning assets",
+            "pdf_page": 57,
+            "unit": "CNY millions",
+            "value": 4994494.0
+          }
+        ],
+        "scale": "millions"
+      },
+      "input_kind": "industry_case",
+      "inputs": {},
+      "module": "data",
+      "notes": [
+        "这是固定发行人与固定报告期的历史披露案例，不是当前行情、全市场行业数据库或任意股票查询。",
+        "平均生息资产与净利息收入均来自 Ping An Bank 的同一 FY2024 管理层讨论表。"
+      ],
+      "provenance": "verified_original_issuer_disclosure",
+      "reason": null,
+      "series": [],
+      "source": "issuer_disclosure",
+      "status": "computed",
+      "symbol": "2318.HK",
+      "units": {
+        "net_interest_margin": "fraction"
+      },
+      "values": {
+        "net_interest_margin": 0.01870599904614962
+      }
+    },
+    "book_bank_nim": {
+      "bar_origin": "server_verified_issuer_filing_pdf",
+      "bars": [],
+      "concept_id": "book_bank_nim",
+      "context": "historical_industry_disclosure",
+      "industry_case": {
+        "audit_boundary": "Management discussion facts on PDF pages 57-58 are outside EY's audit opinion covering the financial statements",
+        "audited": false,
+        "bytes": 14886158,
+        "case_id": "ping_an_group_fy2024_annual_report",
+        "issuer": {
+          "alternate_tickers": [
+            "601318.SS"
+          ],
+          "metric_entity": "Ping An Bank",
+          "name": "Ping An Insurance (Group) Company of China, Ltd.",
+          "reporting_entity": "Ping An Insurance (Group) Company of China, Ltd. and its subsidiaries",
+          "ticker": "2318.HK"
+        },
+        "pdf_pages": [
+          57
+        ],
+        "period": {
+          "end": "2024-12-31",
+          "label": "FY2024",
+          "start": "2024-01-01"
+        },
+        "published": "2025-03-19",
+        "sha256": "62a5bd793ef9a787cc95750d65e52803aa58fa424b01d94e754ea0120d5be8a3",
+        "source_kind": "issuer_official_annual_report_pdf",
+        "status": "Annual report containing audited financial statements; each metric states whether its cited page is inside the audit boundary",
+        "url": "https://pagroup.pingan.com/resource/pingan/IR-Docs/2025/pingan-ar24-report.pdf",
+        "verification": {
+          "matched_bytes": 14886158,
+          "matched_sha256": "62a5bd793ef9a787cc95750d65e52803aa58fa424b01d94e754ea0120d5be8a3",
+          "requested_url": "https://pagroup.pingan.com/resource/pingan/IR-Docs/2025/pingan-ar24-report.pdf",
+          "status": "verified_immutable_cache",
+          "verified_at": "2026-09-28T18:39:40.239111795Z"
+        }
+      },
+      "industry_facts": {
+        "calculation": {
+          "formula": "NIM=净利息收入/平均生息资产",
+          "operands": [
+            "net_interest_income",
+            "average_earning_assets"
+          ],
+          "result_key": "net_interest_margin",
+          "symbol_mapping": {
+            "average_earning_assets": "average_earning_assets",
+            "net_interest_income": "net_interest_income"
+          }
+        },
+        "currency": "CNY",
+        "definitions": {
+          "case_boundary": "Fixed issuer and reporting period; never generalized from the caller's selected symbol or dataset.",
+          "metric": "平均生息资产与净利息收入均来自 Ping An Bank 的同一 FY2024 管理层讨论表。"
+        },
+        "field_provenance": {
+          "average_earning_assets": {
+            "kind": "reported",
+            "note": "Issuer-reported as average interest-earning assets",
+            "pdf_page": 57
+          },
+          "net_interest_income": {
+            "kind": "reported",
+            "note": "Issuer-reported as net interest income",
+            "pdf_page": 57
+          },
+          "net_interest_margin": {
+            "kind": "derived",
+            "note": "Calculated from reviewed reported facts using NIM=净利息收入/平均生息资产"
+          }
+        },
+        "reported_facts": [
+          {
+            "key": "net_interest_income",
+            "label": "net interest income",
+            "pdf_page": 57,
+            "unit": "CNY millions",
+            "value": 93427.0
+          },
+          {
+            "key": "average_earning_assets",
+            "label": "average interest-earning assets",
+            "pdf_page": 57,
+            "unit": "CNY millions",
+            "value": 4994494.0
+          }
+        ],
+        "scale": "millions"
+      },
+      "input_kind": "industry_case",
+      "inputs": {},
+      "module": "data",
+      "notes": [
+        "这是固定发行人与固定报告期的历史披露案例，不是当前行情、全市场行业数据库或任意股票查询。",
+        "平均生息资产与净利息收入均来自 Ping An Bank 的同一 FY2024 管理层讨论表。"
+      ],
+      "provenance": "verified_original_issuer_disclosure",
+      "reason": null,
+      "series": [],
+      "source": "issuer_disclosure",
+      "status": "computed",
+      "symbol": "2318.HK",
+      "units": {
+        "net_interest_margin": "fraction"
+      },
+      "values": {
+        "net_interest_margin": 0.01870599904614962
+      }
+    },
+    "book_bank_cost_income": {
+      "bar_origin": "server_verified_issuer_filing_pdf",
+      "bars": [],
+      "concept_id": "book_bank_cost_income",
+      "context": "historical_industry_disclosure",
+      "industry_case": {
+        "audit_boundary": "Management discussion facts on PDF pages 57-58 are outside EY's audit opinion covering the financial statements",
+        "audited": false,
+        "bytes": 14886158,
+        "case_id": "ping_an_group_fy2024_annual_report",
+        "issuer": {
+          "alternate_tickers": [
+            "601318.SS"
+          ],
+          "metric_entity": "Ping An Bank",
+          "name": "Ping An Insurance (Group) Company of China, Ltd.",
+          "reporting_entity": "Ping An Insurance (Group) Company of China, Ltd. and its subsidiaries",
+          "ticker": "2318.HK"
+        },
+        "pdf_pages": [
+          57
+        ],
+        "period": {
+          "end": "2024-12-31",
+          "label": "FY2024",
+          "start": "2024-01-01"
+        },
+        "published": "2025-03-19",
+        "sha256": "62a5bd793ef9a787cc95750d65e52803aa58fa424b01d94e754ea0120d5be8a3",
+        "source_kind": "issuer_official_annual_report_pdf",
+        "status": "Annual report containing audited financial statements; each metric states whether its cited page is inside the audit boundary",
+        "url": "https://pagroup.pingan.com/resource/pingan/IR-Docs/2025/pingan-ar24-report.pdf",
+        "verification": {
+          "matched_bytes": 14886158,
+          "matched_sha256": "62a5bd793ef9a787cc95750d65e52803aa58fa424b01d94e754ea0120d5be8a3",
+          "requested_url": "https://pagroup.pingan.com/resource/pingan/IR-Docs/2025/pingan-ar24-report.pdf",
+          "status": "verified_immutable_cache",
+          "verified_at": "2026-09-28T18:39:40.451146408Z"
+        }
+      },
+      "industry_facts": {
+        "calculation": {
+          "formula": "成本收入比=经营费用/营业收入",
+          "operands": [
+            "operating_expenses",
+            "operating_income"
+          ],
+          "result_key": "cost_income_ratio",
+          "symbol_mapping": {
+            "operating_expenses": "operating_expenses",
+            "operating_income": "operating_income"
+          }
+        },
+        "currency": "CNY",
+        "definitions": {
+          "case_boundary": "Fixed issuer and reporting period; never generalized from the caller's selected symbol or dataset.",
+          "metric": "经营费用使用表内一般及行政费用的绝对金额，与同表营业收入相除。"
+        },
+        "field_provenance": {
+          "cost_income_ratio": {
+            "kind": "derived",
+            "note": "Calculated from reviewed reported facts using 成本收入比=经营费用/营业收入"
+          },
+          "operating_expenses": {
+            "kind": "reported",
+            "note": "Issuer-reported as general and administrative expenses, absolute amount",
+            "pdf_page": 57
+          },
+          "operating_income": {
+            "kind": "reported",
+            "note": "Issuer-reported as operating income",
+            "pdf_page": 57
+          }
+        },
+        "reported_facts": [
+          {
+            "key": "operating_expenses",
+            "label": "general and administrative expenses, absolute amount",
+            "pdf_page": 57,
+            "unit": "CNY millions",
+            "value": 40582.0
+          },
+          {
+            "key": "operating_income",
+            "label": "operating income",
+            "pdf_page": 57,
+            "unit": "CNY millions",
+            "value": 146695.0
+          }
+        ],
+        "scale": "millions"
+      },
+      "input_kind": "industry_case",
+      "inputs": {},
+      "module": "data",
+      "notes": [
+        "这是固定发行人与固定报告期的历史披露案例，不是当前行情、全市场行业数据库或任意股票查询。",
+        "经营费用使用表内一般及行政费用的绝对金额，与同表营业收入相除。"
+      ],
+      "provenance": "verified_original_issuer_disclosure",
+      "reason": null,
+      "series": [],
+      "source": "issuer_disclosure",
+      "status": "computed",
+      "symbol": "2318.HK",
+      "units": {
+        "cost_income_ratio": "fraction"
+      },
+      "values": {
+        "cost_income_ratio": 0.27664201233852553
+      }
+    },
+    "book_bank_npl_ratio": {
+      "bar_origin": "server_verified_issuer_filing_pdf",
+      "bars": [],
+      "concept_id": "book_bank_npl_ratio",
+      "context": "historical_industry_disclosure",
+      "industry_case": {
+        "audit_boundary": "Management discussion facts on PDF pages 57-58 are outside EY's audit opinion covering the financial statements",
+        "audited": false,
+        "bytes": 14886158,
+        "case_id": "ping_an_group_fy2024_annual_report",
+        "issuer": {
+          "alternate_tickers": [
+            "601318.SS"
+          ],
+          "metric_entity": "Ping An Bank",
+          "name": "Ping An Insurance (Group) Company of China, Ltd.",
+          "reporting_entity": "Ping An Insurance (Group) Company of China, Ltd. and its subsidiaries",
+          "ticker": "2318.HK"
+        },
+        "pdf_pages": [
+          58
+        ],
+        "period": {
+          "end": "2024-12-31",
+          "label": "FY2024",
+          "start": "2024-01-01"
+        },
+        "published": "2025-03-19",
+        "sha256": "62a5bd793ef9a787cc95750d65e52803aa58fa424b01d94e754ea0120d5be8a3",
+        "source_kind": "issuer_official_annual_report_pdf",
+        "status": "Annual report containing audited financial statements; each metric states whether its cited page is inside the audit boundary",
+        "url": "https://pagroup.pingan.com/resource/pingan/IR-Docs/2025/pingan-ar24-report.pdf",
+        "verification": {
+          "matched_bytes": 14886158,
+          "matched_sha256": "62a5bd793ef9a787cc95750d65e52803aa58fa424b01d94e754ea0120d5be8a3",
+          "requested_url": "https://pagroup.pingan.com/resource/pingan/IR-Docs/2025/pingan-ar24-report.pdf",
+          "status": "verified_immutable_cache",
+          "verified_at": "2026-09-28T18:39:40.662119046Z"
+        }
+      },
+      "industry_facts": {
+        "calculation": {
+          "formula": "不良贷款率=不良贷款/贷款总额（不含利息）",
+          "operands": [
+            "nonperforming_loans",
+            "gross_loans"
+          ],
+          "result_key": "nonperforming_loan_ratio",
+          "symbol_mapping": {
+            "gross_loans": "gross_loans",
+            "nonperforming_loans": "nonperforming_loans"
+          }
+        },
+        "currency": "CNY",
+        "definitions": {
+          "case_boundary": "Fixed issuer and reporting period; never generalized from the caller's selected symbol or dataset.",
+          "metric": "分母是客户贷款及垫款总额且不含应计利息。"
+        },
+        "field_provenance": {
+          "gross_loans": {
+            "kind": "reported",
+            "note": "Issuer-reported as loans and advances to customers excluding interest",
+            "pdf_page": 58
+          },
+          "nonperforming_loan_ratio": {
+            "kind": "derived",
+            "note": "Calculated from reviewed reported facts using 不良贷款率=不良贷款/贷款总额（不含利息）"
+          },
+          "nonperforming_loans": {
+            "kind": "reported",
+            "note": "Issuer-reported as non-performing loans",
+            "pdf_page": 58
+          }
+        },
+        "reported_facts": [
+          {
+            "key": "nonperforming_loans",
+            "label": "non-performing loans",
+            "pdf_page": 58,
+            "unit": "CNY millions",
+            "value": 35738.0
+          },
+          {
+            "key": "gross_loans",
+            "label": "loans and advances to customers excluding interest",
+            "pdf_page": 58,
+            "unit": "CNY millions",
+            "value": 3374103.0
+          }
+        ],
+        "scale": "millions"
+      },
+      "input_kind": "industry_case",
+      "inputs": {},
+      "module": "data",
+      "notes": [
+        "这是固定发行人与固定报告期的历史披露案例，不是当前行情、全市场行业数据库或任意股票查询。",
+        "分母是客户贷款及垫款总额且不含应计利息。"
+      ],
+      "provenance": "verified_original_issuer_disclosure",
+      "reason": null,
+      "series": [],
+      "source": "issuer_disclosure",
+      "status": "computed",
+      "symbol": "2318.HK",
+      "units": {
+        "nonperforming_loan_ratio": "fraction"
+      },
+      "values": {
+        "nonperforming_loan_ratio": 0.010591852115954967
+      }
+    },
+    "book_insurance_solvency_ratio": {
+      "bar_origin": "server_verified_issuer_filing_pdf",
+      "bars": [],
+      "concept_id": "book_insurance_solvency_ratio",
+      "context": "historical_industry_disclosure",
+      "industry_case": {
+        "audit_boundary": "Note 49(7), PDF page 336, is inside the audited financial statements covered by EY's opinion",
+        "audited": true,
+        "bytes": 14886158,
+        "case_id": "ping_an_group_fy2024_annual_report",
+        "issuer": {
+          "alternate_tickers": [
+            "601318.SS"
+          ],
+          "metric_entity": "Ping An Property & Casualty Insurance Company of China, Ltd.",
+          "name": "Ping An Insurance (Group) Company of China, Ltd.",
+          "reporting_entity": "Ping An Insurance (Group) Company of China, Ltd. and its subsidiaries",
+          "ticker": "2318.HK"
+        },
+        "pdf_pages": [
+          336
+        ],
+        "period": {
+          "end": "2024-12-31",
+          "label": "FY2024",
+          "start": "2024-01-01"
+        },
+        "published": "2025-03-19",
+        "sha256": "62a5bd793ef9a787cc95750d65e52803aa58fa424b01d94e754ea0120d5be8a3",
+        "source_kind": "issuer_official_annual_report_pdf",
+        "status": "Annual report containing audited financial statements; each metric states whether its cited page is inside the audit boundary",
+        "url": "https://pagroup.pingan.com/resource/pingan/IR-Docs/2025/pingan-ar24-report.pdf",
+        "verification": {
+          "matched_bytes": 14886158,
+          "matched_sha256": "62a5bd793ef9a787cc95750d65e52803aa58fa424b01d94e754ea0120d5be8a3",
+          "requested_url": "https://pagroup.pingan.com/resource/pingan/IR-Docs/2025/pingan-ar24-report.pdf",
+          "status": "verified_immutable_cache",
+          "verified_at": "2026-09-28T18:39:40.872830764Z"
+        }
+      },
+      "industry_facts": {
+        "calculation": {
+          "formula": "偿付能力充足率=实际资本/最低资本",
+          "operands": [
+            "available_capital",
+            "required_capital"
+          ],
+          "result_key": "solvency_adequacy_ratio",
+          "symbol_mapping": {
+            "available_capital": "available_capital (issuer label: actual capital)",
+            "required_capital": "required_capital (issuer label: minimum capital)"
+          }
+        },
+        "currency": "CNY",
+        "definitions": {
+          "case_boundary": "Fixed issuer and reporting period; never generalized from the caller's selected symbol or dataset.",
+          "metric": "原书的可用资本/监管资本要求在该披露中映射为实际资本/最低资本，仅适用于 Ping An P&C。"
+        },
+        "field_provenance": {
+          "available_capital": {
+            "kind": "reported",
+            "note": "Issuer-reported as actual capital",
+            "pdf_page": 336
+          },
+          "required_capital": {
+            "kind": "reported",
+            "note": "Issuer-reported as minimum capital",
+            "pdf_page": 336
+          },
+          "solvency_adequacy_ratio": {
+            "kind": "derived",
+            "note": "Calculated from reviewed reported facts using 偿付能力充足率=实际资本/最低资本"
+          }
+        },
+        "reported_facts": [
+          {
+            "key": "available_capital",
+            "label": "actual capital",
+            "pdf_page": 336,
+            "unit": "CNY millions",
+            "value": 138649.0
+          },
+          {
+            "key": "required_capital",
+            "label": "minimum capital",
+            "pdf_page": 336,
+            "unit": "CNY millions",
+            "value": 67536.0
+          }
+        ],
+        "scale": "millions"
+      },
+      "input_kind": "industry_case",
+      "inputs": {},
+      "module": "data",
+      "notes": [
+        "这是固定发行人与固定报告期的历史披露案例，不是当前行情、全市场行业数据库或任意股票查询。",
+        "原书的可用资本/监管资本要求在该披露中映射为实际资本/最低资本，仅适用于 Ping An P&C。"
+      ],
+      "provenance": "verified_original_issuer_disclosure",
+      "reason": null,
+      "series": [],
+      "source": "issuer_disclosure",
+      "status": "computed",
+      "symbol": "2318.HK",
+      "units": {
+        "solvency_adequacy_ratio": "fraction"
+      },
+      "values": {
+        "solvency_adequacy_ratio": 2.052964344941957
+      }
+    },
+    "book_saas_arr": {
+      "bar_origin": "server_verified_issuer_filing_pdf",
+      "bars": [],
+      "concept_id": "book_saas_arr",
+      "context": "historical_industry_disclosure",
+      "industry_case": {
+        "audit_boundary": "Issuer earnings release metric; no audit assurance is asserted for MRR, GMV or non-GAAP free cash flow",
+        "audited": false,
+        "bytes": 86468,
+        "case_id": "shopify_fy2024_q4_press_release",
+        "issuer": {
+          "alternate_tickers": [
+            "SHOP.TO"
+          ],
+          "metric_entity": "Shopify Inc. and its consolidated subsidiaries",
+          "name": "Shopify Inc.",
+          "reporting_entity": "Shopify Inc. and its consolidated subsidiaries",
+          "ticker": "SHOP"
+        },
+        "pdf_pages": [
+          1
+        ],
+        "period": {
+          "end": "2024-12-31",
+          "label": "FY2024",
+          "start": "2024-01-01"
+        },
+        "published": "2025-02-11",
+        "sha256": "4bf71232697a2270b2dbc38fc9609c11c27d545d6f4301fce3356fa60c6ef6de",
+        "source_kind": "issuer_linked_earnings_release_pdf",
+        "status": "Earnings release; no audit assurance is asserted for MRR, GMV or non-GAAP free cash flow",
+        "url": "https://s27.q4cdn.com/572064924/files/doc_financials/2024/q4/Q4-2024-Press-Release-Final.pdf",
+        "verification": {
+          "matched_bytes": 86468,
+          "matched_sha256": "4bf71232697a2270b2dbc38fc9609c11c27d545d6f4301fce3356fa60c6ef6de",
+          "requested_url": "https://s27.q4cdn.com/572064924/files/doc_financials/2024/q4/Q4-2024-Press-Release-Final.pdf",
+          "status": "verified_immutable_cache",
+          "verified_at": "2026-09-28T18:39:40.875881502Z"
+        }
+      },
+      "industry_facts": {
+        "calculation": {
+          "formula": "ARR=期末MRR×12",
+          "operands": [
+            "monthly_recurring_revenue"
+          ],
+          "result_key": "annualized_recurring_revenue_run_rate",
+          "symbol_mapping": {
+            "monthly_recurring_revenue": "monthly_recurring_revenue"
+          }
+        },
+        "currency": "USD",
+        "definitions": {
+          "case_boundary": "Fixed issuer and reporting period; never generalized from the caller's selected symbol or dataset.",
+          "metric": "ARR 是 2024-12-31 MRR 的年化运行率，不是已报告的年度订阅收入。"
+        },
+        "field_provenance": {
+          "annualized_recurring_revenue_run_rate": {
+            "kind": "derived",
+            "note": "Calculated from reviewed reported facts using ARR=期末MRR×12"
+          },
+          "monthly_recurring_revenue": {
+            "kind": "reported",
+            "note": "Issuer-reported as MRR at 2024-12-31",
+            "pdf_page": 1
+          }
+        },
+        "reported_facts": [
+          {
+            "key": "monthly_recurring_revenue",
+            "label": "MRR at 2024-12-31",
+            "pdf_page": 1,
+            "unit": "USD millions",
+            "value": 178.0
+          }
+        ],
+        "scale": "millions"
+      },
+      "input_kind": "industry_case",
+      "inputs": {},
+      "module": "data",
+      "notes": [
+        "这是固定发行人与固定报告期的历史披露案例，不是当前行情、全市场行业数据库或任意股票查询。",
+        "ARR 是 2024-12-31 MRR 的年化运行率，不是已报告的年度订阅收入。"
+      ],
+      "provenance": "verified_original_issuer_disclosure",
+      "reason": null,
+      "series": [],
+      "source": "issuer_disclosure",
+      "status": "computed",
+      "symbol": "SHOP",
+      "units": {
+        "annualized_recurring_revenue_run_rate": "USD millions annualized"
+      },
+      "values": {
+        "annualized_recurring_revenue_run_rate": 2136.0
+      }
+    },
+    "book_saas_rule_of_40": {
+      "bar_origin": "server_verified_issuer_filing_pdf",
+      "bars": [],
+      "concept_id": "book_saas_rule_of_40",
+      "context": "historical_industry_disclosure",
+      "industry_case": {
+        "audit_boundary": "Issuer earnings release metric; no audit assurance is asserted for MRR, GMV or non-GAAP free cash flow",
+        "audited": false,
+        "bytes": 86468,
+        "case_id": "shopify_fy2024_q4_press_release",
+        "issuer": {
+          "alternate_tickers": [
+            "SHOP.TO"
+          ],
+          "metric_entity": "Shopify Inc. and its consolidated subsidiaries",
+          "name": "Shopify Inc.",
+          "reporting_entity": "Shopify Inc. and its consolidated subsidiaries",
+          "ticker": "SHOP"
+        },
+        "pdf_pages": [
+          1
+        ],
+        "period": {
+          "end": "2024-12-31",
+          "label": "FY2024",
+          "start": "2024-01-01"
+        },
+        "published": "2025-02-11",
+        "sha256": "4bf71232697a2270b2dbc38fc9609c11c27d545d6f4301fce3356fa60c6ef6de",
+        "source_kind": "issuer_linked_earnings_release_pdf",
+        "status": "Earnings release; no audit assurance is asserted for MRR, GMV or non-GAAP free cash flow",
+        "url": "https://s27.q4cdn.com/572064924/files/doc_financials/2024/q4/Q4-2024-Press-Release-Final.pdf",
+        "verification": {
+          "matched_bytes": 86468,
+          "matched_sha256": "4bf71232697a2270b2dbc38fc9609c11c27d545d6f4301fce3356fa60c6ef6de",
+          "requested_url": "https://s27.q4cdn.com/572064924/files/doc_financials/2024/q4/Q4-2024-Press-Release-Final.pdf",
+          "status": "verified_immutable_cache",
+          "verified_at": "2026-09-28T18:39:40.878558946Z"
+        }
+      },
+      "industry_facts": {
+        "calculation": {
+          "formula": "Rule of 40=(2024收入/2023收入-1)+(2024自由现金流/2024收入)",
+          "operands": [
+            "revenue_2024",
+            "revenue_2023",
+            "free_cash_flow"
+          ],
+          "result_key": "rule_of_40",
+          "symbol_mapping": {
+            "fcf_margin": "free_cash_flow / revenue_2024",
+            "revenue_growth_rate": "revenue_2024 / revenue_2023 - 1"
+          }
+        },
+        "currency": "USD",
+        "definitions": {
+          "case_boundary": "Fixed issuer and reporting period; never generalized from the caller's selected symbol or dataset.",
+          "metric": "使用原始披露值精确推导，而不是把公告中 26% 与 18% 的整数展示值相加。"
+        },
+        "field_provenance": {
+          "free_cash_flow": {
+            "kind": "reported",
+            "note": "Issuer-reported as 2024 non-GAAP free cash flow",
+            "pdf_page": 1
+          },
+          "revenue_2023": {
+            "kind": "reported",
+            "note": "Issuer-reported as 2023 revenue",
+            "pdf_page": 1
+          },
+          "revenue_2024": {
+            "kind": "reported",
+            "note": "Issuer-reported as 2024 revenue",
+            "pdf_page": 1
+          },
+          "rule_of_40": {
+            "kind": "derived",
+            "note": "Calculated from reviewed reported facts using Rule of 40=(2024收入/2023收入-1)+(2024自由现金流/2024收入)"
+          }
+        },
+        "reported_facts": [
+          {
+            "key": "revenue_2024",
+            "label": "2024 revenue",
+            "pdf_page": 1,
+            "unit": "USD millions",
+            "value": 8880.0
+          },
+          {
+            "key": "revenue_2023",
+            "label": "2023 revenue",
+            "pdf_page": 1,
+            "unit": "USD millions",
+            "value": 7060.0
+          },
+          {
+            "key": "free_cash_flow",
+            "label": "2024 non-GAAP free cash flow",
+            "pdf_page": 1,
+            "unit": "USD millions",
+            "value": 1597.0
+          }
+        ],
+        "scale": "millions"
+      },
+      "input_kind": "industry_case",
+      "inputs": {},
+      "module": "data",
+      "notes": [
+        "这是固定发行人与固定报告期的历史披露案例，不是当前行情、全市场行业数据库或任意股票查询。",
+        "使用原始披露值精确推导，而不是把公告中 26% 与 18% 的整数展示值相加。"
+      ],
+      "provenance": "verified_original_issuer_disclosure",
+      "reason": null,
+      "series": [],
+      "source": "issuer_disclosure",
+      "status": "computed",
+      "symbol": "SHOP",
+      "units": {
+        "rule_of_40": "fraction"
+      },
+      "values": {
+        "rule_of_40": 0.437632710614297
+      }
+    },
+    "book_platform_gmv": {
+      "bar_origin": "server_verified_issuer_filing_pdf",
+      "bars": [],
+      "concept_id": "book_platform_gmv",
+      "context": "historical_industry_disclosure",
+      "industry_case": {
+        "audit_boundary": "Issuer earnings release metric; no audit assurance is asserted for MRR, GMV or non-GAAP free cash flow",
+        "audited": false,
+        "bytes": 86468,
+        "case_id": "shopify_fy2024_q4_press_release",
+        "issuer": {
+          "alternate_tickers": [
+            "SHOP.TO"
+          ],
+          "metric_entity": "Shopify Inc. and its consolidated subsidiaries",
+          "name": "Shopify Inc.",
+          "reporting_entity": "Shopify Inc. and its consolidated subsidiaries",
+          "ticker": "SHOP"
+        },
+        "pdf_pages": [
+          1
+        ],
+        "period": {
+          "end": "2024-12-31",
+          "label": "FY2024",
+          "start": "2024-01-01"
+        },
+        "published": "2025-02-11",
+        "sha256": "4bf71232697a2270b2dbc38fc9609c11c27d545d6f4301fce3356fa60c6ef6de",
+        "source_kind": "issuer_linked_earnings_release_pdf",
+        "status": "Earnings release; no audit assurance is asserted for MRR, GMV or non-GAAP free cash flow",
+        "url": "https://s27.q4cdn.com/572064924/files/doc_financials/2024/q4/Q4-2024-Press-Release-Final.pdf",
+        "verification": {
+          "matched_bytes": 86468,
+          "matched_sha256": "4bf71232697a2270b2dbc38fc9609c11c27d545d6f4301fce3356fa60c6ef6de",
+          "requested_url": "https://s27.q4cdn.com/572064924/files/doc_financials/2024/q4/Q4-2024-Press-Release-Final.pdf",
+          "status": "verified_immutable_cache",
+          "verified_at": "2026-09-28T18:39:40.880817232Z"
+        }
+      },
+      "industry_facts": {
+        "calculation": {
+          "formula": "GMV=报告期平台成交总额",
+          "operands": [
+            "gross_merchandise_value"
+          ],
+          "result_key": "gross_merchandise_value",
+          "symbol_mapping": {
+            "gross_merchandise_value": "gross_merchandise_value"
+          }
+        },
+        "currency": "USD",
+        "definitions": {
+          "case_boundary": "Fixed issuer and reporting period; never generalized from the caller's selected symbol or dataset.",
+          "metric": "GMV 按发行人定义扣除退款，并包含运费、关税与增值税。"
+        },
+        "field_provenance": {
+          "gross_merchandise_value": {
+            "kind": "derived",
+            "note": "Calculated from reviewed reported facts using GMV=报告期平台成交总额"
+          }
+        },
+        "reported_facts": [
+          {
+            "key": "gross_merchandise_value",
+            "label": "2024 GMV",
+            "pdf_page": 1,
+            "unit": "USD millions",
+            "value": 292275.0
+          }
+        ],
+        "scale": "millions"
+      },
+      "input_kind": "industry_case",
+      "inputs": {},
+      "module": "data",
+      "notes": [
+        "这是固定发行人与固定报告期的历史披露案例，不是当前行情、全市场行业数据库或任意股票查询。",
+        "GMV 按发行人定义扣除退款，并包含运费、关税与增值税。"
+      ],
+      "provenance": "verified_original_issuer_disclosure",
+      "reason": null,
+      "series": [],
+      "source": "issuer_disclosure",
+      "status": "computed",
+      "symbol": "SHOP",
+      "units": {
+        "gross_merchandise_value": "USD millions"
+      },
+      "values": {
+        "gross_merchandise_value": 292275.0
+      }
+    },
+    "book_platform_take_rate": {
+      "bar_origin": "server_verified_issuer_filing_pdf",
+      "bars": [],
+      "concept_id": "book_platform_take_rate",
+      "context": "historical_industry_disclosure",
+      "industry_case": {
+        "audit_boundary": "年报第43–44页的管理层运营指标；不把财务报表审计意见泛化到GMV与Take Rate。",
+        "audited": false,
+        "bytes": 1004020,
+        "case_id": "ebay_fy2024_10k_marketplace_take_rate",
+        "issuer": {
+          "alternate_tickers": [],
+          "metric_entity": "eBay Inc. Marketplace 平台",
+          "name": "eBay Inc.",
+          "reporting_entity": "eBay Inc. 及合并子公司的 Marketplace 平台",
+          "ticker": "EBAY"
+        },
+        "pdf_pages": [
+          44
+        ],
+        "period": {
+          "end": "2024-12-31",
+          "label": "FY2024",
+          "start": "2024-01-01"
+        },
+        "published": "2025-02-27",
+        "sha256": "10530b8314c4dc49f9737b938f28ead7a70212885c35919fb361d145401f37fb",
+        "source_kind": "issuer_official_annual_report_pdf",
+        "status": "年度报告管理层运营指标；财务报表审计不等于GMV与Take Rate获得审计保证。",
+        "url": "https://investors.ebayinc.com/files/doc_financials/2024/q4/eBay-10-K-2024.pdf",
+        "verification": {
+          "matched_bytes": 1004020,
+          "matched_sha256": "10530b8314c4dc49f9737b938f28ead7a70212885c35919fb361d145401f37fb",
+          "requested_url": "https://investors.ebayinc.com/files/doc_financials/2024/q4/eBay-10-K-2024.pdf",
+          "status": "verified_immutable_cache",
+          "verified_at": "2026-09-28T18:39:40.896397514Z"
+        }
+      },
+      "industry_facts": {
+        "calculation": {
+          "formula": "Take Rate=平台净收入/GMV",
+          "operands": [
+            "platform_revenue",
+            "gross_merchandise_value"
+          ],
+          "result_key": "platform_take_rate",
+          "symbol_mapping": {
+            "gross_merchandise_value": "gross_merchandise_value",
+            "platform_revenue": "platform_revenue（eBay 原文 net revenues，包含市场服务与广告收入）"
+          }
+        },
+        "currency": "USD",
+        "definitions": {
+          "case_boundary": "Fixed issuer and reporting period; never generalized from the caller's selected symbol or dataset.",
+          "metric": "eBay 原文明确将 Take Rate 定义为平台净收入/GMV：收入包括市场服务与广告，GMV包含运费和税款。用披露金额复算约13.7718%，原文展示为舍入后的13.77%；不是纯交易佣金率。"
+        },
+        "field_provenance": {
+          "gross_merchandise_value": {
+            "kind": "reported",
+            "note": "Issuer-reported as 2024 年平台成交总额（包含运费与税款）",
+            "pdf_page": 44
+          },
+          "platform_revenue": {
+            "kind": "reported",
+            "note": "Issuer-reported as 2024 年平台净收入（包含市场服务与广告）",
+            "pdf_page": 44
+          },
+          "platform_take_rate": {
+            "kind": "derived",
+            "note": "Calculated from reviewed reported facts using Take Rate=平台净收入/GMV"
+          }
+        },
+        "reported_facts": [
+          {
+            "key": "platform_revenue",
+            "label": "2024 年平台净收入（包含市场服务与广告）",
+            "pdf_page": 44,
+            "unit": "USD millions",
+            "value": 10283.0
+          },
+          {
+            "key": "gross_merchandise_value",
+            "label": "2024 年平台成交总额（包含运费与税款）",
+            "pdf_page": 44,
+            "unit": "USD millions",
+            "value": 74667.0
+          }
+        ],
+        "scale": "millions"
+      },
+      "input_kind": "industry_case",
+      "inputs": {},
+      "module": "data",
+      "notes": [
+        "这是固定发行人与固定报告期的历史披露案例，不是当前行情、全市场行业数据库或任意股票查询。",
+        "eBay 原文明确将 Take Rate 定义为平台净收入/GMV：收入包括市场服务与广告，GMV包含运费和税款。用披露金额复算约13.7718%，原文展示为舍入后的13.77%；不是纯交易佣金率。"
+      ],
+      "provenance": "verified_original_issuer_disclosure",
+      "reason": null,
+      "series": [],
+      "source": "issuer_disclosure",
+      "status": "computed",
+      "symbol": "EBAY",
+      "units": {
+        "platform_take_rate": "fraction"
+      },
+      "values": {
+        "platform_take_rate": 0.1377181351868965
+      }
+    },
+    "book_reit_occupancy": {
+      "bar_origin": "server_verified_issuer_filing_pdf",
+      "bars": [],
+      "concept_id": "book_reit_occupancy",
+      "context": "historical_industry_disclosure",
+      "industry_case": {
+        "audit_boundary": "The issuer labels the supplemental operating information unaudited",
+        "audited": false,
+        "bytes": 17522920,
+        "case_id": "realty_income_fy2024_supplemental",
+        "issuer": {
+          "alternate_tickers": [],
+          "metric_entity": "Realty Income Corporation consolidated portfolio",
+          "name": "Realty Income Corporation",
+          "reporting_entity": "Realty Income Corporation and consolidated subsidiaries",
+          "ticker": "O"
+        },
+        "pdf_pages": [
+          25
+        ],
+        "period": {
+          "end": "2024-12-31",
+          "label": "As of 2024-12-31",
+          "start": "2024-12-31"
+        },
+        "published": "2025-02-24",
+        "sha256": "a0b3bf067c7b19ebde01ceaac3ecb172ed6a4c7084eeabe276ad1d4599c62a3f",
+        "source_kind": "issuer_official_supplemental_information_pdf",
+        "status": "Unaudited supplemental operating information",
+        "url": "https://www.realtyincome.com/sites/realty-income/files/2025-02/realty-income-q4-2024-supplemental-information.pdf",
+        "verification": {
+          "matched_bytes": 17522920,
+          "matched_sha256": "a0b3bf067c7b19ebde01ceaac3ecb172ed6a4c7084eeabe276ad1d4599c62a3f",
+          "requested_url": "https://www.realtyincome.com/sites/realty-income/files/2025-02/realty-income-q4-2024-supplemental-information.pdf",
+          "status": "verified_immutable_cache",
+          "verified_at": "2026-09-28T18:39:41.151891454Z"
+        }
+      },
+      "industry_facts": {
+        "calculation": {
+          "formula": "面积入住率=已出租面积/可出租总面积",
+          "operands": [
+            "leased_area",
+            "lettable_area"
+          ],
+          "result_key": "occupied_area_ratio",
+          "symbol_mapping": {
+            "leased_area": "leased_area (issuer label: occupied square feet)",
+            "lettable_area": "lettable_area (issuer label: total portfolio square feet)"
+          }
+        },
+        "currency": "USD",
+        "definitions": {
+          "case_boundary": "Fixed issuer and reporting period; never generalized from the caller's selected symbol or dataset.",
+          "metric": "使用平方英尺面积比 335,777,818/339,361,416，不使用按物业数量计算的 98.7%。"
+        },
+        "field_provenance": {
+          "leased_area": {
+            "kind": "reported",
+            "note": "Issuer-reported as occupied square feet",
+            "pdf_page": 25
+          },
+          "lettable_area": {
+            "kind": "reported",
+            "note": "Issuer-reported as total portfolio square feet",
+            "pdf_page": 25
+          },
+          "occupied_area_ratio": {
+            "kind": "derived",
+            "note": "Calculated from reviewed reported facts using 面积入住率=已出租面积/可出租总面积"
+          }
+        },
+        "reported_facts": [
+          {
+            "key": "leased_area",
+            "label": "occupied square feet",
+            "pdf_page": 25,
+            "unit": "square feet",
+            "value": 335777818.0
+          },
+          {
+            "key": "lettable_area",
+            "label": "total portfolio square feet",
+            "pdf_page": 25,
+            "unit": "square feet",
+            "value": 339361416.0
+          }
+        ],
+        "scale": "area facts are square feet"
+      },
+      "input_kind": "industry_case",
+      "inputs": {},
+      "module": "data",
+      "notes": [
+        "这是固定发行人与固定报告期的历史披露案例，不是当前行情、全市场行业数据库或任意股票查询。",
+        "使用平方英尺面积比 335,777,818/339,361,416，不使用按物业数量计算的 98.7%。"
+      ],
+      "provenance": "verified_original_issuer_disclosure",
+      "reason": null,
+      "series": [],
+      "source": "issuer_disclosure",
+      "status": "computed",
+      "symbol": "O",
+      "units": {
+        "occupied_area_ratio": "fraction"
+      },
+      "values": {
+        "occupied_area_ratio": 0.9894401725386482
+      }
+    }
+  }
+}

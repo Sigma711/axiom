@@ -1,4 +1,5 @@
 // 共享类型定义
+import type { ExecutionAssumption, MarketProvenance } from './ExecutionAssumptionsVisual';
 export type Side = 'BUY' | 'SELL' | 'HOLD';
 export type TabId = 'learn' | 'data' | 'backtest' | 'paper' | 'compare';
 
@@ -77,6 +78,8 @@ export interface BacktestResult {
   fills: Array<{ timestamp: string; side: string; size: number; price: number; commission: number }>;
   metrics: Record<string, number | null | Record<string, string>>;
   bars?: Bar[];
+  execution_assumptions?: ExecutionAssumption[];
+  market_provenance?: MarketProvenance;
 }
 
 export interface PaperSnapshot {
@@ -97,6 +100,8 @@ export interface PaperSnapshot {
   trades_count: number;
   log: Array<{ timestamp: string; level: string; message: string }>;
   bars?: Bar[];
+  execution_assumptions?: ExecutionAssumption[];
+  market_provenance?: MarketProvenance;
 }
 
 export interface CustomStrategy {
@@ -108,20 +113,23 @@ export interface CustomStrategy {
 
 export type ChartType = 'candle' | 'heikin_ashi';
 export type SourceType = 'binance' | 'a_share' | 'us_stock';
+export type PracticeRouteSource = SourceType | 'issuer_disclosure';
 
 export interface PracticeConcept {
   id: string;
   name: string;
   category: string;
-  input_kind: 'market_bars' | 'independent_inputs' | 'manual_annotation' | 'filing_case';
+  input_kind: 'market_bars' | 'independent_inputs' | 'manual_annotation' | 'filing_case' | 'industry_case';
   inputs: Array<{ key: string; label: string; default: unknown }>;
   notes: string;
   plan?: {
-    markets: Array<'crypto' | 'cn_equity' | 'us_equity'>;
+    markets: Array<'crypto' | 'cn_equity' | 'us_equity' | 'issuer_disclosure'>;
     modules: Array<'data' | 'backtest' | 'paper' | 'compare'>;
     required_datasets: string[];
     source_policy: 'real_required' | 'result_required' | 'evidence_required';
     goal: string;
+    fixed_source?: 'issuer_disclosure';
+    fixed_symbol?: string;
   };
 }
 
@@ -130,7 +138,7 @@ export interface PracticeResult {
   status: 'computed' | 'partial' | 'undefined' | 'insufficient_data';
   reason: string | null;
   input_kind: PracticeConcept['input_kind'];
-  provenance: 'provided_market_bars' | 'provided_result_context' | 'editable_teaching_inputs' | 'server_fetched_provisional_snapshot' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_spot_order_book' | 'server_fetched_completed_stock_daily_bars' | 'server_fetched_binance_recent_trades' | 'server_fetched_bitcoin_block_snapshot' | 'server_fetched_bitcoin_transaction_sample' | 'server_fetched_bitcoin_transaction_first_page' | 'verified_issuer_filing_case';
+  provenance: 'provided_market_bars' | 'provided_result_context' | 'editable_teaching_inputs' | 'server_fetched_provisional_snapshot' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_spot_order_book' | 'server_fetched_completed_stock_daily_bars' | 'server_fetched_binance_recent_trades' | 'server_fetched_bitcoin_block_snapshot' | 'server_fetched_bitcoin_transaction_sample' | 'server_fetched_bitcoin_transaction_first_page' | 'verified_issuer_filing_case' | 'verified_original_issuer_disclosure';
   filing_case?: {
     case_id: string; issuer: string; ticker: string; scope: string;
     period: { start: string; end: string; fiscal_year: number };
@@ -146,6 +154,29 @@ export interface PracticeResult {
     balance_sheets: Record<string, Record<string, number | string>>;
     annual_cash_flows: Record<string, Record<string, number | string>>;
     calculation_boundaries: unknown;
+  };
+  industry_case?: {
+    case_id: string;
+    issuer: { name: string; ticker: string; alternate_tickers: string[]; reporting_entity: string; metric_entity: string };
+    period: { label: string; start: string; end: string };
+    published: string;
+    audited: boolean;
+    audit_boundary: string;
+    status: string;
+    source_kind: string;
+    url: string;
+    pdf_pages: number[];
+    sha256: string;
+    bytes: number;
+    verification: { status: 'verified_immutable_cache' | 'verified_then_cached'; verified_at: string; requested_url: string; matched_sha256: string; matched_bytes: number };
+  };
+  industry_facts?: {
+    currency: string;
+    scale: string;
+    reported_facts: Array<{ key: string; label: string; value: number; unit: string; pdf_page: number }>;
+    calculation: { formula: string; result_key: string; operands: string[]; symbol_mapping: Record<string, string> };
+    field_provenance: Record<string, { kind: 'reported' | 'derived'; pdf_page?: number; note: string }>;
+    definitions: { case_boundary: string; metric: string };
   };
   values: Record<string, number | null>;
   units?: Record<string, string>;
@@ -176,6 +207,8 @@ export interface PracticeResult {
   levels?: { bids: Array<{ price: number; quantity: number }>; asks: Array<{ price: number; quantity: number }> };
   depth_snapshot?: { source: string; endpoint: string; symbol: string; depth_limit: number; update_id: number; timestamp: null; timestamp_note: string };
   provisional_snapshot?: { candle: Bar; is_closed: false; fetched_at: string; expected_close_at: string; completion_evidence: string };
-  context?: 'module_snapshot' | 'selected_dataset' | 'editable_teaching_inputs' | 'provided_result_context' | 'historical_filing_case';
+  context?: 'module_snapshot' | 'selected_dataset' | 'editable_teaching_inputs' | 'provided_result_context' | 'historical_filing_case' | 'historical_industry_disclosure';
   bar_origin?: 'server_fetched_completed_source_bars' | 'server_fetched_completed_binance_usdt_spot_bars' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_provisional_snapshot' | 'server_verified_issuer_filing_pdf';
+  execution_assumptions?: ExecutionAssumption[];
+  market_provenance?: MarketProvenance;
 }

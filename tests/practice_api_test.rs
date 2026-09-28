@@ -478,6 +478,7 @@ async fn server_fetched_knowledge_practices_execute_against_completed_mock_marke
         "book_pitfall_timeframe",
         "book_pitfall_formula_variant",
         "book_pitfall_open_candle",
+        "book_chart_renko",
     ] {
         let (status, body) = request(
             &app,
@@ -510,6 +511,10 @@ async fn server_fetched_knowledge_practices_execute_against_completed_mock_marke
         } else {
             assert_eq!(body["bar_origin"], "server_fetched_completed_source_bars");
             assert_eq!(body["bars"].as_array().unwrap().len(), 200);
+            assert!(body["market_provenance"]["provider"].is_string());
+            assert!(body["execution_assumptions"]
+                .as_array()
+                .is_some_and(|items| !items.is_empty()));
         }
         assert_eq!(body["context"], "selected_dataset");
     }
@@ -827,10 +832,13 @@ async fn book_financial_practices_require_equity_evidence_and_reject_crypto() {
             .find(|concept| concept["id"] == id)
             .unwrap();
         let filing_case = id == "book_current_ratio";
+        let industry_case = id == "book_bank_nim";
         assert_eq!(
             concept["plan"]["markets"],
             if filing_case {
                 json!(["us_equity"])
+            } else if industry_case {
+                json!(["issuer_disclosure"])
             } else {
                 json!(["cn_equity", "us_equity"])
             },
@@ -839,7 +847,7 @@ async fn book_financial_practices_require_equity_evidence_and_reject_crypto() {
         assert_eq!(concept["plan"]["modules"], json!(["data"]), "{id}");
         assert_eq!(
             concept["plan"]["source_policy"],
-            if filing_case {
+            if filing_case || industry_case {
                 "real_required"
             } else {
                 "evidence_required"

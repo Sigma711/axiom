@@ -79,6 +79,13 @@ fn every_published_concept_resolves_to_an_actual_implementation_branch() {
                         location.code_ref,
                         "src/book.rs::market_recent_trade_summary"
                     );
+                } else if axiom::industry_case::is_supported(&e.id) {
+                    assert_eq!(location.kind, "match_arm", "{}", e.id);
+                    assert_eq!(
+                        location.code_ref,
+                        format!("src/industry_case.rs::calculate::{}", e.id)
+                    );
+                    assert_eq!(location.path, "src/industry_case.rs");
                 } else if matches!(
                     e.id.as_str(),
                     "bid_ask_spread" | "book_order_imbalance" | "book_pitfall_order_imbalance"

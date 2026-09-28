@@ -33,6 +33,98 @@ async function mockApi(page: Page) {
 
 test.beforeEach(async ({ page }) => { await mockApi(page); });
 
+test('industry disclosure figures explain every metric with its actual issuer units and original pages', async ({ page }) => {
+  const recording = JSON.parse(await readFile('e2e/fixtures/industry-cases.json', 'utf8'));
+  const expected = [
+    ['bank_nim', '2318.HK', '1.8706', 57],
+    ['book_bank_nim', '2318.HK', '1.8706', 57],
+    ['book_bank_cost_income', '2318.HK', '27.6642', 57],
+    ['book_bank_npl_ratio', '2318.HK', '1.0592', 58],
+    ['book_insurance_solvency_ratio', '2318.HK', '205.2964', 336],
+    ['book_saas_arr', 'SHOP', '2,136', 1],
+    ['book_saas_rule_of_40', 'SHOP', '43.7633', 1],
+    ['book_platform_gmv', 'SHOP', '292,275', 1],
+    ['book_platform_take_rate', 'EBAY', '13.7718', 44],
+    ['book_reit_occupancy', 'O', '98.944', 25],
+  ] as const;
+  // Recorded HTTP payloads exercise rendering only. Independent literals above
+  // come from disclosure examples; real.spec.ts also retrieves original PDFs.
+  await page.route('**/api/practice', route => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: { concepts: recording.concepts, modules: ['data'], total: 10 } });
+    const body = route.request().postDataJSON();
+    const result = recording.results[body.concept_id];
+    expect(body).toEqual({ concept_id: body.concept_id, module: 'data', source: 'issuer_disclosure', symbol: result.symbol, inputs: {} });
+    return route.fulfill({ json: result });
+  });
+  for (const [concept, ticker, value, pdfPage] of expected) {
+    await page.goto(`/data?concept=${concept}&source=issuer_disclosure`);
+    const panel = page.getByLabel('概念实践');
+    await panel.getByRole('button', { name: '运行实践' }).click();
+    const visual = panel.locator('.ax-industry-case');
+    await expect(visual).toBeVisible();
+    await expect(visual.locator('h4')).toContainText(`（${ticker}）`);
+    await expect(visual.locator('.ax-filing-results')).toContainText(value);
+    await expect(visual.locator('[data-industry-fact] a').first()).toHaveAttribute('href', `${recording.results[concept].industry_case.url}#page=${pdfPage}`);
+    await visual.getByText('口径定义', { exact: true }).click();
+    await expect(visual).toContainText('固定发行人与报告期');
+    await visual.getByText('核对原文与文件指纹', { exact: true }).click();
+    await expect(visual).toContainText('字节数与指纹完全匹配');
+    await expect(visual).not.toContainText('教学代理');
+    await expect(visual).toContainText(concept === 'book_insurance_solvency_ratio' ? '审计范围内' : '未经审计');
+  }
+});
+
+test('execution disclosures stay readable across all four modules and both themes', async ({ page }) => {
+  // Deliberately deterministic HTTP fixtures for UI verification, not a live-market claim.
+  const disclosure = {
+    execution_assumptions: [
+      { id: 't_plus_one', description_zh: 'A 股按上海交易日期限制当日买入持仓卖出。', simulated: true, limitation_zh: '已有可卖库存不受当日追加买入影响。', source_url: 'https://www.sse.com.cn/lawandrules/sselawsrules/trade/universal/' },
+      { id: 'quantity', description_zh: '沪深主板与创业板买入数量为 100 股的整数倍。', simulated: true, limitation_zh: '卖出不足一手的剩余持仓可一次退出。' },
+      { id: 'taxes', description_zh: '当前未模拟股票印花税、过户费与券商最低收费。', simulated: false, limitation_zh: '教学手续费和滑点不等于实际交易总成本。' },
+    ],
+    market_provenance: { provider: 'eastmoney', endpoint: 'https://push2his.eastmoney.com/api/qt/stock/kline/get', price_basis: 'unadjusted_requested', corporate_actions: 'not_simulated' },
+  };
+  await page.route('**/api/indicators**', route => route.fulfill({ json: { source: 'a_share', symbol: '600519', bars, indicators: {}, ...disclosure } }));
+  await page.route('**/api/backtest', route => route.fulfill({ json: { ...backtest, ...disclosure } }));
+  await page.route('**/api/paper/snapshot', route => route.fulfill({ json: { is_running: false, source: 'a_share', symbol: '600519', current_bar: bars.at(-1), cash: 10000, position_size: 0, position_value: 0, equity: 10000, last_signal: null, last_fill: null, equity_curve: [], trades_count: 0, log: [], bars, ...disclosure } }));
+  for (const path of ['/data', '/backtest', '/compare', '/paper']) {
+    await page.goto(path);
+    if (path === '/backtest') await page.getByRole('button', { name: '运行回测' }).click();
+    if (path === '/compare') {
+      await expect(page.locator('.ax-pool-item')).toHaveCount(2);
+      await page.getByRole('button', { name: '跑对比' }).click();
+    }
+    const card = page.getByLabel('成交与价格口径').first();
+    await expect(card).toBeVisible();
+    await card.locator('summary').click();
+    await expect(card).toHaveAttribute('open', '');
+    await expect(card).toContainText('东方财富');
+    await expect(card).toContainText('价格曲线不代表含分红再投资的总回报');
+    await expect(card.locator('.ax-execution-status.simulated')).toHaveCount(path === '/data' ? 0 : 2);
+    await expect(card.locator('.ax-execution-status.omitted')).toHaveCount(path === '/data' ? 0 : 1);
+    await expect(card.getByRole('link', { name: '行情接口来源 ↗' })).toHaveAttribute('href', disclosure.market_provenance.endpoint);
+    if (path !== '/data') await card.getByRole('link', { name: '规则原文 ↗' }).click({ trial: true });
+    if (path === '/backtest') {
+      await card.scrollIntoViewIfNeeded();
+      await page.mouse.move(0, 0);
+      await expect(card).toHaveScreenshot('execution-rules-dark.png', { maxDiffPixelRatio: .01 });
+      const dark = await card.evaluate(node => ({ background: getComputedStyle(node).backgroundColor, color: getComputedStyle(node).color }));
+      await page.getByLabel('切换到浅色模式').click();
+      await expect.poll(() => card.evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(dark.background);
+      expect(await card.evaluate(node => getComputedStyle(node).color)).not.toBe(dark.color);
+      await expect(card).toHaveScreenshot('execution-rules-light.png', { maxDiffPixelRatio: .01 });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await card.scrollIntoViewIfNeeded();
+      expect(await card.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+      await expect(card).toHaveScreenshot('execution-rules-mobile.png', { maxDiffPixelRatio: .01 });
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.getByLabel('切换到深色模式').click();
+    }
+    await card.locator('summary').click();
+    await expect(card).not.toHaveAttribute('open', '');
+  }
+});
+
 test('verified historical filing practice follows its own case rather than the selected quote', async ({ page }) => {
   const caseData = JSON.parse(await readFile('../docs/book/financial_cases.json', 'utf8'));
   const ids = ['book_fcf', 'eps', 'dupont'];
@@ -107,13 +199,12 @@ test('knowledge card leads to an in-context practice result', async ({ page }) =
 
 test('knowledge cards distinguish evidence-pending teaching inputs from real-data requirements', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('.ax-knowledge-evidence')).toContainText('1 个需要真实行情、链上或财务数据');
-  await expect(page.locator('.ax-knowledge-evidence')).toContainText('1 个目前仅提供明确标注的教学计算');
-  await expect(page.locator('.ax-knowledge-evidence')).toContainText('不是已完成实证的数量');
+  await expect(page.getByText('实践数据要求：', { exact: false })).toHaveCount(0);
+  await expect(page.getByText('不是已完成实证的数量', { exact: false })).toHaveCount(0);
   const rsi = page.locator('.ax-kb-card').filter({ hasText: 'RSI' });
   const eps = page.locator('.ax-kb-card').filter({ hasText: '每股收益（EPS）' });
-  await expect(rsi.locator('.ax-evidence-badge')).toContainText('需真实数据');
-  await expect(eps.locator('.ax-evidence-badge')).toContainText('待接入独立证据');
+  await expect(page.getByText('需真实数据', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('待接入独立证据', { exact: true })).toHaveCount(0);
   await expect(eps.getByRole('button', { name: '在数据探索中实践' })).toHaveCount(0);
   await eps.getByRole('button', { name: '在数据探索中查看教学示例' }).click();
   await expect(page).toHaveURL(/\/data\?concept=earnings_per_share&source=a_share/);
@@ -698,6 +789,32 @@ test('primary controls retain readable contrast on hover in both themes', async 
       return (Math.max(foreground, background) + .05) / (Math.min(foreground, background) + .05);
     });
     expect(contrast).toBeGreaterThanOrEqual(4.5);
+  }
+});
+
+test('code implementation links keep both text labels readable on hover in both themes', async ({ page }) => {
+  await page.goto('/learn');
+  await page.locator('.ax-kb-details').first().click();
+  const link = page.locator('.ax-code-link').first();
+  for (const theme of ['dark', 'light']) {
+    if (theme === 'light') await page.getByLabel('切换到浅色模式').click();
+    for (const hovered of [false, true]) {
+      if (hovered) await link.hover(); else await page.mouse.move(0, 0);
+      for (const label of [link.locator('code'), link.locator('.ax-goto')]) {
+        const ratio = await label.evaluate(node => {
+          const luminance = (color: string) => {
+            const rgb = color.match(/[\d.]+/g)!.slice(0, 3).map(Number).map(v => v / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4);
+            return .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2];
+          };
+          let surface: Element | null = node;
+          while (surface && getComputedStyle(surface).backgroundColor === 'rgba(0, 0, 0, 0)') surface = surface.parentElement;
+          const fg = luminance(getComputedStyle(node).color);
+          const bg = luminance(getComputedStyle(surface!).backgroundColor);
+          return (Math.max(fg, bg) + .05) / (Math.min(fg, bg) + .05);
+        });
+        expect(ratio).toBeGreaterThanOrEqual(4.5);
+      }
+    }
   }
 });
 

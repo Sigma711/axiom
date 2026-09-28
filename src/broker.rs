@@ -10,8 +10,9 @@
 //!   - `SimulatedBroker` (本文件):用于回测和模拟盘
 //!   - 实盘用 ccxt 的真实下单 API(另写 adapter 复用同一 trait)
 
+use crate::execution::{ExecutionMarket, ExecutionProfile};
 use crate::types::{Fill, Order, OrderType, Position, Side};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -38,6 +39,11 @@ pub trait Broker: Send + Sync {
     fn place_order(&mut self, order: Order) -> Fill;
     fn get_position(&self, symbol: &str) -> Position;
     fn get_cash(&self) -> f64;
+    /// Quantity that can be sold at this instant. The default preserves
+    /// compatibility for broker adapters without settlement-lot tracking.
+    fn sellable_size(&self, symbol: &str, _timestamp: DateTime<Utc>) -> f64 {
+        self.get_position(symbol).size.max(0.0)
+    }
     /// Includes predictable execution costs for cash-safe position sizing.
     fn buy_cost_per_unit(&self, price: f64) -> f64 {
         price
@@ -61,10 +67,26 @@ pub struct SimulatedBroker {
     pub last_price: HashMap<String, f64>,
     cash: f64,
     trade_log: Vec<(DateTime<Utc>, String, f64)>,
+    execution_profile: ExecutionProfile,
+    acquired_lots: HashMap<String, Vec<AcquiredLot>>,
+}
+
+#[derive(Debug, Clone)]
+struct AcquiredLot {
+    trade_date: NaiveDate,
+    quantity: f64,
 }
 
 impl SimulatedBroker {
     pub fn new(config: BrokerConfig, initial_cash: f64) -> Self {
+        Self::new_with_execution_profile(config, initial_cash, ExecutionProfile::default())
+    }
+
+    pub fn new_with_execution_profile(
+        config: BrokerConfig,
+        initial_cash: f64,
+        execution_profile: ExecutionProfile,
+    ) -> Self {
         Self {
             config,
             initial_cash,
@@ -72,6 +94,48 @@ impl SimulatedBroker {
             last_price: HashMap::new(),
             cash: initial_cash,
             trade_log: Vec::new(),
+            execution_profile,
+            acquired_lots: HashMap::new(),
+        }
+    }
+
+    fn tracked_lot_quantity(&self, symbol: &str) -> f64 {
+        self.acquired_lots
+            .get(symbol)
+            .into_iter()
+            .flatten()
+            .map(|lot| lot.quantity)
+            .sum()
+    }
+
+    fn consume_sellable_lots(
+        &mut self,
+        symbol: &str,
+        timestamp: DateTime<Utc>,
+        position_before: f64,
+        sold: f64,
+    ) {
+        if !self.execution_profile.uses_t_plus_one() {
+            return;
+        }
+        let tracked = self.tracked_lot_quantity(symbol);
+        let legacy_sellable = (position_before - tracked).max(0.0);
+        let mut remaining = (sold - legacy_sellable.min(sold)).max(0.0);
+        let Some(today) = ExecutionProfile::shanghai_trade_date(timestamp) else {
+            return;
+        };
+        if let Some(lots) = self.acquired_lots.get_mut(symbol) {
+            for lot in lots.iter_mut() {
+                if remaining <= 1e-9 {
+                    break;
+                }
+                if lot.trade_date < today {
+                    let consumed = lot.quantity.min(remaining);
+                    lot.quantity -= consumed;
+                    remaining -= consumed;
+                }
+            }
+            lots.retain(|lot| lot.quantity > 1e-9);
         }
     }
 
@@ -180,6 +244,38 @@ impl Broker for SimulatedBroker {
                 commission: 0.0,
             };
         }
+        let position_before = self.get_position(&order.symbol).size.max(0.0);
+        let sellable_before = self.sellable_size(&order.symbol, order.timestamp);
+        let settlement_date_valid = !self.execution_profile.uses_t_plus_one()
+            || ExecutionProfile::shanghai_trade_date(order.timestamp).is_some();
+        let quantity_allowed = settlement_date_valid
+            && match order.side {
+                Side::Buy => self.execution_profile.valid_buy_quantity(order.size),
+                Side::Sell if self.execution_profile.market == ExecutionMarket::Unrestricted => {
+                    true
+                }
+                Side::Sell => self.execution_profile.valid_sell_quantity(
+                    order.size,
+                    position_before,
+                    sellable_before,
+                ),
+                Side::Hold => false,
+            };
+        if !quantity_allowed {
+            self.log(
+                order.timestamp,
+                format!("市场执行规则拒绝订单 {}", order.id),
+            );
+            return Fill {
+                order_id: order.id,
+                timestamp: order.timestamp,
+                symbol: order.symbol,
+                side: order.side,
+                size: 0.0,
+                price: 0.0,
+                commission: 0.0,
+            };
+        }
         let fill_price = match self.resolve_fill_price(&order) {
             Some(p) => p,
             None => {
@@ -244,6 +340,25 @@ impl Broker for SimulatedBroker {
             fill_price,
             commission,
         );
+        match order.side {
+            Side::Buy if self.execution_profile.uses_t_plus_one() => {
+                self.acquired_lots
+                    .entry(order.symbol.clone())
+                    .or_default()
+                    .push(AcquiredLot {
+                        trade_date: ExecutionProfile::shanghai_trade_date(order.timestamp)
+                            .expect("T+1 timestamp was validated before execution"),
+                        quantity: order.size,
+                    });
+            }
+            Side::Sell => self.consume_sellable_lots(
+                &order.symbol,
+                order.timestamp,
+                position_before,
+                order.size,
+            ),
+            Side::Buy | Side::Hold => {}
+        }
 
         Fill {
             order_id: order.id,
@@ -270,6 +385,27 @@ impl Broker for SimulatedBroker {
 
     fn get_cash(&self) -> f64 {
         self.cash
+    }
+
+    fn sellable_size(&self, symbol: &str, timestamp: DateTime<Utc>) -> f64 {
+        let position = self.get_position(symbol).size.max(0.0);
+        if !self.execution_profile.uses_t_plus_one() {
+            return position;
+        }
+        let Some(today) = ExecutionProfile::shanghai_trade_date(timestamp) else {
+            return 0.0;
+        };
+        let tracked = self.tracked_lot_quantity(symbol);
+        let legacy = (position - tracked).max(0.0);
+        let settled: f64 = self
+            .acquired_lots
+            .get(symbol)
+            .into_iter()
+            .flatten()
+            .filter(|lot| lot.trade_date < today)
+            .map(|lot| lot.quantity)
+            .sum();
+        (legacy + settled).min(position)
     }
 
     fn set_market_price(&mut self, symbol: &str, price: f64) {

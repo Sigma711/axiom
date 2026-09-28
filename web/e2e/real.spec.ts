@@ -1,5 +1,125 @@
 import { createHash } from 'node:crypto';
 import { expect, test } from './v8-coverage';
+import type { Locator, Page } from '@playwright/test';
+
+async function assertExecutionDisclosure(page: Page, payload: any) {
+  const disclosure = page.getByLabel('成交与价格口径').first();
+  await expect(disclosure).toBeVisible();
+  if (!await disclosure.evaluate(node => (node as HTMLDetailsElement).open)) await disclosure.locator('summary').click();
+  for (const rule of payload.execution_assumptions || []) {
+    const item = disclosure.locator('li').filter({ hasText: rule.description_zh });
+    await expect(item).toContainText(rule.simulated ? '已模拟' : '未模拟');
+    if (rule.limitation_zh) await expect(item).toContainText(rule.limitation_zh);
+    if (rule.source_url) await expect(item.getByRole('link')).toHaveAttribute('href', rule.source_url);
+  }
+  if (payload.market_provenance) {
+    await expect(disclosure).toContainText('价格曲线不代表含分红再投资的总回报');
+    if (payload.market_provenance.endpoint.startsWith('https://')) {
+      await expect(disclosure.getByRole('link', { name: '行情接口来源 ↗' })).toHaveAttribute('href', payload.market_provenance.endpoint);
+    }
+  }
+}
+
+async function captureHistoricalCard(page: Page, visual: Locator, name: string) {
+  await page.evaluate(() => document.fonts.ready);
+  await visual.scrollIntoViewIfNeeded();
+  await expect(visual).toBeVisible();
+  const original = await visual.evaluate(node => {
+    const rect = node.getBoundingClientRect();
+    return { width: rect.width, height: rect.height, position: getComputedStyle(node).position, scrollY: window.scrollY };
+  });
+  expect(original.position).not.toBe('fixed');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(await visual.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await visual.locator('.ax-filing-fact a').first().click({ trial: true });
+  // Verify natural layout first, then keep the same live card and dimensions
+  // while isolating its screenshot origin from unrelated chart scrolling.
+  const snapshotStyle = await page.addStyleTag({ content: `.ax-tabs { visibility: hidden !important; } .ax-filing-case { position: fixed !important; top: 0 !important; left: 0 !important; width: ${original.width}px !important; box-sizing: border-box; margin: 0 !important; transform: none !important; z-index: 10000; }` });
+  try {
+    const isolated = await visual.boundingBox();
+    expect(isolated).not.toBeNull();
+    expect(isolated!.x).toBe(0);
+    expect(isolated!.y).toBe(0);
+    expect(isolated!.width).toBeCloseTo(original.width, 1);
+    expect(isolated!.height).toBeCloseTo(original.height, 1);
+    await page.mouse.move(0, 0);
+    await expect(visual).toHaveScreenshot(name, { maxDiffPixelRatio: .01 });
+  } finally {
+    await snapshotStyle.evaluate(node => node.parentNode?.removeChild(node));
+    await page.evaluate(scrollY => window.scrollTo(0, scrollY), original.scrollY);
+  }
+  expect(await visual.evaluate(node => getComputedStyle(node).position)).toBe(original.position);
+}
+
+test('every historical industry case follows its verified original disclosure from the knowledge card to practice', async ({ page, request }) => {
+  test.setTimeout(420_000);
+  const sources = [
+    { symbol: '2318.HK', url: 'https://pagroup.pingan.com/resource/pingan/IR-Docs/2025/pingan-ar24-report.pdf', bytes: 14_886_158, hash: '62a5bd793ef9a787cc95750d65e52803aa58fa424b01d94e754ea0120d5be8a3' },
+    { symbol: 'SHOP', url: 'https://s27.q4cdn.com/572064924/files/doc_financials/2024/q4/Q4-2024-Press-Release-Final.pdf', bytes: 86_468, hash: '4bf71232697a2270b2dbc38fc9609c11c27d545d6f4301fce3356fa60c6ef6de' },
+    { symbol: 'O', url: 'https://www.realtyincome.com/sites/realty-income/files/2025-02/realty-income-q4-2024-supplemental-information.pdf', bytes: 17_522_920, hash: 'a0b3bf067c7b19ebde01ceaac3ecb172ed6a4c7084eeabe276ad1d4599c62a3f' },
+    { symbol: 'EBAY', url: 'https://investors.ebayinc.com/files/doc_financials/2024/q4/eBay-10-K-2024.pdf', bytes: 1_004_020, hash: '10530b8314c4dc49f9737b938f28ead7a70212885c35919fb361d145401f37fb' },
+  ];
+  for (const source of sources) {
+    const response = await request.get(source.url, { timeout: 60_000 });
+    expect(response.ok()).toBe(true);
+    const bytes = await response.body();
+    expect(bytes.subarray(0, 5).toString()).toBe('%PDF-');
+    expect(bytes).toHaveLength(source.bytes);
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe(source.hash);
+  }
+  // Independent literals transcribed from Ping An pp57–58/336, Shopify p1,
+  // Realty Income p25 and eBay p44. Ratios use actual business denominators.
+  const cases = [
+    { id: 'bank_nim', symbol: '2318.HK', key: 'net_interest_margin', expected: 93427 / 4994494, facts: { net_interest_income: 93427, average_earning_assets: 4994494 }, page: 57, audited: false },
+    { id: 'book_bank_nim', symbol: '2318.HK', key: 'net_interest_margin', expected: 93427 / 4994494, facts: { net_interest_income: 93427, average_earning_assets: 4994494 }, page: 57, audited: false },
+    { id: 'book_bank_cost_income', symbol: '2318.HK', key: 'cost_income_ratio', expected: 40582 / 146695, facts: { operating_expenses: 40582, operating_income: 146695 }, page: 57, audited: false },
+    { id: 'book_bank_npl_ratio', symbol: '2318.HK', key: 'nonperforming_loan_ratio', expected: 35738 / 3374103, facts: { nonperforming_loans: 35738, gross_loans: 3374103 }, page: 58, audited: false },
+    { id: 'book_insurance_solvency_ratio', symbol: '2318.HK', key: 'solvency_adequacy_ratio', expected: 138649 / 67536, facts: { available_capital: 138649, required_capital: 67536 }, page: 336, audited: true },
+    { id: 'book_saas_arr', symbol: 'SHOP', key: 'annualized_recurring_revenue_run_rate', expected: 2136, facts: { monthly_recurring_revenue: 178 }, page: 1, audited: false },
+    { id: 'book_saas_rule_of_40', symbol: 'SHOP', key: 'rule_of_40', expected: (8880 / 7060 - 1) + 1597 / 8880, facts: { revenue_2024: 8880, revenue_2023: 7060, free_cash_flow: 1597 }, page: 1, audited: false },
+    { id: 'book_platform_gmv', symbol: 'SHOP', key: 'gross_merchandise_value', expected: 292275, facts: { gross_merchandise_value: 292275 }, page: 1, audited: false },
+    { id: 'book_platform_take_rate', symbol: 'EBAY', key: 'platform_take_rate', expected: 10283 / 74667, facts: { platform_revenue: 10283, gross_merchandise_value: 74667 }, page: 44, audited: false },
+    { id: 'book_reit_occupancy', symbol: 'O', key: 'occupied_area_ratio', expected: 335777818 / 339361416, facts: { leased_area: 335777818, lettable_area: 339361416 }, page: 25, audited: false },
+  ];
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  for (const item of cases) {
+    await page.goto('/learn');
+    await page.getByRole('textbox', { name: '搜索 概念 / 公式 / 关键词' }).fill(item.id);
+    const card = page.locator(`.ax-kb-card[data-concept-id="${item.id}"]`);
+    await expect(card).toHaveCount(1);
+    await card.getByRole('button', { name: '在数据探索中实践' }).click();
+    await expect(page).toHaveURL(new RegExp(`/data\\?concept=${item.id}&source=issuer_disclosure$`));
+    const panel = page.getByLabel('概念实践');
+    await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+    const sent = page.waitForRequest(r => r.url().includes('/api/practice') && r.method() === 'POST');
+    const received = page.waitForResponse(r => r.url().includes('/api/practice') && r.request().method() === 'POST');
+    await panel.getByRole('button', { name: '运行实践' }).click();
+    const [outbound, response] = await Promise.all([sent, received]);
+    expect(outbound.postDataJSON()).toEqual({ concept_id: item.id, module: 'data', source: 'issuer_disclosure', symbol: item.symbol, inputs: {} });
+    expect(response.ok(), await response.text()).toBe(true);
+    const result = await response.json();
+    expect(result).toMatchObject({ context: 'historical_industry_disclosure', bar_origin: 'server_verified_issuer_filing_pdf', input_kind: 'industry_case', status: 'computed', bars: [], inputs: {} });
+    expect(result.values[item.key]).toBeCloseTo(item.expected, 12);
+    const source = sources.find(source => source.symbol === item.symbol)!;
+    expect(result.industry_case).toMatchObject({ url: source.url, sha256: source.hash, bytes: source.bytes, audited: item.audited, issuer: { ticker: item.symbol } });
+    expect(result.industry_case.verification).toMatchObject({ matched_sha256: source.hash, matched_bytes: source.bytes });
+    expect(Object.fromEntries(result.industry_facts.reported_facts.map((fact: { key: string; value: number }) => [fact.key, fact.value]))).toEqual(item.facts);
+    const visual = panel.locator('.ax-industry-case');
+    await expect(visual).toBeVisible();
+    await expect(visual).toContainText('固定历史案例');
+    await expect(visual.locator('[data-industry-fact]')).toHaveCount(Object.keys(item.facts).length);
+    await expect(visual.locator('[data-industry-fact]').first().getByRole('link')).toHaveAttribute('href', `${source.url}#page=${item.page}`);
+  }
+  const visual = page.getByLabel('概念实践').locator('.ax-industry-case');
+  await captureHistoricalCard(page, visual, 'industry-occupancy-dark.png');
+  await page.getByLabel('切换到浅色模式').click();
+  await captureHistoricalCard(page, visual, 'industry-occupancy-light.png');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await visual.evaluate(node => node.getBoundingClientRect().right <= window.innerWidth)).toBe(true);
+  await captureHistoricalCard(page, visual, 'industry-occupancy-mobile.png');
+  expect(errors).toEqual([]);
+});
 
 test('Binance symbol picker reaches the complete tradable universe and searches beyond its startup seed', async ({ page, request }) => {
   test.setTimeout(90_000);
@@ -234,7 +354,7 @@ test('repainting practice fetches completed real bars and keeps confirmation aft
     }
   }
   expect(confirmationCount).toBeGreaterThan(0);
-  await expect(page.locator('.ax-practice-result')).toContainText('服务器重新获取并过滤已收盘行情');
+  await expect(page.locator('.ax-practice-result')).toContainText('所选标的的已收盘行情');
   await expect.poll(() => page.locator('.ax-practice-result circle[data-series-marker]').count()).toBeGreaterThan(0);
   await expect.poll(() => page.locator('.ax-practice-result circle[data-series-marker="pivot_high_occurrence"], .ax-practice-result circle[data-series-marker="pivot_low_occurrence"]').count()).toBeGreaterThan(0);
   await expect(page.locator('.ax-practice-result')).toContainText('t+2');
@@ -289,6 +409,7 @@ test('browser switches among three live markets with matching symbols and valid 
     }
     await expect(page.locator('.ax-chart svg.main-svg').first()).toBeVisible();
     await expect(page.locator('.ax-summary')).toContainText(market.symbol);
+    await assertExecutionDisclosure(page, payload);
   }
 });
 
@@ -333,6 +454,7 @@ test('real market selections stay aligned across backtest comparison and paper',
     expect(payload.equity_curve.length).toBeGreaterThan(40);
     await expect(page.locator('.ax-metrics')).toBeVisible({ timeout: 20_000 });
     await expect(page.locator('.ax-chart svg.main-svg').first()).toBeVisible({ timeout: 20_000 });
+    await assertExecutionDisclosure(page, payload);
   }
 
   await page.goto('/compare');
@@ -344,13 +466,19 @@ test('real market selections stay aligned across backtest comparison and paper',
   await pool.nth(1).locator('input').click();
   await expect(page.locator('.ax-pool-item.checked')).toHaveCount(2);
   const comparisonRequests: any[] = [];
+  const comparisonResponses: any[] = [];
   const onRequest = (request: import('@playwright/test').Request) => {
     const url = new URL(request.url());
     if (request.method() === 'POST' && url.pathname.endsWith('/api/backtest')) comparisonRequests.push(request.postDataJSON());
   };
   page.on('request', onRequest);
+  const onResponse = async (response: import('@playwright/test').Response) => {
+    if (response.url().includes('/api/backtest') && response.request().method() === 'POST' && response.ok()) comparisonResponses.push(await response.json());
+  };
+  page.on('response', onResponse);
   for (const market of markets) {
     comparisonRequests.length = 0;
+    comparisonResponses.length = 0;
     await selectMarket(market);
     await page.getByRole('button', { name: /\u8dd1\u5bf9\u6bd4/ }).click();
     await expect.poll(() => comparisonRequests.length, { timeout: 45_000 }).toBe(2);
@@ -360,8 +488,11 @@ test('real market selections stay aligned across backtest comparison and paper',
     }
     await expect.poll(() => page.locator('.ax-cmp-table tbody tr').count(), { timeout: 30_000 }).toBe(2);
     await expect(page.locator('.ax-chart svg.main-svg').first()).toBeVisible({ timeout: 20_000 });
+    await expect.poll(() => comparisonResponses.length).toBe(2);
+    await assertExecutionDisclosure(page, comparisonResponses[0]);
   }
   page.off('request', onRequest);
+  page.off('response', onResponse);
 
   await page.goto('/paper');
   await expect(page.getByRole('heading', { name: /\u6a21\u62df\u76d8/ })).toBeVisible();
@@ -385,6 +516,7 @@ test('real market selections stay aligned across backtest comparison and paper',
     await expect(page.locator('.ax-paper-stats')).toContainText(market.symbol);
     await expect(page.locator('.ax-paper-stats')).not.toContainText(/\u4ea4\u6613\u5bf9\s+—/);
     await expect(page.locator('.ax-paper-stats')).not.toContainText(/\u6570\u636e\u6e90\s+—/);
+    await assertExecutionDisclosure(page, payload);
   }
 });
 
@@ -401,7 +533,6 @@ test('knowledge practice opens the applicable module and market instead of forci
   await page.goto('/');
   await search.fill('ROE 净资产收益率');
   const roe = page.locator('.ax-kb-card').filter({ has: page.getByRole('heading', { name: 'ROE 净资产收益率', exact: true }) });
-  await expect(roe).toContainText('需真实数据');
   await expect(roe).not.toContainText('待接入独立证据');
   await roe.getByRole('button', { name: '在数据探索中实践' }).click();
   await expect(page).toHaveURL(/\/data\?concept=roe&source=us_stock/);
@@ -1047,7 +1178,7 @@ test('spot-depth practices read one live Binance order-book snapshot and keep qu
       expect(result.values.order_imbalance).toBeCloseTo((bid - ask) / (bid + ask), 8);
     }
     await expect(panel.locator('.ax-depth-chart svg')).toBeVisible();
-    await expect(panel).toContainText('没有历史时间戳');
+    await expect(panel).toContainText('没有交易所历史时间戳');
     if (conceptId === 'book_pitfall_order_imbalance') await expect(panel).toContainText('委比高不代表价格随后必涨');
   }
   await page.setViewportSize({ width: 390, height: 844 });
@@ -1094,7 +1225,7 @@ test('paired-market practices fetch and align real completed candles through the
       await expect(panel).toContainText('不单凭该统计量认定协整');
     }
     await expect(panel.locator('.ax-series-illustration svg')).toBeVisible();
-    await expect(panel).toContainText('服务器获取并按相同时间戳对齐');
+    await expect(panel).toContainText('两只 Binance USDT 现货的同时刻已收盘小时线');
   }
 });
 

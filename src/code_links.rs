@@ -109,7 +109,9 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
     ROUTES.get_or_init(|| {
         let mut out = BTreeMap::new();
         for c in crate::practice::base_catalog() {
-            let candidates = if crate::filing_case::is_supported(&c.id) {
+            let candidates = if crate::industry_case::is_supported(&c.id) {
+                vec![format!("src/industry_case.rs::calculate::{}", c.id)]
+            } else if crate::filing_case::is_supported(&c.id) {
                 vec![format!("src/filing_case.rs::metric::{}", c.id)]
             } else if c.id == "volume_profile" {
                 vec!["src/book.rs::market_recent_trade_summary".to_string()]
@@ -155,7 +157,9 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
             }
         }
         for c in crate::book::catalog() {
-            let references = if crate::filing_case::is_supported(&c.id) {
+            let references = if crate::industry_case::is_supported(&c.id) {
+                vec![format!("src/industry_case.rs::calculate::{}", c.id)]
+            } else if crate::filing_case::is_supported(&c.id) {
                 vec![format!("src/filing_case.rs::metric::{}", c.id)]
             } else {
                 match c.id.as_str() {

@@ -1313,14 +1313,13 @@ impl HttpFeed {
     }
 }
 
-#[async_trait]
-impl AsyncDataFeed for HttpFeed {
-    async fn fetch_historical_async(
+impl HttpFeed {
+    async fn fetch_historical_snapshot(
         &self,
         symbol: &str,
         since: DateTime<Utc>,
         limit: usize,
-    ) -> Result<Vec<Bar>> {
+    ) -> Result<MarketSnapshot> {
         // 1. 先看本地缓存
         if let Ok(cached) = self.csv.load(symbol, "1h") {
             let cached_after: Vec<Bar> = cached
@@ -1329,7 +1328,15 @@ impl AsyncDataFeed for HttpFeed {
                 .cloned()
                 .collect();
             if cached_after.len() >= limit {
-                return Ok(cached_after.into_iter().take(limit).collect());
+                // Legacy CSV files contain no authenticated provider or
+                // adjustment metadata. Do not turn cache availability into a
+                // claim that these bytes were just verified at the exchange.
+                return Ok(MarketSnapshot::new(
+                    cached_after.into_iter().take(limit).collect(),
+                    "local_csv_cache",
+                    "local historical CSV cache",
+                    "cache_price_basis_unverified",
+                ));
             }
         }
 
@@ -1345,7 +1352,47 @@ impl AsyncDataFeed for HttpFeed {
         merged.dedup_by_key(|b| b.timestamp);
         self.csv.save(symbol, "1h", &merged).ok();
 
-        Ok(bars)
+        let official_endpoint = reqwest::Url::parse(&self.base_url).is_ok_and(|url| {
+            url.scheme() == "https"
+                && [
+                    "data-api.binance.vision",
+                    "api.binance.com",
+                    "api1.binance.com",
+                    "api2.binance.com",
+                    "api3.binance.com",
+                    "api4.binance.com",
+                ]
+                .contains(&url.host_str().unwrap_or(""))
+        });
+        Ok(MarketSnapshot::new(
+            bars,
+            if official_endpoint {
+                "binance_spot"
+            } else {
+                "configured_crypto_endpoint"
+            },
+            &format!("{}/api/v3/klines", self.base_url.trim_end_matches('/')),
+            if official_endpoint {
+                "spot_trade_prices"
+            } else {
+                "configured_feed_unverified"
+            },
+        ))
+    }
+}
+
+#[async_trait]
+impl AsyncDataFeed for HttpFeed {
+    async fn fetch_historical_async(
+        &self,
+        symbol: &str,
+        since: DateTime<Utc>,
+        limit: usize,
+    ) -> Result<Vec<Bar>> {
+        Ok(self
+            .fetch_historical_snapshot(symbol, since, limit)
+            .await?
+            .bars)
     }
 
     async fn stream_live_async(&self, symbol: &str) -> Result<Vec<Bar>> {
@@ -1527,9 +1574,8 @@ fn json_number(value: &serde_json::Value) -> Option<f64> {
 fn parse_tencent_a_share_bars(raw: &serde_json::Value, market_symbol: &str) -> Result<Vec<Bar>> {
     let rows = raw
         .pointer(&format!("/data/{market_symbol}/day"))
-        .or_else(|| raw.pointer(&format!("/data/{market_symbol}/qfqday")))
         .and_then(serde_json::Value::as_array)
-        .context("Tencent A-share response has no completed daily rows")?;
+        .context("Tencent A-share response has no unadjusted completed daily rows")?;
     let bars: Vec<Bar> = rows
         .iter()
         .filter_map(|row| {
@@ -1592,9 +1638,13 @@ fn latest_daily_bars(mut bars: Vec<Bar>, since: DateTime<Utc>, limit: usize) -> 
     bars
 }
 
-async fn fetch_a_share(symbol: &str, since: DateTime<Utc>, limit: usize) -> Result<Vec<Bar>> {
+async fn fetch_a_share_snapshot(
+    symbol: &str,
+    since: DateTime<Utc>,
+    limit: usize,
+) -> Result<MarketSnapshot> {
     let client = reqwest::Client::new();
-    fetch_a_share_at(
+    fetch_a_share_snapshot_at(
         &client,
         "https://push2his.eastmoney.com/api/qt/stock/kline/get",
         "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get",
@@ -1605,6 +1655,7 @@ async fn fetch_a_share(symbol: &str, since: DateTime<Utc>, limit: usize) -> Resu
     .await
 }
 
+#[cfg(test)]
 async fn fetch_a_share_at(
     client: &reqwest::Client,
     eastmoney_endpoint: &str,
@@ -1613,6 +1664,26 @@ async fn fetch_a_share_at(
     since: DateTime<Utc>,
     limit: usize,
 ) -> Result<Vec<Bar>> {
+    Ok(fetch_a_share_snapshot_at(
+        client,
+        eastmoney_endpoint,
+        tencent_endpoint,
+        symbol,
+        since,
+        limit,
+    )
+    .await?
+    .bars)
+}
+
+async fn fetch_a_share_snapshot_at(
+    client: &reqwest::Client,
+    eastmoney_endpoint: &str,
+    tencent_endpoint: &str,
+    symbol: &str,
+    since: DateTime<Utc>,
+    limit: usize,
+) -> Result<MarketSnapshot> {
     anyhow::ensure!(
         symbol.len() == 6 && symbol.bytes().all(|byte| byte.is_ascii_digit()),
         "A-share symbol must be a six digit code"
@@ -1664,29 +1735,42 @@ async fn fetch_a_share_at(
                 .filter_map(parse_eastmoney_kline)
                 .collect();
             crate::practice::validate_bars(&bars).map_err(anyhow::Error::msg)?;
-            Ok::<Vec<Bar>, anyhow::Error>(latest_daily_bars(bars, since, limit))
+            Ok::<MarketSnapshot, anyhow::Error>(MarketSnapshot::new(
+                latest_daily_bars(bars, since, limit),
+                "eastmoney",
+                eastmoney_endpoint,
+                "unadjusted_requested",
+            ))
         },
-        fetch_a_share_tencent_at(client, tencent_endpoint, symbol, since, limit)
+        async {
+            fetch_a_share_tencent_at(client, tencent_endpoint, symbol, since, limit)
+                .await
+                .map(|bars| {
+                    MarketSnapshot::new(bars, "tencent", tencent_endpoint, "unadjusted_requested")
+                })
+        }
     );
     select_a_share_daily_bars(primary, tencent, Utc::now())
 }
 
-fn select_a_share_daily_bars(
-    primary: Result<Vec<Bar>>,
-    fallback: Result<Vec<Bar>>,
+fn select_a_share_daily_bars<T: AsRef<[Bar]>>(
+    primary: Result<T>,
+    fallback: Result<T>,
     now: DateTime<Utc>,
-) -> Result<Vec<Bar>> {
+) -> Result<T> {
     let primary_current = primary
         .as_ref()
-        .is_ok_and(|bars| has_current_daily_bars(bars, now));
+        .is_ok_and(|bars| has_current_daily_bars(bars.as_ref(), now));
     let fallback_current = fallback
         .as_ref()
-        .is_ok_and(|bars| has_current_daily_bars(bars, now));
+        .is_ok_and(|bars| has_current_daily_bars(bars.as_ref(), now));
     match (primary_current, fallback_current) {
         (true, true) => {
             let primary = primary.expect("current primary result was checked above");
             let fallback = fallback.expect("current fallback result was checked above");
-            if fallback.last().map(|bar| bar.timestamp) > primary.last().map(|bar| bar.timestamp) {
+            if fallback.as_ref().last().map(|bar| bar.timestamp)
+                > primary.as_ref().last().map(|bar| bar.timestamp)
+            {
                 Ok(fallback)
             } else {
                 Ok(primary)
@@ -1703,7 +1787,7 @@ fn select_a_share_daily_bars(
             let bars = newest_nonempty_daily_series(primary, fallback)?;
             let age_days = now
                 .date_naive()
-                .signed_duration_since(bars.last().unwrap().timestamp.date_naive())
+                .signed_duration_since(bars.as_ref().last().unwrap().timestamp.date_naive())
                 .num_days();
             anyhow::ensure!(
                 (0..=21).contains(&age_days),
@@ -1714,20 +1798,24 @@ fn select_a_share_daily_bars(
     }
 }
 
-fn newest_nonempty_daily_series(
-    primary: Result<Vec<Bar>>,
-    fallback: Result<Vec<Bar>>,
-) -> Result<Vec<Bar>> {
+fn newest_nonempty_daily_series<T: AsRef<[Bar]>>(
+    primary: Result<T>,
+    fallback: Result<T>,
+) -> Result<T> {
     match (primary, fallback) {
-        (Ok(primary), Ok(fallback)) if !primary.is_empty() && !fallback.is_empty() => {
-            if fallback.last().map(|bar| bar.timestamp) > primary.last().map(|bar| bar.timestamp) {
+        (Ok(primary), Ok(fallback))
+            if !primary.as_ref().is_empty() && !fallback.as_ref().is_empty() =>
+        {
+            if fallback.as_ref().last().map(|bar| bar.timestamp)
+                > primary.as_ref().last().map(|bar| bar.timestamp)
+            {
                 Ok(fallback)
             } else {
                 Ok(primary)
             }
         }
-        (Ok(primary), _) if !primary.is_empty() => Ok(primary),
-        (_, Ok(fallback)) if !fallback.is_empty() => Ok(fallback),
+        (Ok(primary), _) if !primary.as_ref().is_empty() => Ok(primary),
+        (_, Ok(fallback)) if !fallback.as_ref().is_empty() => Ok(fallback),
         (primary, fallback) => {
             let primary_error = primary
                 .err()
@@ -1794,13 +1882,13 @@ async fn fetch_us_stock_nasdaq_at(
     symbol: &str,
     since: DateTime<Utc>,
     limit: usize,
-) -> Result<Vec<Bar>> {
+) -> Result<MarketSnapshot> {
     // Nasdaq separates common shares and exchange-traded funds by asset class.
     // The catalog includes both, so a missing stock result must retry as an ETF.
     let mut last_error = String::new();
     for assetclass in ["stocks", "etf"] {
-        let attempt: Result<Vec<Bar>> = async {
-            let raw: serde_json::Value = client
+        let attempt: Result<MarketSnapshot> = async {
+            let response = client
                 .get(format!("{endpoint}/{symbol}/historical"))
                 .header(
                     reqwest::header::USER_AGENT,
@@ -1818,15 +1906,22 @@ async fn fetch_us_stock_nasdaq_at(
                 .await
                 .context("Nasdaq market request failed")?
                 .error_for_status()
-                .context("Nasdaq market returned HTTP error")?
+                .context("Nasdaq market returned HTTP error")?;
+            let selected_endpoint = response.url().to_string();
+            let raw: serde_json::Value = response
                 .json()
                 .await
                 .context("invalid Nasdaq market JSON")?;
-            Ok(latest_daily_bars(parse_nasdaq_bars(&raw)?, since, limit))
+            Ok(MarketSnapshot::new(
+                latest_daily_bars(parse_nasdaq_bars(&raw)?, since, limit),
+                "nasdaq",
+                &selected_endpoint,
+                "provider_adjustment_unverified",
+            ))
         }
         .await;
         match attempt {
-            Ok(bars) if !bars.is_empty() => return Ok(bars),
+            Ok(snapshot) if !snapshot.bars.is_empty() => return Ok(snapshot),
             Ok(_) => last_error = format!("{assetclass} returned no daily rows"),
             Err(error) => last_error = format!("{assetclass}: {error}"),
         }
@@ -1834,9 +1929,13 @@ async fn fetch_us_stock_nasdaq_at(
     anyhow::bail!("Nasdaq market has no usable daily rows for {symbol}: {last_error}")
 }
 
-async fn fetch_us_stock(symbol: &str, since: DateTime<Utc>, limit: usize) -> Result<Vec<Bar>> {
+async fn fetch_us_stock_snapshot(
+    symbol: &str,
+    since: DateTime<Utc>,
+    limit: usize,
+) -> Result<MarketSnapshot> {
     let client = reqwest::Client::new();
-    fetch_us_stock_at(
+    fetch_us_stock_snapshot_at(
         &client,
         "https://query1.finance.yahoo.com/v8/finance/chart",
         "https://api.nasdaq.com/api/quote",
@@ -1847,14 +1946,14 @@ async fn fetch_us_stock(symbol: &str, since: DateTime<Utc>, limit: usize) -> Res
     .await
 }
 
-async fn fetch_us_stock_at(
+async fn fetch_us_stock_snapshot_at(
     client: &reqwest::Client,
     yahoo_endpoint: &str,
     nasdaq_endpoint: &str,
     symbol: &str,
     since: DateTime<Utc>,
     limit: usize,
-) -> Result<Vec<Bar>> {
+) -> Result<MarketSnapshot> {
     anyhow::ensure!(
         !symbol.is_empty()
             && symbol.len() <= 12
@@ -1896,7 +1995,12 @@ async fn fetch_us_stock_at(
     }
     .await;
     match primary {
-        Ok(bars) if !bars.is_empty() => Ok(bars),
+        Ok(bars) if !bars.is_empty() => Ok(MarketSnapshot::new(
+            bars,
+            "yahoo",
+            yahoo_endpoint,
+            "provider_adjustment_unverified",
+        )),
         Ok(_) | Err(_) => {
             fetch_us_stock_nasdaq_at(client, nasdaq_endpoint, symbol, since, limit).await
         }
@@ -1905,6 +2009,40 @@ async fn fetch_us_stock_at(
 
 /// Fetch completed candles from a named free public source. Source-specific
 /// response peculiarities, daily session rules and parsers stay behind this seam.
+#[derive(Debug, Clone, Serialize)]
+pub struct MarketProvenance {
+    pub provider: String,
+    pub endpoint: String,
+    pub price_basis: String,
+    pub corporate_actions: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MarketSnapshot {
+    pub bars: Vec<Bar>,
+    pub provenance: MarketProvenance,
+}
+
+impl AsRef<[Bar]> for MarketSnapshot {
+    fn as_ref(&self) -> &[Bar] {
+        &self.bars
+    }
+}
+
+impl MarketSnapshot {
+    fn new(bars: Vec<Bar>, provider: &str, endpoint: &str, price_basis: &str) -> Self {
+        Self {
+            bars,
+            provenance: MarketProvenance {
+                provider: provider.into(),
+                endpoint: endpoint.into(),
+                price_basis: price_basis.into(),
+                corporate_actions: "not_simulated".into(),
+            },
+        }
+    }
+}
+
 pub async fn fetch_public_market_bars(
     feed: &HttpFeed,
     source: &str,
@@ -1912,14 +2050,30 @@ pub async fn fetch_public_market_bars(
     since: DateTime<Utc>,
     limit: usize,
 ) -> Result<Vec<Bar>> {
+    Ok(
+        fetch_public_market_snapshot(feed, source, symbol, since, limit)
+            .await?
+            .bars,
+    )
+}
+
+/// Preserve the actual chosen provider and its price convention with its bars.
+/// Quote OHLC must not be advertised as a dividend-adjusted total-return series.
+pub async fn fetch_public_market_snapshot(
+    feed: &HttpFeed,
+    source: &str,
+    symbol: &str,
+    since: DateTime<Utc>,
+    limit: usize,
+) -> Result<MarketSnapshot> {
     anyhow::ensure!(
         is_public_market_source(source),
         "unknown public market source"
     );
     match source {
-        "binance" => feed.fetch_historical_async(symbol, since, limit).await,
-        "a_share" => fetch_a_share(symbol, since, limit).await,
-        "us_stock" => fetch_us_stock(symbol, since, limit).await,
+        "binance" => feed.fetch_historical_snapshot(symbol, since, limit).await,
+        "a_share" => fetch_a_share_snapshot(symbol, since, limit).await,
+        "us_stock" => fetch_us_stock_snapshot(symbol, since, limit).await,
         _ => unreachable!("source is validated above"),
     }
 }
@@ -2004,6 +2158,23 @@ mod public_market_source_tests {
         axum::http::StatusCode::SERVICE_UNAVAILABLE
     }
 
+    async fn configured_crypto_fixture() -> Json<serde_json::Value> {
+        Json(serde_json::json!([[
+            1_704_153_600_000_i64,
+            "10",
+            "12",
+            "9",
+            "11",
+            "100",
+            1_704_157_199_999_i64,
+            "1100",
+            10,
+            "30",
+            "330",
+            "0"
+        ]]))
+    }
+
     async fn empty_yahoo_fixture() -> Json<serde_json::Value> {
         Json(serde_json::json!({
             "chart": {"result": [{
@@ -2053,6 +2224,7 @@ mod public_market_source_tests {
                     .route("/tencent-unavailable", get(unavailable_tencent_fixture))
                     .route("/yahoo/*symbol", get(empty_yahoo_fixture))
                     .route("/nasdaq/*symbol", get(nasdaq_fallback_fixture))
+                    .route("/api/v3/klines", get(configured_crypto_fixture))
                     .route("/nasdaq-etf/*symbol", get(nasdaq_etf_fixture)),
             )
             .await
@@ -2191,6 +2363,69 @@ mod public_market_source_tests {
             ),
             (10.0, 12.0, 9.0, 11.0, 100.0)
         );
+    }
+
+    #[test]
+    fn unadjusted_daily_requests_never_accept_forward_adjusted_fallback_rows() {
+        let adjusted_only = serde_json::json!({"data":{"sh600519":{"qfqday":[
+            ["2024-01-02","10","11","12","9","100"]
+        ]}}});
+        let error = parse_tencent_a_share_bars(&adjusted_only, "sh600519")
+            .expect_err("a forward-adjusted series cannot replace unadjusted daily prices");
+        assert!(error.to_string().contains("unadjusted"));
+    }
+
+    #[tokio::test]
+    async fn cached_crypto_candles_do_not_claim_a_new_verified_exchange_response() {
+        let directory =
+            std::env::temp_dir().join(format!("axiom-provenance-{}", uuid::Uuid::new_v4()));
+        let feed = HttpFeed::new(&directory);
+        let bar = Bar {
+            timestamp: Utc.with_ymd_and_hms(2024, 1, 2, 0, 0, 0).unwrap(),
+            open: 10.0,
+            high: 12.0,
+            low: 9.0,
+            close: 11.0,
+            volume: 100.0,
+        };
+        feed.csv.save("BTCUSDT", "1h", &[bar]).unwrap();
+        let snapshot = fetch_public_market_snapshot(&feed, "binance", "BTCUSDT", bar.timestamp, 1)
+            .await
+            .unwrap();
+        assert_eq!(snapshot.bars[0].close, 11.0);
+        assert_eq!(snapshot.provenance.provider, "local_csv_cache");
+        assert_eq!(
+            snapshot.provenance.price_basis,
+            "cache_price_basis_unverified"
+        );
+        assert_eq!(snapshot.provenance.endpoint, "local historical CSV cache");
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[tokio::test]
+    async fn configured_crypto_endpoints_are_not_misidentified_as_the_official_exchange() {
+        let (base, server) = provider_fixture_server().await;
+        let directory =
+            std::env::temp_dir().join(format!("axiom-configured-feed-{}", uuid::Uuid::new_v4()));
+        let mut feed = HttpFeed::new(&directory);
+        feed.base_url = base.clone();
+        let snapshot = fetch_public_market_snapshot(
+            &feed,
+            "binance",
+            "BTCUSDT",
+            Utc.with_ymd_and_hms(2024, 1, 2, 0, 0, 0).unwrap(),
+            1,
+        )
+        .await
+        .unwrap();
+        assert_eq!(snapshot.provenance.provider, "configured_crypto_endpoint");
+        assert_eq!(
+            snapshot.provenance.endpoint,
+            format!("{base}/api/v3/klines")
+        );
+        assert_eq!(snapshot.bars[0].close, 11.0);
+        server.abort();
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
@@ -2347,7 +2582,7 @@ mod public_market_source_tests {
         let (base, server) = provider_fixture_server().await;
         let client = reqwest::Client::new();
         let since = Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
-        let a_share = fetch_a_share_at(
+        let a_share_snapshot = fetch_a_share_snapshot_at(
             &client,
             &format!("{base}/east"),
             &format!("{base}/tencent"),
@@ -2357,11 +2592,25 @@ mod public_market_source_tests {
         )
         .await
         .unwrap();
+        assert_eq!(a_share_snapshot.provenance.provider, "tencent");
+        assert_eq!(
+            a_share_snapshot.provenance.endpoint,
+            format!("{base}/tencent")
+        );
+        assert_eq!(
+            a_share_snapshot.provenance.price_basis,
+            "unadjusted_requested"
+        );
+        assert_eq!(
+            a_share_snapshot.provenance.corporate_actions,
+            "not_simulated"
+        );
+        let a_share = a_share_snapshot.bars;
         assert_eq!(a_share.len(), 1);
         assert_eq!(a_share[0].close, 11.0);
         assert_eq!(a_share[0].timestamp.date_naive(), Utc::now().date_naive());
 
-        let us_stock = fetch_us_stock_at(
+        let us_stock_snapshot = fetch_us_stock_snapshot_at(
             &client,
             &format!("{base}/yahoo"),
             &format!("{base}/nasdaq"),
@@ -2371,6 +2620,17 @@ mod public_market_source_tests {
         )
         .await
         .unwrap();
+        assert_eq!(us_stock_snapshot.provenance.provider, "nasdaq");
+        assert_eq!(
+            us_stock_snapshot.provenance.price_basis,
+            "provider_adjustment_unverified"
+        );
+        let selected = reqwest::Url::parse(&us_stock_snapshot.provenance.endpoint).unwrap();
+        assert_eq!(selected.path(), "/nasdaq/AAPL/historical");
+        assert!(selected
+            .query_pairs()
+            .any(|(key, value)| key == "assetclass" && value == "stocks"));
+        let us_stock = us_stock_snapshot.bars;
         assert_eq!(us_stock.len(), 1);
         assert_eq!(us_stock[0].close, 10.5);
         server.abort();
@@ -2381,7 +2641,7 @@ mod public_market_source_tests {
         let (base, server) = provider_fixture_server().await;
         let client = reqwest::Client::new();
         let since = Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
-        let bars = fetch_us_stock_at(
+        let snapshot = fetch_us_stock_snapshot_at(
             &client,
             &format!("{base}/yahoo"),
             &format!("{base}/nasdaq-etf"),
@@ -2391,6 +2651,12 @@ mod public_market_source_tests {
         )
         .await
         .unwrap();
+        let selected = reqwest::Url::parse(&snapshot.provenance.endpoint).unwrap();
+        assert_eq!(selected.path(), "/nasdaq-etf/SPY/historical");
+        assert!(selected
+            .query_pairs()
+            .any(|(key, value)| key == "assetclass" && value == "etf"));
+        let bars = snapshot.bars;
         assert_eq!(bars.len(), 1);
         assert_eq!(bars[0].close, 10.5);
         server.abort();

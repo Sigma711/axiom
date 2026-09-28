@@ -14,7 +14,9 @@
 
 use crate::api_validation::{self as validate, ApiError};
 use crate::app_state::AppState;
-use crate::data::{fetch_public_market_bars, DataFeed, SyntheticFeed};
+use crate::data::{
+    fetch_public_market_snapshot, DataFeed, MarketProvenance, MarketSnapshot, SyntheticFeed,
+};
 use crate::engine::{BacktestEngine, EngineConfig};
 use crate::metrics::compute_metrics;
 use crate::paper::PaperSnapshot;
@@ -50,12 +52,12 @@ fn source_candle_close_after(source: &str) -> Result<Duration, ApiError> {
 use std::sync::OnceLock;
 use tokio::sync::{Mutex as TokioMutex, RwLock as TokioRwLock};
 
-async fn market_bars(
+async fn market_snapshot(
     state: &AppState,
     symbol: &str,
     source: &str,
     limit: usize,
-) -> Result<Vec<Bar>, ApiError> {
+) -> Result<MarketSnapshot, ApiError> {
     validate::market(symbol, source, limit, 5000)?;
     // The real alias is accepted only for old deep links; new callers use the explicit provider name.
     let source = if source == "real" { "binance" } else { source };
@@ -85,13 +87,24 @@ async fn market_bars(
         // Daily markets need calendar runway: it includes weekends and holidays.
         now - Duration::days((requested.saturating_mul(3)) as i64)
     };
-    let bars = if source == "synthetic" {
-        SyntheticFeed::default().fetch_historical(symbol, since, requested)
+    let mut snapshot = if source == "synthetic" {
+        SyntheticFeed::default()
+            .fetch_historical(symbol, since, requested)
+            .map(|bars| MarketSnapshot {
+                bars,
+                provenance: MarketProvenance {
+                    provider: "synthetic".into(),
+                    endpoint: "deterministic_internal_generator".into(),
+                    price_basis: "simulated_ohlcv".into(),
+                    corporate_actions: "not_applicable".into(),
+                },
+            })
     } else {
-        fetch_public_market_bars(&state.feed, source, symbol, since, requested).await
+        fetch_public_market_snapshot(&state.feed, source, symbol, since, requested).await
     }
     .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
-    completed_market_bars(bars, source, Utc::now(), limit)
+    snapshot.bars = completed_market_bars(snapshot.bars, source, Utc::now(), limit)?;
+    Ok(snapshot)
 }
 
 fn completed_market_bars(
@@ -405,7 +418,8 @@ async fn get_data(
     let limit = q.limit.unwrap_or(200);
     let source = q.source.unwrap_or_else(|| "binance".to_string());
 
-    let bars = market_bars(&state, &symbol, &source, limit).await?;
+    let snapshot = market_snapshot(&state, &symbol, &source, limit).await?;
+    let bars = snapshot.bars;
 
     let json_bars: Vec<Value> = bars
         .iter()
@@ -427,6 +441,7 @@ async fn get_data(
         "bars": json_bars,
         "source": source,
         "market_data_as_of": bars.last().map(|bar| bar.timestamp),
+        "market_provenance": snapshot.provenance,
     })))
 }
 
@@ -508,11 +523,20 @@ async fn post_backtest(
     let source = req.source.unwrap_or_else(|| "binance".to_string());
 
     validate::market(&symbol, &source, limit, 5000)?;
-    let bars = if let Some(bars) = req.bars {
+    let (bars, market_provenance) = if let Some(bars) = req.bars {
         validate::bars(&bars)?;
-        bars
+        (
+            bars,
+            MarketProvenance {
+                provider: "caller_provided_unverified".into(),
+                endpoint: "request_body".into(),
+                price_basis: "caller_provided_unverified".into(),
+                corporate_actions: "not_simulated".into(),
+            },
+        )
     } else {
-        market_bars(&state, &symbol, &source, limit).await?
+        let snapshot = market_snapshot(&state, &symbol, &source, limit).await?;
+        (snapshot.bars, snapshot.provenance)
     };
 
     if bars.is_empty() {
@@ -543,9 +567,12 @@ async fn post_backtest(
     };
 
     // 4. 跑回测
-    let engine = BacktestEngine::new(engine_cfg.clone(), risk_cfg);
+    let execution_profile = crate::execution::ExecutionProfile::for_market(&source, &symbol);
+    let engine =
+        BacktestEngine::new(engine_cfg.clone(), risk_cfg).with_execution_profile(execution_profile);
     let mut result = engine.run(strategy.as_mut(), &bars);
     result.metrics = compute_metrics(&result);
+    result.config["market_provenance"] = json!(market_provenance.clone());
 
     // 5. 序列化成前端友好格式
     let equity_curve: Vec<Value> = result
@@ -620,6 +647,8 @@ async fn post_backtest(
         "bars": bars,
         "source": source,
         "market_data_as_of": market_data_as_of,
+        "execution_assumptions": result.config["execution_assumptions"],
+        "market_provenance": market_provenance,
         "config": result.config,
         "metrics": result.metrics,
         "equity_curve": equity_curve,
@@ -829,7 +858,8 @@ async fn get_patterns(
         .unwrap_or_else(|| state.config.trading.symbol.clone());
     let limit = q.limit.unwrap_or(100);
     let source = q.source.unwrap_or_else(|| "binance".to_string());
-    let bars = market_bars(&state, &symbol, &source, limit).await?;
+    let snapshot = market_snapshot(&state, &symbol, &source, limit).await?;
+    let bars = snapshot.bars;
 
     use crate::indicators::extra::detect_pattern;
     let patterns: Vec<Value> = bars
@@ -847,7 +877,13 @@ async fn get_patterns(
         })
         .collect();
 
-    Ok(Json(json!({ "symbol": symbol, "patterns": patterns })))
+    Ok(Json(json!({
+        "symbol": symbol,
+        "source": source,
+        "patterns": patterns,
+        "market_provenance": snapshot.provenance,
+        "execution_assumptions": crate::execution::ExecutionProfile::for_market(&source, &symbol).assumptions(),
+    })))
 }
 
 async fn get_heikin_ashi(
@@ -859,7 +895,8 @@ async fn get_heikin_ashi(
         .unwrap_or_else(|| state.config.trading.symbol.clone());
     let limit = q.limit.unwrap_or(200);
     let source = q.source.unwrap_or_else(|| "binance".to_string());
-    let bars = market_bars(&state, &symbol, &source, limit).await?;
+    let snapshot = market_snapshot(&state, &symbol, &source, limit).await?;
+    let bars = snapshot.bars;
 
     let ha = crate::indicators::extra::heikin_ashi(&bars);
     let json_bars: Vec<Value> = ha
@@ -872,9 +909,15 @@ async fn get_heikin_ashi(
         })
         .collect();
 
-    Ok(Json(
-        json!({ "symbol": symbol, "bars": json_bars, "chart": "heikin_ashi" }),
-    ))
+    Ok(Json(json!({
+        "symbol": symbol,
+        "source": source,
+        "bars": json_bars,
+        "chart": "heikin_ashi",
+        "bar_origin": "server_fetched_completed_source_bars",
+        "market_provenance": snapshot.provenance,
+        "execution_assumptions": crate::execution::ExecutionProfile::for_market(&source, &symbol).assumptions(),
+    })))
 }
 
 // -----------------------------------------------------------------------------
@@ -920,7 +963,8 @@ async fn get_indicators(
         .unwrap_or_else(|| state.config.trading.symbol.clone());
     let limit = q.limit.unwrap_or(200);
     let source = q.source.unwrap_or_else(|| "binance".to_string());
-    let bars = market_bars(&state, &symbol, &source, limit).await?;
+    let snapshot = market_snapshot(&state, &symbol, &source, limit).await?;
+    let bars = snapshot.bars;
 
     let closes: Vec<f64> = bars.iter().map(|b| b.close).collect();
     let requested_str = q
@@ -1093,6 +1137,7 @@ async fn get_indicators(
         "indicators": indicator_output,
         "source": source,
         "market_data_as_of": bars.last().map(|bar| bar.timestamp),
+        "market_provenance": snapshot.provenance,
     })))
 }
 
@@ -1443,6 +1488,17 @@ pub fn locate_symbol_for_test(reference: &str) -> Option<usize> {
 }
 
 fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
+    if crate::industry_case::is_supported(&concept.id) {
+        return json!({
+            "markets":["issuer_disclosure"],
+            "modules":["data"],
+            "required_datasets":["server_verified_issuer_filing_pdf","embedded_page_cited_industry_facts"],
+            "source_policy":"real_required",
+            "fixed_source":"issuer_disclosure",
+            "fixed_symbol":industry_case_symbol(&concept.id),
+            "goal":"按同一报告期与主体的原文数据，观察指标如何计算，以及口径如何影响结果。"
+        });
+    }
     if crate::filing_case::is_supported(&concept.id) {
         return json!({
             "markets":["us_equity"],
@@ -1724,6 +1780,20 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
             "source_policy":"evidence_required",
             "goal":"按概念的数据口径收集证据或行情快照；教学输入只用于理解公式，不能替代真实练习。"
         })
+    }
+}
+
+fn industry_case_symbol(id: &str) -> &'static str {
+    match id {
+        "bank_nim"
+        | "book_bank_nim"
+        | "book_bank_cost_income"
+        | "book_bank_npl_ratio"
+        | "book_insurance_solvency_ratio" => "2318.HK",
+        "book_saas_arr" | "book_saas_rule_of_40" | "book_platform_gmv" => "SHOP",
+        "book_platform_take_rate" => "EBAY",
+        "book_reit_occupancy" => "O",
+        _ => "",
     }
 }
 
@@ -2064,6 +2134,7 @@ fn daily_range_response(
     history: &[Bar],
     symbol: &str,
     source: &str,
+    market_provenance: &MarketProvenance,
 ) -> Result<Json<Value>, ApiError> {
     let mut result =
         crate::book::market_52w_range_summary(history, source).map_err(validate::bad)?;
@@ -2072,6 +2143,9 @@ fn daily_range_response(
     result["source"] = json!(source);
     result["context"] = json!("selected_dataset");
     result["bar_origin"] = json!("server_fetched_daily_52w_range");
+    result["market_provenance"] = json!(market_provenance);
+    result["execution_assumptions"] =
+        json!(crate::execution::ExecutionProfile::for_market(source, symbol).assumptions());
     Ok(Json(result))
 }
 
@@ -2211,6 +2285,42 @@ async fn post_practice(
         return Err(validate::bad(
             "practice module is not applicable to this concept",
         ));
+    }
+    if crate::industry_case::is_supported(&concept.id) {
+        let expected_symbol = industry_case_symbol(&concept.id);
+        if source != "issuer_disclosure"
+            || symbol != expected_symbol
+            || req.limit.is_some()
+            || req.second_symbol.is_some()
+            || req.bars.is_some()
+            || !req
+                .inputs
+                .as_object()
+                .is_some_and(serde_json::Map::is_empty)
+        {
+            return Err(validate::bad(format!(
+                "industry case is fixed to {expected_symbol}/issuer_disclosure with module=data, empty inputs, and no bars, limit, or second symbol"
+            )));
+        }
+        if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Issuer disclosure verification is disabled in offline mode".into(),
+            ));
+        }
+        let mut result = crate::industry_case::evaluate(
+            &concept.id,
+            &state.data_cache_dir,
+            &state.industry_sources,
+        )
+        .await
+        .map_err(|error| (StatusCode::BAD_GATEWAY, error))?;
+        result["module"] = json!("data");
+        result["symbol"] = json!(expected_symbol);
+        result["source"] = json!("issuer_disclosure");
+        result["context"] = json!("historical_industry_disclosure");
+        result["bar_origin"] = json!("server_verified_issuer_filing_pdf");
+        return Ok(Json(result));
     }
     validate::market(&symbol, &source, limit, 5000)?;
     let market =
@@ -2510,8 +2620,8 @@ async fn post_practice(
         {
             return Err(validate::bad("52-week range requires server-fetched daily bars and rejects caller-supplied bars or inputs"));
         }
-        let history = market_bars(&state, &symbol, &source, 400).await?;
-        return daily_range_response(&history, &symbol, &source);
+        let snapshot = market_snapshot(&state, &symbol, &source, 400).await?;
+        return daily_range_response(&snapshot.bars, &symbol, &source, &snapshot.provenance);
     }
     if concept.id == "book_period"
         && !req
@@ -2613,8 +2723,15 @@ async fn post_practice(
     } else {
         None
     };
+    let mut market_provenance = None;
     let mut bars = if let Some(bars) = req.bars {
         validate::bars(&bars)?;
+        market_provenance = Some(MarketProvenance {
+            provider: "caller_provided_unverified".into(),
+            endpoint: "request_body".into(),
+            price_basis: "caller_provided_unverified".into(),
+            corporate_actions: "not_simulated".into(),
+        });
         bars
     } else if independent
         || concept.id == "book_pitfall_open_candle"
@@ -2624,7 +2741,9 @@ async fn post_practice(
     {
         Vec::new()
     } else {
-        market_bars(&state, &symbol, &source, limit).await?
+        let snapshot = market_snapshot(&state, &symbol, &source, limit).await?;
+        market_provenance = Some(snapshot.provenance);
+        snapshot.bars
     };
     if !bars.is_empty() {
         practice_bars_are_closed(&bars, &source)?;
@@ -2818,6 +2937,14 @@ async fn post_practice(
         result["bars"] = json!([]);
     } else if open_candle_pair.is_none() {
         result["bars"] = json!(bars);
+    }
+    if let Some(provenance) = market_provenance {
+        result["market_provenance"] = json!(provenance);
+        result["execution_assumptions"] =
+            json!(crate::execution::ExecutionProfile::for_market(&source, &symbol).assumptions());
+        if !provided_bars && result["bar_origin"].is_null() {
+            result["bar_origin"] = json!("server_fetched_completed_source_bars");
+        }
     }
     Ok(Json(result))
 }
@@ -3041,7 +3168,13 @@ mod daily_range_response_tests {
             })
             .collect();
         for (source, symbol) in [("a_share", "600519"), ("us_stock", "AAPL")] {
-            let Json(result) = daily_range_response(&history, symbol, source).unwrap();
+            let provenance = MarketProvenance {
+                provider: "fixture".into(),
+                endpoint: "fixture".into(),
+                price_basis: "provider_adjustment_unverified".into(),
+                corporate_actions: "not_simulated".into(),
+            };
+            let Json(result) = daily_range_response(&history, symbol, source, &provenance).unwrap();
             assert_eq!(result["concept_id"], "book_52w_range");
             assert_eq!(result["module"], "data");
             assert_eq!(result["symbol"], symbol);
@@ -3052,6 +3185,10 @@ mod daily_range_response_tests {
                 "server_fetched_completed_stock_daily_bars"
             );
             assert_eq!(result["bar_origin"], "server_fetched_daily_52w_range");
+            assert_eq!(result["market_provenance"]["provider"], "fixture");
+            assert!(result["execution_assumptions"]
+                .as_array()
+                .is_some_and(|items| !items.is_empty()));
             assert_eq!(result["year_range"]["source"], source);
             assert_eq!(result["year_range"]["as_of"], json!(end));
             assert_eq!(
@@ -3069,7 +3206,14 @@ mod daily_range_response_tests {
             );
             assert_eq!(result["values"]["position_in_range"], 0.5);
         }
-        let error = daily_range_response(&history[100..], "AAPL", "us_stock").unwrap_err();
+        let provenance = MarketProvenance {
+            provider: "fixture".into(),
+            endpoint: "fixture".into(),
+            price_basis: "provider_adjustment_unverified".into(),
+            corporate_actions: "not_simulated".into(),
+        };
+        let error =
+            daily_range_response(&history[100..], "AAPL", "us_stock", &provenance).unwrap_err();
         assert_eq!(error.0, StatusCode::BAD_REQUEST);
     }
 }

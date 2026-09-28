@@ -1,0 +1,99 @@
+{
+  "ping_an": {
+    "case_id": "ping_an_group_fy2024_annual_report",
+    "issuer": "Ping An Insurance (Group) Company of China, Ltd.",
+    "ticker": "2318.HK",
+    "alternate_tickers": ["601318.SS"],
+    "reporting_entity": "Ping An Insurance (Group) Company of China, Ltd. and its subsidiaries",
+    "currency": "CNY",
+    "scale": "millions",
+    "period_label": "FY2024",
+    "period_start": "2024-01-01",
+    "period_end": "2024-12-31",
+    "published": "2025-03-19",
+    "source_kind": "issuer_official_annual_report_pdf",
+    "source_status": "Annual report containing audited financial statements; each metric states whether its cited page is inside the audit boundary",
+    "url": "https://pagroup.pingan.com/resource/pingan/IR-Docs/2025/pingan-ar24-report.pdf",
+    "sha256": "62a5bd793ef9a787cc95750d65e52803aa58fa424b01d94e754ea0120d5be8a3",
+    "bytes": 14886158,
+    "facts": {
+      "net_interest_income": {"value": 93427, "unit": "CNY millions", "page": 57, "label": "net interest income"},
+      "average_earning_assets": {"value": 4994494, "unit": "CNY millions", "page": 57, "label": "average interest-earning assets"},
+      "operating_expenses": {"value": 40582, "unit": "CNY millions", "page": 57, "label": "general and administrative expenses, absolute amount"},
+      "operating_income": {"value": 146695, "unit": "CNY millions", "page": 57, "label": "operating income"},
+      "nonperforming_loans": {"value": 35738, "unit": "CNY millions", "page": 58, "label": "non-performing loans"},
+      "gross_loans": {"value": 3374103, "unit": "CNY millions", "page": 58, "label": "loans and advances to customers excluding interest"},
+      "available_capital": {"value": 138649, "unit": "CNY millions", "page": 336, "label": "actual capital"},
+      "required_capital": {"value": 67536, "unit": "CNY millions", "page": 336, "label": "minimum capital"}
+    }
+  },
+  "shopify": {
+    "case_id": "shopify_fy2024_q4_press_release",
+    "issuer": "Shopify Inc.",
+    "ticker": "SHOP",
+    "alternate_tickers": ["SHOP.TO"],
+    "reporting_entity": "Shopify Inc. and its consolidated subsidiaries",
+    "currency": "USD",
+    "scale": "millions",
+    "period_label": "FY2024",
+    "period_start": "2024-01-01",
+    "period_end": "2024-12-31",
+    "published": "2025-02-11",
+    "source_kind": "issuer_linked_earnings_release_pdf",
+    "source_status": "Earnings release; no audit assurance is asserted for MRR, GMV or non-GAAP free cash flow",
+    "url": "https://s27.q4cdn.com/572064924/files/doc_financials/2024/q4/Q4-2024-Press-Release-Final.pdf",
+    "sha256": "4bf71232697a2270b2dbc38fc9609c11c27d545d6f4301fce3356fa60c6ef6de",
+    "bytes": 86468,
+    "facts": {
+      "monthly_recurring_revenue": {"value": 178, "unit": "USD millions", "page": 1, "label": "MRR at 2024-12-31"},
+      "revenue_2024": {"value": 8880, "unit": "USD millions", "page": 1, "label": "2024 revenue"},
+      "revenue_2023": {"value": 7060, "unit": "USD millions", "page": 1, "label": "2023 revenue"},
+      "free_cash_flow": {"value": 1597, "unit": "USD millions", "page": 1, "label": "2024 non-GAAP free cash flow"},
+      "gross_merchandise_value": {"value": 292275, "unit": "USD millions", "page": 1, "label": "2024 GMV"}
+    }
+  },
+  "ebay": {
+    "case_id": "ebay_fy2024_10k_marketplace_take_rate",
+    "issuer": "eBay Inc.",
+    "ticker": "EBAY",
+    "alternate_tickers": [],
+    "reporting_entity": "eBay Inc. 及合并子公司的 Marketplace 平台",
+    "currency": "USD",
+    "scale": "millions",
+    "period_label": "FY2024",
+    "period_start": "2024-01-01",
+    "period_end": "2024-12-31",
+    "published": "2025-02-27",
+    "source_kind": "issuer_official_annual_report_pdf",
+    "source_status": "年度报告管理层运营指标；财务报表审计不等于GMV与Take Rate获得审计保证。",
+    "url": "https://investors.ebayinc.com/files/doc_financials/2024/q4/eBay-10-K-2024.pdf",
+    "sha256": "10530b8314c4dc49f9737b938f28ead7a70212885c35919fb361d145401f37fb",
+    "bytes": 1004020,
+    "facts": {
+      "platform_revenue": {"value": 10283, "unit": "USD millions", "page": 44, "label": "2024 年平台净收入（包含市场服务与广告）"},
+      "gross_merchandise_value": {"value": 74667, "unit": "USD millions", "page": 44, "label": "2024 年平台成交总额（包含运费与税款）"}
+    }
+  },
+  "realty_income": {
+    "case_id": "realty_income_fy2024_supplemental",
+    "issuer": "Realty Income Corporation",
+    "ticker": "O",
+    "alternate_tickers": [],
+    "reporting_entity": "Realty Income Corporation and consolidated subsidiaries",
+    "currency": "USD",
+    "scale": "area facts are square feet",
+    "period_label": "As of 2024-12-31",
+    "period_start": "2024-12-31",
+    "period_end": "2024-12-31",
+    "published": "2025-02-24",
+    "source_kind": "issuer_official_supplemental_information_pdf",
+    "source_status": "Unaudited supplemental operating information",
+    "url": "https://www.realtyincome.com/sites/realty-income/files/2025-02/realty-income-q4-2024-supplemental-information.pdf",
+    "sha256": "a0b3bf067c7b19ebde01ceaac3ecb172ed6a4c7084eeabe276ad1d4599c62a3f",
+    "bytes": 17522920,
+    "facts": {
+      "leased_area": {"value": 335777818, "unit": "square feet", "page": 25, "label": "occupied square feet"},
+      "lettable_area": {"value": 339361416, "unit": "square feet", "page": 25, "label": "total portfolio square feet"}
+    }
+  }
+}

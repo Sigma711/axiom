@@ -63,6 +63,7 @@ async fn an_empty_indicator_selection_returns_a_price_only_chart() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["bars"].as_array().unwrap().len(), 60);
     assert_eq!(body["indicators"].as_object().unwrap().len(), 0);
+    assert_eq!(body["market_provenance"]["provider"], "synthetic");
     assert_eq!(
         body["market_data_as_of"],
         body["bars"].as_array().unwrap().last().unwrap()["timestamp"]
@@ -232,6 +233,61 @@ async fn compare_can_reuse_exactly_the_same_bars_and_initial_capital() {
         assert_eq!(result["metrics"]["初始资金"], 10000.0);
         assert_eq!(result["equity_curve"].as_array().unwrap().len(), 100);
     }
+}
+
+#[tokio::test]
+async fn backtest_discloses_execution_rules_and_client_bar_provenance() {
+    let bars = json!([
+        {"timestamp":"2026-09-01T01:00:00Z","open":100,"high":101,"low":99,"close":100,"volume":1000},
+        {"timestamp":"2026-09-02T01:00:00Z","open":100,"high":101,"low":99,"close":100,"volume":1000}
+    ]);
+    let (status, result) = request(
+        "POST",
+        "/api/backtest",
+        json!({
+            "strategy":"buy_and_hold",
+            "source":"a_share",
+            "symbol":"600000",
+            "bars":bars,
+            "initial_capital":50_000,
+            "commission_rate":0,
+            "slippage_rate":0,
+            "max_position_pct":1
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    assert_eq!(result["fills"][0]["size"], 500.0);
+    assert_eq!(result["config"]["execution_profile"]["market"], "china_a");
+    assert_eq!(
+        result["market_provenance"]["provider"],
+        "caller_provided_unverified"
+    );
+    assert_eq!(
+        result["market_provenance"]["corporate_actions"],
+        "not_simulated"
+    );
+}
+
+#[tokio::test]
+async fn industry_practice_rejects_market_data_disguised_as_issuer_disclosure() {
+    let (status, result) = request(
+        "POST",
+        "/api/practice",
+        json!({
+            "concept_id":"bank_nim",
+            "module":"data",
+            "source":"us_stock",
+            "symbol":"AAPL",
+            "inputs":{}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{result}");
+    assert!(result
+        .as_str()
+        .unwrap()
+        .contains("2318.HK/issuer_disclosure"));
 }
 
 #[tokio::test]
@@ -465,6 +521,7 @@ async fn public_learning_and_exploration_reads_return_complete_safe_documents() 
     assert_eq!(status, StatusCode::OK, "{patterns}");
     assert_eq!(patterns["patterns"].as_array().unwrap().len(), 20);
     assert!(patterns["patterns"][0]["pattern_code"].is_string());
+    assert_eq!(patterns["market_provenance"]["provider"], "synthetic");
 
     let (status, heikin_ashi) = request(
         "GET",
@@ -475,6 +532,15 @@ async fn public_learning_and_exploration_reads_return_complete_safe_documents() 
     assert_eq!(status, StatusCode::OK, "{heikin_ashi}");
     assert_eq!(heikin_ashi["chart"], "heikin_ashi");
     assert_eq!(heikin_ashi["bars"].as_array().unwrap().len(), 25);
+    assert_eq!(heikin_ashi["source"], "synthetic");
+    assert_eq!(
+        heikin_ashi["bar_origin"],
+        "server_fetched_completed_source_bars"
+    );
+    assert_eq!(heikin_ashi["market_provenance"]["provider"], "synthetic");
+    assert!(heikin_ashi["execution_assumptions"]
+        .as_array()
+        .is_some_and(|items| !items.is_empty()));
 
     let (status, knowledge) = request("GET", "/api/knowledge", Value::Null).await;
     assert_eq!(status, StatusCode::OK, "{knowledge}");

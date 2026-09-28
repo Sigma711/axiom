@@ -15,7 +15,7 @@ NPM ?= npm
 PLAYWRIGHT_ARGS ?=
 AXIOM_PORT ?= 8080
 
-.PHONY: deploy help setup browser-deps build build-web build-rust build-debug run-debug dev serve serve-test test test-rust test-one test-web test-e2e test-e2e-real test-visual lint lint-rust lint-web check-format fmt check ci coverage tools verify-published
+.PHONY: deploy help setup browser-deps build build-web build-rust build-debug run-debug dev serve serve-test test test-rust test-unit test-one test-web test-e2e test-e2e-real test-visual lint lint-rust lint-web check-format fmt check ci coverage coverage-rust tools verify-published
 help:
 	@printf '%s\n' 'make setup      Install locked frontend dependencies and browser' 'make build      Build frontend and Rust release' 'make serve      Run the production app (AXIOM_PORT=8080)' 'make dev        Run the frontend dev server' 'make test       Rust, frontend unit tests, real-browser E2E and visual checks' 'make check      Formatting, lint, typecheck, build and every test' 'make coverage   Rust and Chromium executable-source coverage, each enforced at 95%' 'make fmt        Format Rust source' 'make deploy     Publish the tested main revision to sigma711.top/axiom'
 
@@ -49,6 +49,8 @@ dev:
 test: test-rust test-web test-e2e test-e2e-real
 test-rust:
 	cargo test --all-targets --locked --no-fail-fast
+test-unit:
+	cargo test --lib --locked $(TEST_FILTER)
 test-one:
 	@test -n "$(TEST)" || (printf '%s\n' 'Use make test-one TEST=integration_test'; exit 2)
 	cargo test --locked --test $(TEST)
@@ -79,12 +81,16 @@ tools:
 	cargo install cargo-llvm-cov --locked
 coverage: build-web
 	rm -rf coverage/rust coverage/web-e2e coverage/web-combined coverage/lcov.info coverage/html
-	mkdir -p coverage/rust
-	cargo llvm-cov --all-targets --locked --lcov --output-path coverage/rust/lcov.info
+	$(MAKE) coverage-rust
 	bash scripts/run-browser-coverage.sh
 	cat coverage/rust/lcov.info coverage/web-combined/lcov.info > coverage/lcov.info
 	node scripts/check-line-coverage.mjs coverage/rust/lcov.info coverage/web-combined/lcov.info
 	cargo llvm-cov report --html --output-dir coverage/html
+
+# Focused backend report; the full coverage target enforces both release gates.
+coverage-rust:
+	mkdir -p coverage/rust
+	cargo llvm-cov --all-targets --locked --lcov --output-path coverage/rust/lcov.info
 
 # Run after committing and pushing; rebuilds the AST map against that revision.
 verify-published:

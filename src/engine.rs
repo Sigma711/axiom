@@ -10,6 +10,7 @@
 //!   7. 快照净值
 
 use crate::broker::{BrokerConfig, SimulatedBroker};
+use crate::execution::ExecutionProfile;
 use crate::metrics::compute_metrics;
 use crate::portfolio::{Portfolio, PortfolioConfig};
 use crate::risk::{RiskConfig, RiskManager};
@@ -50,6 +51,7 @@ pub struct BacktestProgress {
 pub struct BacktestEngine {
     pub config: EngineConfig,
     pub risk_config: RiskConfig,
+    execution_profile: ExecutionProfile,
 }
 
 impl BacktestEngine {
@@ -57,29 +59,37 @@ impl BacktestEngine {
         Self {
             config,
             risk_config,
+            execution_profile: ExecutionProfile::default(),
         }
+    }
+
+    pub fn with_execution_profile(mut self, execution_profile: ExecutionProfile) -> Self {
+        self.execution_profile = execution_profile;
+        self
     }
 
     /// 在给定的 K 线序列上跑策略,产出 BacktestResult。
     pub fn run(&self, strategy: &mut dyn Strategy, bars: &[Bar]) -> BacktestResult {
         strategy.reset();
 
-        let broker = SimulatedBroker::new(
+        let broker = SimulatedBroker::new_with_execution_profile(
             BrokerConfig {
                 commission_rate: self.config.commission_rate,
                 slippage_rate: self.config.slippage_rate,
                 allow_short: false,
             },
             self.config.initial_capital,
+            self.execution_profile.clone(),
         );
 
-        let mut portfolio = Portfolio::new(
+        let mut portfolio = Portfolio::new_with_execution_profile(
             Box::new(broker),
             PortfolioConfig {
                 max_position_pct: self.risk_config.max_position_pct,
                 min_trade_size: 1e-6,
                 symbol: self.config.symbol.clone(),
             },
+            self.execution_profile.clone(),
         );
         let risk = RiskManager::new(self.risk_config.clone(), self.config.symbol.clone());
 
@@ -155,6 +165,8 @@ impl BacktestEngine {
                 "strategy": strategy.name(),
                 "params": strategy.params(),
                 "n_bars": total,
+                "execution_profile": self.execution_profile,
+                "execution_assumptions": self.execution_profile.assumptions(),
             }),
             equity_curve,
             trades: portfolio.closed_trades().to_vec(),
@@ -198,10 +210,27 @@ pub fn compare_strategies(
     engine_config: EngineConfig,
     risk_config: RiskConfig,
 ) -> MultiStrategyResult {
+    compare_strategies_with_execution_profile(
+        strategies,
+        bars,
+        engine_config,
+        risk_config,
+        ExecutionProfile::default(),
+    )
+}
+
+pub fn compare_strategies_with_execution_profile(
+    strategies: Vec<(String, Box<dyn Strategy>)>,
+    bars: &[Bar],
+    engine_config: EngineConfig,
+    risk_config: RiskConfig,
+    execution_profile: ExecutionProfile,
+) -> MultiStrategyResult {
     let mut out = MultiStrategyResult {
         results: HashMap::new(),
     };
-    let engine = BacktestEngine::new(engine_config, risk_config);
+    let engine =
+        BacktestEngine::new(engine_config, risk_config).with_execution_profile(execution_profile);
     for (name, mut strat) in strategies {
         let mut result = engine.run(strat.as_mut(), bars);
         result.metrics = compute_metrics(&result);

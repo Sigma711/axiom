@@ -14,6 +14,7 @@ pub struct AppState {
     pub paper_state: Arc<RwLock<PaperState>>,
     pub feed: Arc<HttpFeed>,
     pub filing_source: crate::filing_case::FilingSourceConfig,
+    pub industry_sources: crate::industry_case::IndustrySourceRegistry,
 }
 
 impl AppState {
@@ -31,7 +32,10 @@ impl AppState {
                 max_position_pct: config.risk.max_position_pct,
             },
         };
-        let paper_state = PaperState::new(paper_cfg, strategy);
+        let execution_profile =
+            crate::execution::ExecutionProfile::for_market("binance", &paper_cfg.symbol);
+        let paper_state =
+            PaperState::new_with_execution_profile(paper_cfg, strategy, execution_profile);
         let feed = Arc::new(HttpFeed::new(data_cache_dir.clone()));
         Self {
             config,
@@ -39,12 +43,21 @@ impl AppState {
             paper_state: Arc::new(RwLock::new(paper_state)),
             feed,
             filing_source: crate::filing_case::FilingSourceConfig::default(),
+            industry_sources: crate::industry_case::IndustrySourceRegistry::default(),
         }
     }
 
     /// Replaces only the document transport identity; useful for a hermetic HTTP seam test.
     pub fn with_filing_source(mut self, source: crate::filing_case::FilingSourceConfig) -> Self {
         self.filing_source = source;
+        self
+    }
+
+    pub fn with_industry_sources(
+        mut self,
+        sources: crate::industry_case::IndustrySourceRegistry,
+    ) -> Self {
+        self.industry_sources = sources;
         self
     }
 }

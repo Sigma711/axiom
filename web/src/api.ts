@@ -9,6 +9,7 @@ import type {
   PracticeConcept,
   PracticeResult,
 } from './types';
+import type { ExecutionAssumption, MarketProvenance } from './ExecutionAssumptionsVisual';
 
 export const appBase = (import.meta.env.VITE_APP_BASE ?? '').replace(/\/+$/, '');
 export const appPath = (path: string) => `${appBase}${path}`;
@@ -45,16 +46,16 @@ export const api = {
   getConfig: () => call<Record<string, unknown>>('GET', '/api/config'),
   listKnowledge: () => call<KnowledgeResponse>('GET', '/api/knowledge'),
   getData: (symbol: string, limit: number, source: SourceType) =>
-    call<{ bars: Bar[]; count: number; symbol: string; source: string }>(
+    call<{ bars: Bar[]; count: number; symbol: string; source: string; market_provenance?: MarketProvenance }>(
       'GET', `/api/data?symbol=${encodeURIComponent(symbol)}&limit=${limit}&source=${source}`),
   getIndicators: (symbol: string, indicators: string, limit: number, source: SourceType) =>
-    call<{ bars: Bar[]; indicators: Record<string, Array<{ x: string; y: number } | null>>; symbol: string; source: string }>(
+    call<{ bars: Bar[]; indicators: Record<string, Array<{ x: string; y: number } | null>>; symbol: string; source: string; market_provenance?: MarketProvenance }>(
       'GET', `/api/indicators?symbol=${encodeURIComponent(symbol)}&indicators=${encodeURIComponent(indicators)}&limit=${limit}&source=${source}`),
   getPatterns: (symbol: string, limit: number, source: SourceType) =>
-    call<{ symbol: string; patterns: Array<{ timestamp: string; close: number; pattern: string; pattern_code: string }> }>(
+    call<{ symbol: string; source: string; patterns: Array<{ timestamp: string; close: number; pattern: string; pattern_code: string }>; market_provenance: MarketProvenance; execution_assumptions: ExecutionAssumption[] }>(
       'GET', `/api/patterns?symbol=${encodeURIComponent(symbol)}&limit=${limit}&source=${source}`),
   getHeikinAshi: (symbol: string, limit: number, source: SourceType) =>
-    call<{ symbol: string; bars: Bar[]; chart: string }>(
+    call<{ symbol: string; source: string; bars: Array<Omit<Bar, 'volume'>>; chart: 'heikin_ashi'; bar_origin: 'server_fetched_completed_source_bars'; market_provenance: MarketProvenance; execution_assumptions: ExecutionAssumption[] }>(
       'GET', `/api/heikin_ashi?symbol=${encodeURIComponent(symbol)}&limit=${limit}&source=${source}`),
   getCodeLocation: (ref: string) => call<CodeLocation>('GET', `/api/code_loc?ref=${encodeURIComponent(ref)}`),
   runBacktest: (req: {
@@ -72,7 +73,7 @@ export const api = {
     call<{ status: string; source: SourceType; symbol: string; strategy: string }>('POST', '/api/paper/config', { source, symbol, strategy }),
   listPractice: () => call<{ concepts: PracticeConcept[]; modules: string[]; total: number }>('GET', '/api/practice'),
   runPractice: (req: {
-    concept_id: string; module: 'data' | 'backtest' | 'paper' | 'compare'; symbol: string; second_symbol?: string; source: SourceType; limit?: number;
+    concept_id: string; module: 'data' | 'backtest' | 'paper' | 'compare'; symbol: string; second_symbol?: string; source: SourceType | 'issuer_disclosure'; limit?: number;
     inputs: Record<string, unknown>; bars?: Bar[];
   }) => call<PracticeResult>('POST', '/api/practice', req),
 };

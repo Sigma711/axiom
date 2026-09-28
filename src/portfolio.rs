@@ -12,6 +12,7 @@
 //! 如果要跨线程共享,把整个 Portfolio 用 Arc<Mutex<>> 包起来。
 
 use crate::broker::{new_order, Broker};
+use crate::execution::ExecutionProfile;
 use crate::types::{Fill, Order, OrderType, Position, Side, Trade};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -38,15 +39,25 @@ pub struct Portfolio {
     pub config: PortfolioConfig,
     open_trade: Option<Trade>,
     closed_trades: Vec<Trade>,
+    execution_profile: ExecutionProfile,
 }
 
 impl Portfolio {
     pub fn new(broker: Box<dyn Broker>, config: PortfolioConfig) -> Self {
+        Self::new_with_execution_profile(broker, config, ExecutionProfile::default())
+    }
+
+    pub fn new_with_execution_profile(
+        broker: Box<dyn Broker>,
+        config: PortfolioConfig,
+        execution_profile: ExecutionProfile,
+    ) -> Self {
         Self {
             broker,
             config,
             open_trade: None,
             closed_trades: Vec::new(),
+            execution_profile,
         }
     }
 
@@ -103,8 +114,17 @@ impl Portfolio {
                 if pos.is_flat() {
                     return None;
                 }
-                let size = pos.size.abs();
+                let size = self
+                    .broker
+                    .sellable_size(&self.config.symbol, ts)
+                    .min(pos.size.abs());
                 if size < self.config.min_trade_size {
+                    return None;
+                }
+                if !self
+                    .execution_profile
+                    .valid_sell_quantity(size, pos.size.abs(), size)
+                {
                     return None;
                 }
                 Some(new_order(
@@ -122,32 +142,77 @@ impl Portfolio {
 
     /// 成交回报回调:同步更新内部 Trade 记录
     pub fn on_fill(&mut self, fill: &Fill) {
-        if fill.size == 0.0 {
+        if !fill.size.is_finite()
+            || fill.size <= 0.0
+            || !fill.price.is_finite()
+            || fill.price <= 0.0
+            || !fill.commission.is_finite()
+            || fill.commission < 0.0
+            || fill.symbol != self.config.symbol
+        {
             return;
         }
-        match (fill.side, self.open_trade.as_ref()) {
-            (Side::Buy, None) => {
-                self.open_trade = Some(Trade {
+        match fill.side {
+            Side::Buy => match self.open_trade.as_mut() {
+                Some(open) if open.side == Side::Buy && open.symbol == fill.symbol => {
+                    let combined_size = open.size + fill.size;
+                    if !combined_size.is_finite() {
+                        return;
+                    }
+                    open.entry_price =
+                        (open.entry_price * open.size + fill.price * fill.size) / combined_size;
+                    open.size = combined_size;
+                    open.entry_commission += fill.commission;
+                }
+                None => {
+                    self.open_trade = Some(Trade {
+                        symbol: fill.symbol.clone(),
+                        side: Side::Buy,
+                        entry_time: fill.timestamp,
+                        exit_time: None,
+                        entry_price: fill.price,
+                        exit_price: None,
+                        size: fill.size,
+                        entry_commission: fill.commission,
+                        exit_commission: 0.0,
+                    });
+                }
+                Some(_) => {}
+            },
+            Side::Sell => {
+                let Some(mut open) = self.open_trade.take() else {
+                    return;
+                };
+                if open.side != Side::Buy || open.symbol != fill.symbol {
+                    self.open_trade = Some(open);
+                    return;
+                }
+                let closed_size = fill.size.min(open.size);
+                let fully_closed = closed_size >= open.size - 1e-9;
+                let allocated_entry_commission = if fully_closed {
+                    open.entry_commission
+                } else {
+                    open.entry_commission * closed_size / open.size
+                };
+                let allocated_exit_commission = fill.commission * closed_size / fill.size;
+                self.closed_trades.push(Trade {
                     symbol: fill.symbol.clone(),
                     side: Side::Buy,
-                    entry_time: fill.timestamp,
-                    exit_time: None,
-                    entry_price: fill.price,
-                    exit_price: None,
-                    size: fill.size,
-                    entry_commission: fill.commission,
-                    exit_commission: 0.0,
+                    entry_time: open.entry_time,
+                    exit_time: Some(fill.timestamp),
+                    entry_price: open.entry_price,
+                    exit_price: Some(fill.price),
+                    size: closed_size,
+                    entry_commission: allocated_entry_commission,
+                    exit_commission: allocated_exit_commission,
                 });
+                if !fully_closed {
+                    open.size -= closed_size;
+                    open.entry_commission -= allocated_entry_commission;
+                    self.open_trade = Some(open);
+                }
             }
-            (Side::Sell, Some(t)) => {
-                let mut closed = t.clone();
-                closed.exit_time = Some(fill.timestamp);
-                closed.exit_price = Some(fill.price);
-                closed.exit_commission = fill.commission;
-                self.closed_trades.push(closed);
-                self.open_trade = None;
-            }
-            _ => {}
+            Side::Hold => {}
         }
     }
 
@@ -167,7 +232,9 @@ impl Portfolio {
         if !cost.is_finite() || cost <= 0.0 || !max_money.is_finite() {
             0.0
         } else {
-            max_money / cost
+            self.execution_profile
+                .buy_quantity(max_money / cost)
+                .unwrap_or(0.0)
         }
     }
 }

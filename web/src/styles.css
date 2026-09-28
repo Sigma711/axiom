@@ -199,9 +199,6 @@ body {
 details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
 .ax-kb-header { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
 .ax-kb-header h4 { margin: 0; color: var(--text); font-weight: 600; font-size: 0.95rem; }
-.ax-knowledge-evidence { margin: 0 0 1rem; padding: .7rem .85rem; border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; background: var(--bg-elev); color: var(--text-dim); font-size: .81rem; line-height: 1.6; }
-.ax-evidence-badge { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 999px; padding: .08rem .42rem; color: var(--accent-2); background: var(--bg-elev); font-size: .68rem; line-height: 1.45; white-space: nowrap; }
-.ax-evidence-badge.pending { color: var(--accent); }
 .ax-kb-id { color: var(--text-dim); font-weight: 400; font-size: 0.78rem; }
 .ax-kb-summary { color: var(--text-dim); font-weight: 400; font-size: 0.83rem; margin-top: 0.2rem; font-style: italic; }
 .ax-kb-practice { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.55rem; }
@@ -214,7 +211,7 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
 /* === GitHub 链接 === */
 .ax-gh-btn { display: inline-block; margin-left: 0.4rem; padding: 0.1rem 0.4rem; background: var(--bg-elev); color: var(--accent); border: 1px solid var(--accent); border-radius: 3px; font-size: 0.7rem; text-decoration: none; font-family: var(--mono); }
 .ax-gh-btn:hover { background: var(--accent); color: var(--bg); }
-.ax-code-link { display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none; padding: 0.2rem 0.4rem; background: var(--bg-elev); border: 1px solid var(--green); border-radius: 3px; transition: all 0.15s; }
+.ax-code-link { display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none; padding: 0.2rem 0.4rem; background: var(--bg-elev); border: 1px solid var(--green); border-radius: 3px; transition: border-color 0.15s; }
 .ax-code-link:hover { background: var(--green); }
 .ax-code-link:hover code, .ax-code-link:hover .ax-goto { color: var(--bg); }
 .ax-code-link code { background: none; padding: 0; }
@@ -227,6 +224,7 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
 .ax-section-label { font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; margin-bottom: 0.2rem; }
 .ax-section-block > div:not(.ax-section-label) { font-size: 0.83rem; line-height: 1.65; }
 .ax-section-block code, code { font-family: var(--mono); font-size: 0.78rem; background: var(--bg-elev); padding: 0.1rem 0.4rem; border-radius: 3px; border: 1px solid var(--border-soft); color: var(--accent); }
+.ax-section-block .ax-code-link code { background: transparent; padding: 0; border: 0; }
 .ax-section-block pre { font-size: 0.78rem; line-height: 1.6; }
 .ax-knowledge-chart { margin: 0.55rem 0 0; max-width: 420px; }
 .ax-knowledge-chart svg { display: block; width: 100%; background: var(--bg-input); border: 1px solid var(--border-soft); border-radius: 4px; }
@@ -616,6 +614,16 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
 .ax-filing-case details { border-top: 1px solid var(--border); padding-top: .8rem; font-size: .8rem; line-height: 1.7; }
 .ax-filing-case summary { cursor: pointer; color: var(--accent); }
 .ax-filing-case details code { overflow-wrap: anywhere; }
+.ax-industry-case > header strong { color: var(--text); }
+.ax-industry-formula { padding: .9rem; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-elev); }
+.ax-industry-formula-flow { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; color: var(--text-dim); font-size: .82rem; }
+.ax-industry-formula-flow span { padding: .35rem .55rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-card); }
+.ax-industry-formula-flow strong { color: var(--accent); }
+.ax-industry-symbols { margin: .65rem 0 0; color: var(--text-dim); font-size: .75rem; line-height: 1.6; }
+.ax-industry-unit-group { margin: 1rem 0; padding: .8rem; border: 1px solid var(--border); border-radius: 10px; }
+.ax-industry-unit-group h5 { margin: 0 0 .75rem; color: var(--text-dim); font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; }
+.ax-industry-provenance { margin: .3rem 0 0; color: var(--text-dim); font-size: .75rem; line-height: 1.55; }
+.ax-industry-definitions p { margin: .55rem 0; }
 .ax-book-toc { display: flex; flex-direction: column; height: 76vh; min-height: 0; box-sizing: border-box; }
 .ax-book-toc > nav { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: var(--text-faint) transparent; }
 .ax-book-toc-toggle { flex-shrink: 0; }

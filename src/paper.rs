@@ -6,7 +6,8 @@
 //!   - 模拟盘的"实时" = 每 N 秒拉一次最新 K 线收盘价
 
 use crate::broker::{Broker, BrokerConfig, SimulatedBroker};
-use crate::data::{fetch_public_market_bars, AsyncDataFeed, HttpFeed};
+use crate::data::{fetch_public_market_snapshot, AsyncDataFeed, HttpFeed, MarketProvenance};
+use crate::execution::{ExecutionAssumption, ExecutionProfile};
 use crate::portfolio::{Portfolio, PortfolioConfig};
 use crate::risk::{RiskConfig, RiskManager};
 use crate::strategy::Strategy;
@@ -62,6 +63,8 @@ pub struct PaperSnapshot {
     /// 从建仓到完全平仓的一笔完整交易数。
     pub completed_trades_count: usize,
     pub log: Vec<PaperLogEntry>,
+    pub execution_assumptions: Vec<ExecutionAssumption>,
+    pub market_provenance: MarketProvenance,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -86,6 +89,8 @@ pub struct PaperState {
     pending_signal: Option<Signal>,
     generation: u64,
     source: String,
+    execution_profile: ExecutionProfile,
+    market_provenance: MarketProvenance,
     pub equity_curve: Vec<EquityPoint>,
     bars: Vec<Bar>,
     pub log: Vec<PaperLogEntry>,
@@ -93,28 +98,39 @@ pub struct PaperState {
 
 impl PaperState {
     pub fn new(config: PaperConfigP, strategy: Box<dyn Strategy>) -> Self {
-        let broker = SimulatedBroker::new(
+        Self::new_with_execution_profile(config, strategy, ExecutionProfile::default())
+    }
+
+    pub fn new_with_execution_profile(
+        config: PaperConfigP,
+        strategy: Box<dyn Strategy>,
+        execution_profile: ExecutionProfile,
+    ) -> Self {
+        let broker = SimulatedBroker::new_with_execution_profile(
             BrokerConfig {
                 commission_rate: config.commission_rate,
                 slippage_rate: config.slippage_rate,
                 allow_short: false,
             },
             config.initial_capital,
+            execution_profile.clone(),
         );
-        let portfolio = Portfolio::new(
-            Box::new(SimulatedBroker::new(
+        let portfolio = Portfolio::new_with_execution_profile(
+            Box::new(SimulatedBroker::new_with_execution_profile(
                 BrokerConfig {
                     commission_rate: config.commission_rate,
                     slippage_rate: config.slippage_rate,
                     allow_short: false,
                 },
                 config.initial_capital,
+                execution_profile.clone(),
             )),
             PortfolioConfig {
                 max_position_pct: config.risk.max_position_pct,
                 min_trade_size: 1e-6,
                 symbol: config.symbol.clone(),
             },
+            execution_profile.clone(),
         );
         let risk = RiskManager::new(config.risk.clone(), config.symbol.clone());
 
@@ -136,6 +152,8 @@ impl PaperState {
             } else {
                 "binance".into()
             },
+            execution_profile,
+            market_provenance: unknown_market_provenance(),
             equity_curve: Vec::new(),
             bars: Vec::new(),
             log: Vec::new(),
@@ -165,7 +183,8 @@ impl PaperState {
     ) {
         let mut config = self.config.clone();
         config.symbol = symbol;
-        let mut replacement = Self::new(config, strategy);
+        let execution_profile = ExecutionProfile::for_market(&source, &config.symbol);
+        let mut replacement = Self::new_with_execution_profile(config, strategy, execution_profile);
         replacement.source = source;
         *self = replacement;
     }
@@ -289,6 +308,8 @@ impl PaperState {
             trades_count: self.fills_count,
             completed_trades_count: self.portfolio.closed_trades().len(),
             log: self.log.iter().rev().take(100).cloned().collect(),
+            execution_assumptions: self.execution_profile.assumptions(),
+            market_provenance: self.market_provenance.clone(),
         }
     }
 
@@ -384,14 +405,15 @@ pub async fn run_market_paper_loop(feed: Arc<HttpFeed>, state: Arc<RwLock<PaperS
         }
         let since =
             chrono::Utc::now() - chrono::Duration::days(if source == "binance" { 2 } else { 14 });
-        let result = fetch_public_market_bars(&feed, &source, &symbol, since, 8).await;
+        let result = fetch_public_market_snapshot(&feed, &source, &symbol, since, 8).await;
         match result {
-            Ok(bars) if !bars.is_empty() => {
+            Ok(snapshot) if !snapshot.bars.is_empty() => {
                 let mut paper = state.write().await;
                 if !paper.is_running || paper.generation != generation {
                     continue;
                 }
-                for bar in bars {
+                paper.market_provenance = snapshot.provenance;
+                for bar in snapshot.bars {
                     if let Err(error) = paper.process_bar(bar) {
                         paper.log(PaperLogLevel::Error, format!("处理出错: {error}"));
                     }
@@ -418,6 +440,12 @@ pub async fn run_offline_paper_loop(state: Arc<RwLock<PaperState>>) {
     {
         let mut s = state.write().await;
         s.source = "synthetic".into();
+        s.market_provenance = MarketProvenance {
+            provider: "synthetic".into(),
+            endpoint: "deterministic_internal_generator".into(),
+            price_basis: "simulated_ohlcv".into(),
+            corporate_actions: "not_applicable".into(),
+        };
     }
     let bars = SyntheticFeed::default()
         .fetch_historical(
@@ -437,5 +465,14 @@ pub async fn run_offline_paper_loop(state: Arc<RwLock<PaperState>>) {
             }
             cursor += 1;
         }
+    }
+}
+
+fn unknown_market_provenance() -> MarketProvenance {
+    MarketProvenance {
+        provider: "unknown".into(),
+        endpoint: "unavailable_until_market_data_is_fetched".into(),
+        price_basis: "unverified".into(),
+        corporate_actions: "not_simulated".into(),
     }
 }
