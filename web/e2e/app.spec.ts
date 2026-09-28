@@ -1,4 +1,5 @@
 import { expect, test, type Page } from './v8-coverage';
+import { readFile } from 'node:fs/promises';
 
 const bars = Array.from({ length: 60 }, (_, index) => ({ timestamp: new Date(Date.UTC(2025, 0, 1, index)).toISOString(), open: 100 + index, high: 102 + index, low: 99 + index, close: 101 + index, volume: 1000 + index * 10 }));
 const strategies = [{ name: 'sma_cross', display_name: '均线交叉', description: 'demo', params: [{ key: 'fast', label: '快线', default: 5, min: 2, max: 20 }] }, { name: 'rsi', display_name: 'RSI', description: 'demo', params: [] }];
@@ -10,6 +11,7 @@ async function mockApi(page: Page) {
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url());
     const path = url.pathname;
+    if (path === '/api/book/pdf') return route.fulfill({ contentType: 'application/pdf', body: await readFile('../static/book/股票交易软件专业指标全解_完整版.pdf') });
     const json = (body: unknown) => route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
     if (path === '/api/knowledge') return json({ total: 2, categories: { 动量: [{ ...concepts[0], summary: '衡量动量', formula: 'RS = avg(gain) / avg(loss)', meaning: '强弱', example: '70 偏高', signals: '观察趋势', pitfalls: '不是单独买卖信号', related: [], code_url: 'https://example.test/repo/src/indicator.rs#L42', implementation: 'rsi()' }, { id: 'earnings_per_share', name: '每股收益（EPS）', category: '财务', input_kind: 'independent_inputs', inputs: [{ key: 'net_income', label: '净利润', default: 3000000 }, { key: 'preferred_dividends', label: '优先股股息', default: 0 }, { key: 'shares', label: '普通股股数', default: 1000000 }], notes: '每股收益采用可编辑教学数据。', summary: '把归属于普通股股东的利润平摊到每一股。', formula: '(净利润 − 优先股股息) ÷ 普通股股数', meaning: '每股盈利能力', example: '3 元/股', signals: '用于比较盈利能力', pitfalls: '需结合股本变化', related: [], code_url: 'https://example.test/repo/src/indicator.rs#L42', implementation: 'earnings_per_share()' }] } });
     if (path === '/api/symbols') return json({ symbols: ['BTCUSDT'], items: [{ symbol: 'BTCUSDT', name: 'Bitcoin / Tether', exchange: 'Binance' }], count: 1, total: 1, universe_count: 1, offset: 0, has_more: false, status: 'live', complete: true, source: 'fixture' });
@@ -30,6 +32,43 @@ async function mockApi(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => { await mockApi(page); });
+
+test('verified historical filing practice follows its own case rather than the selected quote', async ({ page }) => {
+  const caseData = JSON.parse(await readFile('../docs/book/financial_cases.json', 'utf8'));
+  const ids = ['book_fcf', 'eps', 'dupont'];
+  const names = ['自由现金流', '每股收益', '杜邦分析'];
+  const entries = ids.map((id, index) => ({ id, name: names[index], category: '财务', summary: '核对公告中的财务事实。', formula: '按定义计算', meaning: '核对期间与口径', example: '历史案例', signals: '不构成买卖建议', pitfalls: '不能替代当前数据', related: [], code_url: 'https://example.test/filing_case.rs#L250', implementation: 'filing_case::metric' }));
+  const catalog = entries.map(entry => ({ ...entry, input_kind: 'filing_case', inputs: [], notes: 'Apple FY2025 历史案例。', plan: { markets: ['us_equity'], modules: ['data'], required_datasets: ['server_fetched_verified_issuer_filing_pdf'], source_policy: 'real_required', goal: '核对原文与公式。' } }));
+  await page.route('**/api/knowledge', route => route.fulfill({ json: { total: 3, categories: { 财务: entries } } }));
+  await page.route('**/api/practice', route => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: { concepts: catalog, modules: ['data'], total: 3 } });
+    const body = route.request().postDataJSON();
+    expect(body).toEqual({ concept_id: body.concept_id, module: 'data', symbol: 'AAPL', source: 'us_stock', inputs: {} });
+    const values = body.concept_id === 'eps' ? { reported_basic_eps: 7.49, reported_diluted_eps: 7.46, approx_basic_eps_cross_check: 7.49306 } : body.concept_id === 'dupont' ? { net_margin: .26915, asset_turnover: 1.1493, equity_multiplier: 5.542, dupont_roe: 1.7142 } : { free_cash_flow: 98767 };
+    const units = body.concept_id === 'eps' ? { reported_basic_eps: 'USD/share', reported_diluted_eps: 'USD/share', approx_basic_eps_cross_check: 'USD/share' } : body.concept_id === 'dupont' ? { net_margin: 'fraction', asset_turnover: 'multiple', equity_multiplier: 'multiple', dupont_roe: 'fraction' } : { free_cash_flow: 'USD millions' };
+    return route.fulfill({ json: { concept_id: body.concept_id, status: 'computed', reason: null, input_kind: 'filing_case', provenance: 'verified_issuer_filing_case', values, units, series: [], notes: ['近似 EPS 复算受披露单位舍入影响。'], module: 'data', symbol: 'AAPL', source: 'us_stock', bars: [],
+      filing_case: { case_id: caseData.case_id, issuer: caseData.issuer.name, ticker: 'AAPL', scope: caseData.issuer.scope, period: { start: '2024-09-29', end: '2025-09-27', fiscal_year: 2025 }, comparison_period: { start: '2023-10-01', end: '2024-09-28', fiscal_year: 2024 }, ...caseData.source, source_kind: caseData.source.kind, pages: { income_statement: 1, balance_sheet: 2, cash_flow: 3 }, verification: { verified_at: '2026-09-28T00:00:00Z', cache_status: 'verified_cache' } }, facts: caseData,
+    } });
+  });
+  await page.goto('/learn');
+  const card = page.locator('.ax-kb-card').filter({ hasText: '自由现金流' });
+  await card.locator('summary').click();
+  await expect(card.locator('.ax-filing-case')).toContainText('98,767');
+  await expect(card).toContainText('不是当前所选股票的财务数据');
+  await expect(card).not.toContainText('基于可编辑教学输入计算');
+  await card.getByRole('button', { name: '在数据探索中实践' }).click();
+  const panel = page.getByLabel('概念实践');
+  await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  await expect(panel.locator('.ax-filing-case')).toContainText('98,767');
+  await expect(panel.locator('[data-filing-fact]')).toHaveCount(2);
+  await expect(panel).not.toContainText('使用可编辑教学输入');
+  for (const id of ids.slice(1)) {
+    await page.goto(`/data?concept=${id}&source=us_stock&symbol=AAPL`);
+    await page.getByLabel('概念实践').getByRole('button', { name: '运行实践' }).click();
+    await expect(page.locator('.ax-filing-case')).toContainText(id === 'eps' ? '披露基本每股收益' : '权益乘数');
+  }
+});
 
 test('data exploration separates price, oscillator, momentum, and volatility axes', async ({ page }) => {
   await page.goto('/');
@@ -68,12 +107,12 @@ test('knowledge card leads to an in-context practice result', async ({ page }) =
 
 test('knowledge cards distinguish evidence-pending teaching inputs from real-data requirements', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('.ax-knowledge-evidence')).toContainText('1 个需要真实行情或链上数据');
+  await expect(page.locator('.ax-knowledge-evidence')).toContainText('1 个需要真实行情、链上或财务数据');
   await expect(page.locator('.ax-knowledge-evidence')).toContainText('1 个目前仅提供明确标注的教学计算');
   await expect(page.locator('.ax-knowledge-evidence')).toContainText('不是已完成实证的数量');
   const rsi = page.locator('.ax-kb-card').filter({ hasText: 'RSI' });
   const eps = page.locator('.ax-kb-card').filter({ hasText: '每股收益（EPS）' });
-  await expect(rsi.locator('.ax-evidence-badge')).toContainText('需真实市场数据');
+  await expect(rsi.locator('.ax-evidence-badge')).toContainText('需真实数据');
   await expect(eps.locator('.ax-evidence-badge')).toContainText('待接入独立证据');
   await expect(eps.getByRole('button', { name: '在数据探索中实践' })).toHaveCount(0);
   await eps.getByRole('button', { name: '在数据探索中查看教学示例' }).click();
@@ -386,6 +425,11 @@ test('Bitcoin UTXO pages show only observed block-page inputs and outputs across
   });
 
   await page.goto('/');
+  const knowledgeCard = page.locator('.ax-kb-card').filter({ hasText: names[0] });
+  await knowledgeCard.locator('summary').click();
+  await expect(knowledgeCard.locator('.ax-utxo-sample')).toBeVisible();
+  await expect(knowledgeCard).toContainText('它是局部样本，不能推导当前全网 UTXO 总量');
+  await expect(knowledgeCard).not.toContainText('基于可编辑教学输入计算');
   await page.locator('.ax-kb-card').filter({ hasText: names[0] }).getByRole('button', { name: '在数据探索中实践' }).click();
   const panel = page.getByLabel('概念实践');
   await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
@@ -799,7 +843,8 @@ test('navigation, direct practice, and book reader have shareable URLs', async (
   await page.getByRole('button', { name: '原书阅读', exact: true }).click();
   await expect(page).toHaveURL(/\/learn\/book$/);
   await expect(page.getByRole('navigation', { name: '原书目录' })).toBeVisible();
-  await expect(page.locator('iframe[title="股票交易软件专业指标全解"]')).toHaveAttribute('src', /\/api\/book\/pdf/);
+  await expect(page.locator('.ax-book-reader')).toHaveAttribute('data-ready', 'true');
+  await expect(page.locator('#pdf-page-1 canvas')).toBeVisible();
   await page.getByRole('button', { name: '指标大全', exact: true }).click();
   await expect(page.locator('.ax-kb-card').first().getByRole('link', { name: '↗ 源码' })).toHaveCount(0);
 });
@@ -857,6 +902,13 @@ test('book contents uses an arrow-only accessible collapse control', async ({ pa
   const toggle = page.getByRole('button', { name: '收起原书目录' });
   await expect(toggle).toBeVisible();
   await expect(toggle).toHaveText('‹');
+  const selected = page.getByRole('button', { name: '使用说明 第 8 页', exact: true });
+  await selected.click();
+  await expect(selected).toHaveClass(/active/);
+  const darkBackground = await selected.evaluate(node => getComputedStyle(node).backgroundColor);
+  expect(darkBackground).not.toBe('rgb(239, 239, 239)');
+  await page.getByLabel('切换到浅色模式').click();
+  expect(await selected.evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(darkBackground);
   await toggle.click();
   await expect(page.getByRole('button', { name: '展开原书目录' })).toHaveText('›');
   await expect(page.locator('.ax-book-reader')).toHaveClass(/toc-collapsed/);
@@ -1180,4 +1232,29 @@ test('theme switch immediately gives body the active background token', async ({
     return { active, body };
   });
   expect(backgrounds.body).toBe(backgrounds.active);
+});
+test('Bitcoin address practice renders a script-address set from the mocked confirmed first page', async ({ page }) => {
+  const concept = { id: 'book_sending_receiving', name: '发送与接收', category: 'Bitcoin', input_kind: 'market_bars', inputs: [], notes: '从输入和非 OP_RETURN 输出脚本提取地址。', plan: { markets: ['crypto'], modules: ['data'], required_datasets: ['confirmed_bitcoin_first_page'], source_policy: 'real_required', goal: '地址集合不推断身份。' } };
+  const hash = 'a'.repeat(64);
+  await page.route('**/api/practice', async route => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: { concepts: [concept], modules: ['data'], total: 1 } });
+    return route.fulfill({ json: { concept_id: concept.id, status: 'computed', reason: null, input_kind: 'market_bars', provenance: 'server_fetched_bitcoin_transaction_first_page', values: { union_script_address_count: 3 }, units: {}, series: [], notes: [], module: 'data', source: 'bitcoin', symbol: 'BTC', bars: [], address_sample: { network: 'bitcoin_mainnet', provider: 'Blockstream Esplora', endpoint: 'https://blockstream.info/api/block/' + hash + '/txs/0', fetched_at: '2026-09-28T00:00:00Z', block_hash: hash, block_height: 840000, block_time: '2026-09-28T00:00:00Z', page_start: 0, returned_count: 2, excluded_coinbase_count: 1, sampled_noncoinbase_transaction_count: 1, scope: 'confirmed_pinned_block_first_page_noncoinbase_transactions', observed_newer_blocks: 6, confirmation_note: 'six newer blocks' }, address_transactions: [{ txid: 'b'.repeat(64), input_addresses: ['bc1qin'], output_addresses: ['bc1qout', 'bc1qin'], missing_input_address_slots: 0, missing_output_address_slots: 0, excluded_op_return_output_count: 1 }] } });
+  });
+  await page.goto('/data?concept=book_sending_receiving');
+  const panel = page.getByLabel('概念实践');
+  await expect(panel).toContainText('发送与接收');
+  await page.getByRole('button', { name: '运行实践' }).click();
+  const visual = panel.locator('.ax-address-sample');
+  await expect(visual).toBeVisible();
+  await expect(visual).toContainText('地址不是人或实体');
+  await expect(visual.locator('[data-address-txid]')).toHaveCount(1);
+  await expect(visual.getByRole('link', { name: '核对原始区块 ↗' })).toHaveAttribute('href', 'https://blockstream.info/block/' + hash);
+  await expect(visual).toHaveScreenshot('address-set-dark.png');
+  const darkBackground = await visual.evaluate(node => getComputedStyle(node).backgroundColor);
+  await page.getByLabel('切换到浅色模式').click();
+  await expect.poll(() => visual.evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(darkBackground);
+  await expect(visual).toHaveScreenshot('address-set-light.png');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect(visual).toHaveScreenshot('address-set-mobile.png');
 });

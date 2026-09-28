@@ -113,7 +113,7 @@ export interface PracticeConcept {
   id: string;
   name: string;
   category: string;
-  input_kind: 'market_bars' | 'independent_inputs' | 'manual_annotation';
+  input_kind: 'market_bars' | 'independent_inputs' | 'manual_annotation' | 'filing_case';
   inputs: Array<{ key: string; label: string; default: unknown }>;
   notes: string;
   plan?: {
@@ -130,7 +130,23 @@ export interface PracticeResult {
   status: 'computed' | 'partial' | 'undefined' | 'insufficient_data';
   reason: string | null;
   input_kind: PracticeConcept['input_kind'];
-  provenance: 'provided_market_bars' | 'provided_result_context' | 'editable_teaching_inputs' | 'server_fetched_provisional_snapshot' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_spot_order_book' | 'server_fetched_completed_stock_daily_bars' | 'server_fetched_binance_recent_trades' | 'server_fetched_bitcoin_block_snapshot' | 'server_fetched_bitcoin_transaction_sample' | 'server_fetched_bitcoin_transaction_first_page';
+  provenance: 'provided_market_bars' | 'provided_result_context' | 'editable_teaching_inputs' | 'server_fetched_provisional_snapshot' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_spot_order_book' | 'server_fetched_completed_stock_daily_bars' | 'server_fetched_binance_recent_trades' | 'server_fetched_bitcoin_block_snapshot' | 'server_fetched_bitcoin_transaction_sample' | 'server_fetched_bitcoin_transaction_first_page' | 'verified_issuer_filing_case';
+  filing_case?: {
+    case_id: string; issuer: string; ticker: string; scope: string;
+    period: { start: string; end: string; fiscal_year: number };
+    comparison_period: { start: string; end: string; fiscal_year: number };
+    published: string; audited: false; status: string; source_kind: string;
+    url: string; sha256: string; bytes: number;
+    pages: { income_statement: number; balance_sheet: number; cash_flow: number };
+    verification: { cache_status: string; verified_at: string; requested_url: string; matched_sha256: string; matched_bytes: number };
+  };
+  facts?: {
+    units: Record<string, string>;
+    annual_income_statement: Record<string, Record<string, number | string>>;
+    balance_sheets: Record<string, Record<string, number | string>>;
+    annual_cash_flows: Record<string, Record<string, number | string>>;
+    calculation_boundaries: unknown;
+  };
   values: Record<string, number | null>;
   units?: Record<string, string>;
   series: Array<{ name: string; unit?: string; values: Array<number | null> }>;
@@ -153,11 +169,13 @@ export interface PracticeResult {
   transaction_sample?: { network: 'bitcoin_mainnet'; provider: string; endpoint: string; fetched_at: string; block_hash: string; block_height: number; block_time: string | number; page_start: 0; returned_count: number; analyzed_count: number; excluded_coinbase_count: number; scope: 'first_page_non_coinbase_transactions'; observed_newer_blocks: number; confirmation_note: string };
   transactions?: Array<{ txid: string; fee_sats: number; size_bytes: number }>;
   utxo_sample?: { network: 'bitcoin_mainnet'; provider: string; endpoint: string; fetched_at: string; block_hash: string; block_height: number; block_time: string; page_start: 0; returned_count: number; excluded_coinbase_count: number; sampled_noncoinbase_transaction_count: number; scope: 'confirmed_pinned_block_first_page_noncoinbase_transactions'; observed_newer_blocks: number; confirmation_note: string; total_utxo_scope: 'undefined_not_derived_from_first_page_sample' };
+  address_sample?: { network: 'bitcoin_mainnet'; provider: string; endpoint: string; fetched_at: string; block_hash: string; block_height: number; block_time: string; page_start: 0; returned_count: number; excluded_coinbase_count: number; sampled_noncoinbase_transaction_count: number; scope: 'confirmed_pinned_block_first_page_noncoinbase_transactions'; observed_newer_blocks: number; confirmation_note: string; address_semantics?: { sending: string; receiving: string; receiving_includes_change: boolean; identity_inference: 'not_supported' } };
+  address_transactions?: Array<{ txid: string; input_addresses: string[]; output_addresses: string[]; missing_input_address_slots: number; missing_output_address_slots: number; excluded_op_return_output_count: number }>;
   utxo_transactions?: Array<{ txid: string; input_prevout_values_sats: number[]; non_op_return_output_values_sats: number[]; spent_prevout_count: number; spent_prevout_value_sats: number; created_output_count: number; created_output_value_sats: number; created_non_op_return_output_count: number; created_non_op_return_value_sats: number; excluded_op_return_output_count: number; excluded_op_return_output_value_sats: number; unclassified_non_op_return_output_count: number }>;
   asset_units?: { base_asset: string; quote_asset: string };
   levels?: { bids: Array<{ price: number; quantity: number }>; asks: Array<{ price: number; quantity: number }> };
   depth_snapshot?: { source: string; endpoint: string; symbol: string; depth_limit: number; update_id: number; timestamp: null; timestamp_note: string };
   provisional_snapshot?: { candle: Bar; is_closed: false; fetched_at: string; expected_close_at: string; completion_evidence: string };
-  context?: 'module_snapshot' | 'selected_dataset' | 'editable_teaching_inputs' | 'provided_result_context';
-  bar_origin?: 'server_fetched_completed_source_bars' | 'server_fetched_completed_binance_usdt_spot_bars' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_provisional_snapshot';
+  context?: 'module_snapshot' | 'selected_dataset' | 'editable_teaching_inputs' | 'provided_result_context' | 'historical_filing_case';
+  bar_origin?: 'server_fetched_completed_source_bars' | 'server_fetched_completed_binance_usdt_spot_bars' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_provisional_snapshot' | 'server_verified_issuer_filing_pdf';
 }

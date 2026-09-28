@@ -210,7 +210,7 @@ async fn serve_static(axum::extract::Path(file): axum::extract::Path<String>) ->
         Ok(content) => {
             let mime = if file.ends_with(".css") {
                 "text/css; charset=utf-8"
-            } else if file.ends_with(".js") {
+            } else if file.ends_with(".js") || file.ends_with(".mjs") {
                 "application/javascript; charset=utf-8"
             } else if file.ends_with(".html") {
                 "text/html; charset=utf-8"
@@ -1145,7 +1145,9 @@ async fn fetch_symbols_from_binance_at(base_url: &str) -> anyhow::Result<Vec<Str
         .build()?;
     // 获取所有交易对
     let exchange_info: serde_json::Value = client
-        .get(format!("{base_url}/api/v3/exchangeInfo"))
+        .get(format!(
+            "{base_url}/api/v3/exchangeInfo?permissions=SPOT&showPermissionSets=false"
+        ))
         .send()
         .await?
         .error_for_status()?
@@ -1291,6 +1293,7 @@ async fn get_symbols(
     }
     if source == "binance" {
         let (catalog, status, complete) = get_cached_symbols().await;
+        let universe_count = catalog.len();
         let mut items: Vec<_> = catalog
             .into_iter()
             .filter(|symbol| {
@@ -1307,7 +1310,7 @@ async fn get_symbols(
             .collect();
         return Ok(Json(json!({
             "symbols": symbols, "items": page, "count": symbols.len(), "total": total,
-            "universe_count": total, "offset": offset, "has_more": offset + symbols.len() < total,
+            "universe_count": universe_count, "offset": offset, "has_more": offset + symbols.len() < total,
             "status": status, "complete": complete, "source": source
         })));
     }
@@ -1440,6 +1443,15 @@ pub fn locate_symbol_for_test(reference: &str) -> Option<usize> {
 }
 
 fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
+    if crate::filing_case::is_supported(&concept.id) {
+        return json!({
+            "markets":["us_equity"],
+            "modules":["data"],
+            "required_datasets":["server_fetched_verified_issuer_filing_pdf","embedded_checked_filing_facts"],
+            "source_policy":"real_required",
+            "goal":"服务器取得 Apple 官方 FY2025 业绩公告 PDF，严格核对 4,919,649 字节与固定 SHA-256 后，使用已逐页核对的 FY2025/FY2024 GAAP 事实计算固定 AAPL 历史案例。来源是未经审计业绩公告而非年度报告；它不是当前行情、全市场财务数据库或任意股票查询。"
+        });
+    }
     let financial = matches!(
         concept.category.as_str(),
         "估值"
@@ -1506,6 +1518,8 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
         "book_utxo_value_stats" | "book_utxo_counts" | "book_utxo_totals"
     ) {
         json!({"markets":["crypto"],"modules":["data"],"required_datasets":["server_fetched_bitcoin_mainnet_pinned_block_transaction_first_page"],"source_policy":"real_required","goal":"服务器取得已验证主网区块窗口后固定其中一个具有六个更新观测区块的区块，只请求该哈希交易列表第一页并排除coinbase。普通交易必须有非coinbase vin.prevout.value 与 vout.value、scriptpubkey_type；只从创建输出小计排除 scriptpubkey_type=op_return，其他类型不承诺可花费或仍未花费。返回此页样本的创建/花费观察值；绝不从该样本捏造当前全网 UTXO 总数或总价值。"})
+    } else if concept.id == "book_sending_receiving" {
+        json!({"markets":["crypto"],"modules":["data"],"required_datasets":["server_fetched_bitcoin_mainnet_pinned_block_transaction_first_page"],"source_policy":"real_required","goal":"服务器取得已验证主网区块窗口后固定其中一个具有六个更新观测区块的区块，只请求该哈希交易列表第一页并排除 coinbase。普通交易必须有非 coinbase vin.prevout.value、vout.value 和 scriptpubkey_type；地址字段只能缺失/null 或非空 ASCII 且至多128字符。发送集合只取 vin.prevout.scriptpubkey_address；接收集合只取非 OP_RETURN vout.scriptpubkey_address，包含找零；缺失地址按输入和非 OP_RETURN 输出槽位分别报告。返回的是该页可解码脚本地址标签，不能推断用户、实体、收付款方、经济转账、全块或全网活跃地址。"})
     } else if matches!(
         concept.id.as_str(),
         "book_block_height" | "book_block_size" | "book_block_interval" | "book_transaction_rate"
@@ -2206,6 +2220,36 @@ async fn post_practice(
             "practice source is not applicable to this concept",
         ));
     }
+    if crate::filing_case::is_supported(&concept.id) {
+        if source != "us_stock"
+            || symbol != "AAPL"
+            || req.limit.is_some()
+            || req.second_symbol.is_some()
+            || req.bars.is_some()
+            || !req
+                .inputs
+                .as_object()
+                .is_some_and(serde_json::Map::is_empty)
+        {
+            return Err(validate::bad("filing case is fixed to AAPL/us_stock with module=data, empty inputs, and no bars, limit, or second symbol"));
+        }
+        if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Issuer filing verification is disabled in offline mode".into(),
+            ));
+        }
+        let mut result =
+            crate::filing_case::evaluate(&concept.id, &state.data_cache_dir, &state.filing_source)
+                .await
+                .map_err(|error| (StatusCode::BAD_GATEWAY, error))?;
+        result["module"] = json!("data");
+        result["symbol"] = json!("AAPL");
+        result["source"] = json!("us_stock");
+        result["context"] = json!("historical_filing_case");
+        result["bar_origin"] = json!("server_verified_issuer_filing_pdf");
+        return Ok(Json(result));
+    }
     if matches!(
         concept.id.as_str(),
         "book_transaction_fees" | "book_transaction_bytes"
@@ -2306,6 +2350,57 @@ async fn post_practice(
             Ok(json!({"txid":tx.txid,"input_prevout_values_sats":tx.spent_prevout_values_sats,"non_op_return_output_values_sats":non_op_return_output_values_sats,"spent_prevout_count":tx.spent_prevout_values_sats.len(),"spent_prevout_value_sats":spent,"created_output_count":tx.outputs.len(),"created_output_value_sats":created,"created_non_op_return_output_count":tx.outputs.len()-excluded.len(),"created_non_op_return_value_sats":non_op_return,"excluded_op_return_output_count":excluded.len(),"excluded_op_return_output_value_sats":excluded_value,"unclassified_non_op_return_output_count":unclassified}))
         }).collect::<Result<Vec<_>, _>>().map_err(validate::bad)?;
         result["utxo_transactions"] = json!(utxo_transactions);
+        return Ok(Json(result));
+    }
+    if concept.id == "book_sending_receiving" {
+        if source != "binance"
+            || symbol != "BTCUSDT"
+            || req.limit.is_some_and(|n| n != 25)
+            || req.bars.is_some()
+            || !req
+                .inputs
+                .as_object()
+                .is_some_and(serde_json::Map::is_empty)
+        {
+            return Err(validate::bad("Bitcoin address practice uses the fixed BTCUSDT selector and server-fetched first page only"));
+        }
+        if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Live market data is disabled in offline mode".into(),
+            ));
+        }
+        let sample = state
+            .feed
+            .fetch_bitcoin_mainnet_transaction_sample()
+            .await
+            .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+        let mut result =
+            crate::book::market_bitcoin_address_summary(&concept.id, &sample.transactions)
+                .map_err(validate::bad)?;
+        result["module"] = json!("data");
+        result["symbol"] = json!(symbol);
+        result["source"] = json!(source);
+        result["context"] = json!("selected_dataset");
+        result["bar_origin"] = json!("server_fetched_bitcoin_transaction_first_page");
+        result["bars"] = json!([]);
+        result["address_sample"] = json!({
+            "network":"bitcoin_mainnet","provider":sample.provider,"endpoint":sample.endpoint,
+            "fetched_at":sample.fetched_at,"block_hash":sample.block.hash,"block_height":sample.block.height,
+            "block_time":sample.block.timestamp,"page_start":0,"returned_count":sample.returned_count,
+            "sampled_noncoinbase_transaction_count":sample.transactions.len(),"excluded_coinbase_count":sample.excluded_coinbase_count,
+            "scope":"confirmed_pinned_block_first_page_noncoinbase_transactions","observed_newer_blocks":6,
+            "confirmation_note":"six newer blocks in this observed window; this is not a consensus-finality claim",
+            "address_semantics":{"sending":"vin.prevout.scriptpubkey_address","receiving":"non_op_return_vout.scriptpubkey_address","receiving_includes_change":true,"identity_inference":"not_supported"}
+        });
+        result["address_transactions"] = json!(sample.transactions.iter().map(|tx| {
+            let input_addresses = tx.spent_prevout_addresses.iter().flatten().collect::<std::collections::BTreeSet<_>>();
+            let output_addresses = tx.outputs.iter().filter(|output| output.scriptpubkey_type != "op_return").filter_map(|output| output.scriptpubkey_address.as_ref()).collect::<std::collections::BTreeSet<_>>();
+            let missing_input_address_slots = tx.spent_prevout_addresses.iter().filter(|address| address.is_none()).count();
+            let missing_output_address_slots = tx.outputs.iter().filter(|output| output.scriptpubkey_type != "op_return" && output.scriptpubkey_address.is_none()).count();
+            let excluded_op_return_output_count = tx.outputs.iter().filter(|output| output.scriptpubkey_type == "op_return").count();
+            json!({"txid":tx.txid,"input_addresses":input_addresses,"output_addresses":output_addresses,"missing_input_address_slots":missing_input_address_slots,"missing_output_address_slots":missing_output_address_slots,"excluded_op_return_output_count":excluded_op_return_output_count})
+        }).collect::<Vec<_>>());
         return Ok(Json(result));
     }
     if matches!(
@@ -2738,7 +2833,13 @@ mod binance_catalog_tests {
         select_binance_symbols, source_candle_close_after, BinanceSymbol, BinanceTicker,
     };
     use crate::types::Bar;
-    use axum::{routing::get, Json, Router};
+    use axum::{
+        body::Body,
+        extract::RawQuery,
+        http::{header, HeaderMap, Response},
+        routing::get,
+        Json, Router,
+    };
     use chrono::{Duration, Utc};
     use serde_json::json;
 
@@ -2848,6 +2949,55 @@ mod binance_catalog_tests {
             axum::serve(listener, bad).await.unwrap();
         });
         assert!(fetch_symbols_from_binance_at(&base).await.is_err());
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn catalog_requests_and_decodes_the_compact_gzip_exchange_payload() {
+        let app = Router::new()
+            .route(
+                "/api/v3/exchangeInfo",
+                get(|headers: HeaderMap, RawQuery(query): RawQuery| async move {
+                    assert_eq!(
+                        query.as_deref(),
+                        Some("permissions=SPOT&showPermissionSets=false")
+                    );
+                    assert!(headers
+                        .get(header::ACCEPT_ENCODING)
+                        .and_then(|value| value.to_str().ok())
+                        .is_some_and(|value| value.split(',').any(|item| item.trim() == "gzip")));
+                    let compressed = vec![
+                        31, 139, 8, 0, 0, 0, 0, 0, 2, 255, 171, 86, 42, 174, 204, 77, 202, 207, 41,
+                        86, 178, 138, 174, 134, 178, 149, 172, 148, 156, 66, 156, 67, 131, 93, 66,
+                        148, 116, 148, 138, 75, 18, 75, 74, 129, 178, 74, 33, 65, 142, 46, 158,
+                        126, 238, 64, 161, 194, 210, 252, 146, 84, 199, 226, 226, 212, 18, 160, 48,
+                        84, 89, 102, 113, 112, 65, 126, 73, 72, 81, 98, 74, 102, 94, 186, 99, 78,
+                        78, 126, 121, 106, 138, 146, 85, 73, 81, 105, 106, 109, 108, 45, 0, 215,
+                        136, 138, 43, 101, 0, 0, 0,
+                    ];
+                    Response::builder()
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .header(header::CONTENT_ENCODING, "gzip")
+                        .body(Body::from(compressed))
+                        .unwrap()
+                }),
+            )
+            .route(
+                "/api/v3/ticker/24hr",
+                get(|| async { Json(json!([{"symbol":"BTCUSDT","quoteVolume":"1000"}])) }),
+            );
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        assert_eq!(
+            fetch_symbols_from_binance_at(&base).await.unwrap(),
+            vec!["BTCUSDT"]
+        );
         server.abort();
     }
 

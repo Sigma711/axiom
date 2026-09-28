@@ -2439,3 +2439,69 @@ pub fn market_bitcoin_utxo_summary(
         ],"source_ids":[match id {"book_utxo_value_stats"=>"appendix_080","book_utxo_counts"=>"appendix_078",_=>"appendix_079"}]
     }))
 }
+
+/// Counts decoded script-address labels on a confirmed block transaction page.
+/// Input prevout and new output addresses may overlap (including change), and
+/// neither side is a count of people, entities or economic transfers.
+pub fn market_bitcoin_address_summary(
+    id: &str,
+    txs: &[crate::data::BitcoinTransaction],
+) -> Result<Value, String> {
+    if id != "book_sending_receiving" {
+        return Err("unsupported Bitcoin address sample practice".into());
+    }
+    let mut spending = std::collections::BTreeSet::new();
+    let mut receiving = std::collections::BTreeSet::new();
+    let mut missing_input = 0u64;
+    let mut missing_output = 0u64;
+    let mut excluded_op_return_output_count = 0u64;
+    for tx in txs {
+        if tx.spent_prevout_values_sats.len() != tx.spent_prevout_addresses.len() {
+            return Err(
+                "Bitcoin transaction prevout address slots do not align with inputs".into(),
+            );
+        }
+        for address in &tx.spent_prevout_addresses {
+            match address {
+                Some(address) => {
+                    spending.insert(address);
+                }
+                None => {
+                    missing_input = missing_input
+                        .checked_add(1)
+                        .ok_or("missing input address count overflow")?
+                }
+            }
+        }
+        for output in &tx.outputs {
+            if output.scriptpubkey_type == "op_return" {
+                excluded_op_return_output_count = excluded_op_return_output_count
+                    .checked_add(1)
+                    .ok_or("OP_RETURN output count overflow")?;
+                continue;
+            }
+            match &output.scriptpubkey_address {
+                Some(address) => {
+                    receiving.insert(address);
+                }
+                None => {
+                    missing_output = missing_output
+                        .checked_add(1)
+                        .ok_or("missing output address count overflow")?
+                }
+            }
+        }
+    }
+    let shared = spending.intersection(&receiving).count();
+    let union = spending.union(&receiving).count();
+    Ok(json!({
+        "concept_id":id,"input_kind":"market_bars","provenance":"server_fetched_bitcoin_transaction_first_page",
+        "status":if txs.is_empty(){"undefined"}else{"computed"},
+        "reason":if txs.is_empty(){json!("固定区块交易首页排除 coinbase 后没有普通交易。")}else{Value::Null},
+        "inputs":{},"series":[],
+        "values":{"sampled_noncoinbase_transaction_count":txs.len(),"unique_sending_script_address_count":spending.len(),"unique_receiving_script_address_count":receiving.len(),"shared_script_address_count":shared,"union_script_address_count":union,"missing_input_address_count":missing_input,"missing_output_address_count":missing_output,"excluded_op_return_output_count":excluded_op_return_output_count},
+        "units":{"sampled_noncoinbase_transaction_count":"transactions","unique_sending_script_address_count":"script_addresses","unique_receiving_script_address_count":"script_addresses","shared_script_address_count":"script_addresses","union_script_address_count":"script_addresses","missing_input_address_count":"inputs","missing_output_address_count":"non_op_return_outputs","excluded_op_return_output_count":"outputs"},
+        "notes":["仅统计固定已确认 Bitcoin 区块交易首页中普通交易的可解码脚本地址：发送侧来自 vin.prevout.scriptpubkey_address，接收侧来自非 OP_RETURN vout.scriptpubkey_address。", "无法解码的输入地址与非 OP_RETURN 输出地址分别按槽位计数但不编造地址；接收侧包含找零。交集只表示同一页中两侧均出现的脚本标签。地址不等于人、实体、收付款方或经济转账，样本不代表整个区块或全网。"],
+        "source_ids":["appendix_090"]
+    }))
+}

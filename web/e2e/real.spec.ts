@@ -1,4 +1,101 @@
+import { createHash } from 'node:crypto';
 import { expect, test } from './v8-coverage';
+
+test('Binance symbol picker reaches the complete tradable universe and searches beyond its startup seed', async ({ page, request }) => {
+  test.setTimeout(90_000);
+  const upstream = await request.get('https://data-api.binance.vision/api/v3/exchangeInfo?permissions=SPOT&showPermissionSets=false', { timeout: 30_000 });
+  expect(upstream.ok()).toBe(true);
+  const raw = await upstream.json();
+  const expected = raw.symbols.filter((symbol: { symbol: string; status: string; quoteAsset: string; isSpotTradingAllowed: boolean }) => symbol.status === 'TRADING' && symbol.quoteAsset === 'USDT' && symbol.isSpotTradingAllowed).map((symbol: { symbol: string }) => symbol.symbol).sort() as string[];
+  expect(expected.length).toBeGreaterThan(200);
+  await expect.poll(async () => {
+    const response = await request.get('/api/symbols?source=binance&limit=100');
+    expect(response.ok()).toBe(true);
+    return (await response.json()).complete;
+  }, { timeout: 30_000, intervals: [250, 500, 1000] }).toBe(true);
+  const listed: string[] = [];
+  for (let offset = 0; ; offset += 100) {
+    const response = await request.get(`/api/symbols?source=binance&limit=100&offset=${offset}`);
+    expect(response.ok()).toBe(true);
+    const catalog = await response.json();
+    expect(catalog.complete).toBe(true);
+    expect(catalog.universe_count).toBe(expected.length);
+    listed.push(...catalog.symbols);
+    if (!catalog.has_more) break;
+  }
+  expect(listed).toEqual(expected);
+  await page.goto('/data');
+  await page.getByRole('button', { name: '交易对', exact: true }).click();
+  await expect(page.locator('.ax-symbol-status')).toContainText(`目录共 ${expected.length.toLocaleString('en-US')} 个`);
+  const symbol = expected[expected.length - 1];
+  await page.getByLabel('搜索交易对').fill(symbol);
+  await expect(page.getByRole('option', { name: new RegExp(`^${symbol}\\b`) })).toBeVisible();
+  await expect(page.locator('.ax-symbol-status')).toContainText(`目录共 ${expected.length.toLocaleString('en-US')} 个`);
+  await page.getByRole('option', { name: new RegExp(`^${symbol}\\b`) }).click();
+  await expect(page.getByRole('button', { name: '交易对', exact: true })).toContainText(symbol);
+});
+
+test('original book renders real pages and navigates its own bookmarks in both themes', async ({ page, request }) => {
+  test.setTimeout(90_000);
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  const pdf = await request.get('/api/book/pdf');
+  expect(pdf.ok()).toBe(true);
+  expect((await pdf.body()).subarray(0, 5).toString()).toBe('%PDF-');
+  await page.goto('/learn/book');
+  const reader = page.locator('.ax-book-reader');
+  await expect(reader).toHaveAttribute('data-ready', 'true', { timeout: 30_000 });
+  await expect(reader).toContainText('共 83 页');
+  const toc = page.getByRole('navigation', { name: '原书目录' });
+  await expect(toc.locator(':scope > ol > li')).toHaveCount(8);
+  expect(await toc.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
+  expect(await page.locator('.ax-book-toc').evaluate(node => node.clientHeight < window.innerHeight)).toBe(true);
+  const chapter = toc.getByRole('button', { name: '第三部分 趋势、动量、波动与量价技术指标 第 33 页', exact: true });
+  const windowScroll = await page.evaluate(() => window.scrollY);
+  await chapter.click();
+  const sheet = page.locator('#pdf-page-33');
+  await expect.poll(() => sheet.evaluate(node => {
+    const scroll = node.closest('.ax-book-scroll')!.getBoundingClientRect();
+    const bounds = node.getBoundingClientRect();
+    return Math.abs(bounds.top - scroll.top) < 40;
+  })).toBe(true);
+  expect(await page.evaluate(() => window.scrollY)).toBe(windowScroll);
+  const canvas = sheet.locator('canvas');
+  await expect(canvas).toBeVisible();
+  // Check the actual PDF pixels, not merely a mounted canvas or a blank iframe.
+  await expect.poll(() => canvas.evaluate((node: HTMLCanvasElement) => {
+    if (!node.width || !node.height) return 0;
+    const pixels = node.getContext('2d')!.getImageData(0, 0, node.width, node.height).data;
+    let ink = 0;
+    for (let i = 0; i < pixels.length; i += 16) if (pixels[i] < 220 || pixels[i + 1] < 220 || pixels[i + 2] < 220) ink++;
+    return ink;
+  })).toBeGreaterThan(300);
+  await expect(chapter).toHaveClass(/active/);
+  const dark = await toc.evaluate(node => ({ background: getComputedStyle(node.closest('aside')!).backgroundColor, text: getComputedStyle(node).color }));
+  const tabs = page.locator('.ax-tabs');
+  const snapshotStyle = await page.addStyleTag({ content: '.ax-tabs { visibility: hidden !important; }' });
+  await expect(tabs).toHaveCSS('visibility', 'hidden');
+  await expect(page.locator('.ax-book-toc')).toHaveScreenshot('book-toc-dark.png', { maxDiffPixelRatio: .01 });
+  await page.getByLabel('切换到浅色模式').click();
+  const light = await toc.evaluate(node => ({ background: getComputedStyle(node.closest('aside')!).backgroundColor, text: getComputedStyle(node).color }));
+  expect(light.background).not.toBe(dark.background);
+  expect(light.text).not.toBe(dark.text);
+  await expect(page.locator('.ax-book-toc')).toHaveScreenshot('book-toc-light.png', { maxDiffPixelRatio: .01 });
+  await page.getByLabel('收起原书目录').click();
+  await expect(toc).toHaveCount(0);
+  await page.getByLabel('展开原书目录').click();
+  await expect(toc).toBeVisible();
+  await page.getByLabel('当前页码').fill('82');
+  await page.getByLabel('当前页码').press('Enter');
+  await expect(page.locator('#pdf-page-82 canvas')).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await expect(page.locator('.ax-book-toc')).toHaveScreenshot('book-toc-mobile.png', { maxDiffPixelRatio: .01 });
+  await snapshotStyle.evaluate(node => node.parentNode?.removeChild(node));
+  await page.getByRole('button', { name: '指标大全', exact: true }).click();
+  await expect(reader).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
 
 test('real Rust service supports the four-module learning journey', async ({ page }, testInfo) => {
   test.setTimeout(120_000);
@@ -304,13 +401,16 @@ test('knowledge practice opens the applicable module and market instead of forci
   await page.goto('/');
   await search.fill('ROE 净资产收益率');
   const roe = page.locator('.ax-kb-card').filter({ has: page.getByRole('heading', { name: 'ROE 净资产收益率', exact: true }) });
-  await expect(roe).toContainText('待接入独立证据');
-  await roe.getByRole('button', { name: '在数据探索中查看教学示例' }).click();
-  await expect(page).toHaveURL(/\/data\?concept=roe&source=a_share/);
-  await expect(page.getByRole('button', { name: '数据源', exact: true })).toContainText('A 股');
-  await expect(page.getByRole('button', { name: '交易对' })).toContainText('600519');
-  await expect(page.getByLabel('概念实践')).toContainText('ROE 净资产收益率');
-  await expect(page.getByLabel('概念实践')).toContainText('教学示例');
+  await expect(roe).toContainText('需真实数据');
+  await expect(roe).not.toContainText('待接入独立证据');
+  await roe.getByRole('button', { name: '在数据探索中实践' }).click();
+  await expect(page).toHaveURL(/\/data\?concept=roe&source=us_stock/);
+  await expect(page.getByRole('button', { name: '数据源', exact: true })).toContainText('美股');
+  await expect(page.getByRole('button', { name: '交易对' })).toContainText('AAPL');
+  const roePractice = page.getByLabel('概念实践');
+  await expect(roePractice).toContainText('ROE 净资产收益率');
+  await expect(roePractice.locator('.ax-practice-inputs')).toHaveCount(0);
+  await expect(roePractice).not.toContainText('教学示例');
 });
 
 
@@ -1257,6 +1357,70 @@ test('Bitcoin UTXO practices independently recompute observed first-page inputs 
   }
 });
 
+test('Bitcoin script address sets match the original confirmed block page rather than people or transfers', async ({ page, request }) => {
+  test.setTimeout(120_000);
+  await page.goto('/data?concept=book_sending_receiving&source=binance');
+  const panel = page.getByLabel('概念实践');
+  await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+  const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+  const requestPromise = page.waitForRequest(request => request.url().includes('/api/practice') && request.method() === 'POST');
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  const [sent, response] = await Promise.all([requestPromise, responsePromise]);
+  expect(sent.postDataJSON()).toMatchObject({ concept_id: 'book_sending_receiving', module: 'data', source: 'binance', inputs: {} });
+  expect(sent.postDataJSON().bars).toBeUndefined();
+  expect(response.ok(), await response.text()).toBe(true);
+  const result = await response.json();
+  expect(result.provenance).toBe('server_fetched_bitcoin_transaction_first_page');
+  expect(result.address_sample.network).toBe('bitcoin_mainnet');
+  expect(result.address_sample.endpoint).toMatch(/^https:\/\/(blockstream\.info|mempool\.space)\/api\/block\/[0-9a-f]{64}\/txs\/0$/);
+  const provider = await request.get(result.address_sample.endpoint, { timeout: 30_000 });
+  expect(provider.ok(), await provider.text()).toBe(true);
+  const raw = await provider.json();
+  expect(raw[0].vin[0].is_coinbase).toBe(true);
+  const ordinary = raw.slice(1);
+  expect(ordinary.length).toBe(result.address_transactions.length);
+  const sending = new Set<string>(), receiving = new Set<string>();
+  let missingInputs = 0, missingOutputs = 0, excluded = 0;
+  type Script = { scriptpubkey_address?: string | null; scriptpubkey_type: string };
+  for (const [index, tx] of result.address_transactions.entries()) {
+    const original = ordinary[index];
+    expect(tx.txid).toBe(original.txid);
+    expect(original.status.confirmed).toBe(true);
+    expect(original.status.block_hash).toBe(result.address_sample.block_hash);
+    const inputs: Script[] = original.vin.map((input: { prevout: Script }) => input.prevout);
+    const outputs: Script[] = original.vout.filter((output: Script) => output.scriptpubkey_type !== 'op_return');
+    const decoded = (scripts: Script[]) => [...new Set(scripts.flatMap(script => typeof script.scriptpubkey_address === 'string' ? [script.scriptpubkey_address] : []))].sort();
+    expect(tx.input_addresses).toEqual(decoded(inputs));
+    expect(tx.output_addresses).toEqual(decoded(outputs));
+    const inputMissing = inputs.filter(script => !script.scriptpubkey_address).length;
+    const outputMissing = outputs.filter(script => !script.scriptpubkey_address).length;
+    const opReturn = original.vout.length - outputs.length;
+    expect(tx.missing_input_address_slots).toBe(inputMissing);
+    expect(tx.missing_output_address_slots).toBe(outputMissing);
+    expect(tx.excluded_op_return_output_count).toBe(opReturn);
+    decoded(inputs).forEach(address => sending.add(address));
+    decoded(outputs).forEach(address => receiving.add(address));
+    missingInputs += inputMissing; missingOutputs += outputMissing; excluded += opReturn;
+  }
+  const shared = [...sending].filter(address => receiving.has(address)).length;
+  expect(result.values.unique_sending_script_address_count).toBe(sending.size);
+  expect(result.values.unique_receiving_script_address_count).toBe(receiving.size);
+  expect(result.values.shared_script_address_count).toBe(shared);
+  expect(result.values.union_script_address_count).toBe(new Set([...sending, ...receiving]).size);
+  expect(result.values.missing_input_address_count).toBe(missingInputs);
+  expect(result.values.missing_output_address_count).toBe(missingOutputs);
+  expect(result.values.excluded_op_return_output_count).toBe(excluded);
+  const visual = panel.locator('.ax-address-sample');
+  await expect(visual).toBeVisible();
+  await expect(panel.locator('[data-address-txid]')).toHaveCount(ordinary.length);
+  await expect(panel.locator(`a[href="${new URL(result.address_sample.endpoint).origin}/block/${result.address_sample.block_hash}"]`)).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await visual.evaluate(node => node.getBoundingClientRect().right <= window.innerWidth)).toBe(true);
+  const dark = await visual.evaluate(node => getComputedStyle(node).backgroundColor);
+  await page.getByLabel('切换到浅色模式').click();
+  expect(await visual.evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(dark);
+});
+
 test('Bitcoin block timing and transaction rate use exactly nine linked header-time intervals', async ({ page }) => {
   test.setTimeout(120_000);
   for (const conceptId of ['book_block_interval', 'book_transaction_rate']) {
@@ -1319,5 +1483,168 @@ test('Bitcoin block timing and transaction rate use exactly nine linked header-t
       }
       await expect(panel).toContainText('交易数包含每块的 coinbase');
     }
+  }
+});
+
+test('Apple filing case verifies the issuer PDF and computes every supported metric from one historical statement', async ({ page, request }) => {
+  test.setTimeout(180_000);
+  const officialUrl = 'https://www.apple.com/newsroom/pdfs/fy2025-q4/FY25_Q4_Consolidated_Financial_Statements.pdf';
+  const officialPdf = await request.get(officialUrl, { timeout: 30_000 });
+  expect(officialPdf.ok(), await officialPdf.text()).toBe(true);
+  const officialBytes = await officialPdf.body();
+  expect(officialBytes).toHaveLength(4_919_649);
+  expect(createHash('sha256').update(officialBytes).digest('hex')).toBe('43e7f0730b3cce0fc37301a2f43c29712bbde6ab299d97c6df345fd0c754508a');
+
+  await page.goto('/');
+  await page.getByRole('textbox', { name: '搜索 概念 / 公式 / 关键词' }).fill('book_fcf');
+  const card = page.locator('.ax-kb-card').filter({ has: page.getByRole('heading', { name: '自由现金流', exact: true }) });
+  await expect(card).toHaveCount(1, { timeout: 30_000 });
+  await card.getByRole('button', { name: '在数据探索中实践' }).click();
+  await expect(page).toHaveURL(/\/data\?concept=book_fcf&source=us_stock$/);
+  const panel = page.getByLabel('概念实践');
+  await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+  const requestPromise = page.waitForRequest(sent => sent.url().includes('/api/practice') && sent.method() === 'POST');
+  const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  const [sent, response] = await Promise.all([requestPromise, responsePromise]);
+  expect(sent.postDataJSON()).toEqual({ concept_id: 'book_fcf', module: 'data', symbol: 'AAPL', source: 'us_stock', inputs: {} });
+  expect(response.ok(), await response.text()).toBe(true);
+  const result = await response.json();
+  expect(result).toMatchObject({
+    concept_id: 'book_fcf', input_kind: 'filing_case', provenance: 'verified_issuer_filing_case', status: 'computed',
+    module: 'data', source: 'us_stock', symbol: 'AAPL', context: 'historical_filing_case', bar_origin: 'server_verified_issuer_filing_pdf',
+    values: { free_cash_flow: 98_767 }, units: { free_cash_flow: 'USD millions' }, bars: [], inputs: {}, series: [],
+    filing_case: {
+      case_id: 'apple_fy2025_q4_annual_gaap_press_release', issuer: 'Apple Inc.', ticker: 'AAPL',
+      period: { start: '2024-09-29', end: '2025-09-27', fiscal_year: 2025 },
+      comparison_period: { start: '2023-10-01', end: '2024-09-28', fiscal_year: 2024 },
+      published: '2025-10-30', audited: false, source_kind: 'issuer_official_earnings_release_pdf',
+      url: officialUrl, sha256: '43e7f0730b3cce0fc37301a2f43c29712bbde6ab299d97c6df345fd0c754508a', bytes: 4_919_649,
+      pages: { income_statement: 1, balance_sheet: 2, cash_flow: 3 },
+    },
+  });
+  expect(result.filing_case.status).toContain('Unaudited');
+  expect(result.filing_case.status).toContain('not an annual report');
+  expect(result.filing_case.verification.requested_url).toBe(officialUrl);
+  expect(result.filing_case.verification.matched_bytes).toBe(4_919_649);
+  expect(result.filing_case.verification.matched_sha256).toBe('43e7f0730b3cce0fc37301a2f43c29712bbde6ab299d97c6df345fd0c754508a');
+  expect(result.facts.calculation_boundaries).toEqual({
+    eps: 'Reported EPS is authoritative. Net income in millions divided by weighted shares in thousands is only an approximate cross-check because both inputs are rounded in the release.',
+    cash: 'Cash-flow ending cash agrees to the balance-sheet cash and cash equivalents in each reported year.',
+    capex: 'PPE capex is the absolute value of the reported cash-flow line Payments for acquisition of property, plant and equipment.',
+  });
+
+  const visual = panel.locator('.ax-filing-case');
+  await expect(visual).toBeVisible();
+  await expect(visual).toContainText('历史财务案例 · 原文已核验');
+  await expect(visual).toContainText('Apple Inc. · FY2025');
+  await expect(visual).toContainText('2024-09-29 至 2025-09-27 · 公告发布 2025-10-30');
+  await expect(visual).toContainText('未经审计');
+  await expect(visual).toContainText('不是年度报告');
+  await expect(visual).toContainText('不是当前行情或当前所选股票的财务数据');
+  await expect(visual.locator('.ax-filing-results')).toContainText('98,767 百万美元');
+  await expect(visual.locator('figure')).toContainText('经营现金流 − 购置固定资产的现金支出');
+  await expect(visual.locator('[data-filing-fact="cfo"]')).toContainText('111,482 百万美元');
+  await expect(visual.locator('[data-filing-fact="ppe_capex_cash_outflow"]')).toContainText('12,715 百万美元');
+  await expect(visual.locator('.ax-filing-fact')).toHaveCount(2);
+  await expect(visual.locator('.ax-filing-bar')).toHaveCount(4);
+  await expect(visual.locator(`a[href="${officialUrl}#page=3"]`)).toHaveCount(2);
+  const captureCase = async (name: string) => {
+    await page.evaluate(() => document.fonts.ready);
+    await visual.scrollIntoViewIfNeeded();
+    await expect(visual).toBeVisible();
+    const original = await visual.evaluate(node => {
+      const rect = node.getBoundingClientRect();
+      return { width: rect.width, height: rect.height, position: getComputedStyle(node).position, scrollY: window.scrollY };
+    });
+    expect(original.position).not.toBe('fixed');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect(await visual.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+    await visual.getByRole('link', { name: '第 3 页 ↗' }).first().click({ trial: true });
+    // Keep the live component and its natural dimensions; isolate only the
+    // screenshot origin from asynchronous charts and page scrolling outside it.
+    const snapshotStyle = await page.addStyleTag({ content: `.ax-tabs { visibility: hidden !important; } .ax-filing-case { position: fixed !important; top: 0 !important; left: 0 !important; width: ${original.width}px !important; box-sizing: border-box; margin: 0 !important; transform: none !important; z-index: 10000; }` });
+    try {
+      const isolated = await visual.boundingBox();
+      expect(isolated).not.toBeNull();
+      expect(isolated!.x).toBe(0);
+      expect(isolated!.y).toBe(0);
+      expect(isolated!.width).toBeCloseTo(original.width, 1);
+      expect(isolated!.height).toBeCloseTo(original.height, 1);
+      await page.mouse.move(0, 0);
+      await expect(visual).toHaveScreenshot(name, { maxDiffPixelRatio: .01 });
+    } finally {
+      await snapshotStyle.evaluate(node => node.parentNode?.removeChild(node));
+      await page.evaluate(scrollY => window.scrollTo(0, scrollY), original.scrollY);
+    }
+    expect(await visual.evaluate(node => getComputedStyle(node).position)).toBe(original.position);
+  };
+  await captureCase('book-fcf-dark.png');
+  await page.getByLabel('切换到浅色模式').click();
+  await captureCase('book-fcf-light.png');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await visual.evaluate(node => node.getBoundingClientRect().right <= window.innerWidth)).toBe(true);
+  await captureCase('book-fcf-mobile.png');
+
+  // Literal inputs transcribed from pages 1–3 of the checked Apple announcement.
+  // Expected values are recomputed here without importing application code or its embedded case JSON.
+  const i = { sales: 416_161, cogs: 220_960, gross: 195_201, operating: 133_050, net: 112_010, basicEps: 7.49, dilutedEps: 7.46, basicShares: 14_948_500, dilutedShares: 15_004_697 };
+  const b = { cash: 35_934, securities: 18_763, receivables: 39_777, inventory: 5_718, currentAssets: 147_957, payables: 69_860, commercialPaper: 7_979, currentDebt: 12_350, currentLiabilities: 165_631, noncurrentDebt: 78_328, assets: 359_241, liabilities: 285_508, equity: 73_733 };
+  const prior = { sales: 391_035, receivables: 33_410, inventory: 7_286, payables: 68_960, assets: 364_980, equity: 56_950 };
+  const cashFlow = { cfo: 111_482, capex: 12_715 };
+  const averageAssets = (b.assets + prior.assets) / 2;
+  const averageEquity = (b.equity + prior.equity) / 2;
+  const expected: Record<string, Record<string, number>> = {
+    eps: { reported_basic_eps: i.basicEps, reported_diluted_eps: i.dilutedEps, approx_basic_eps_cross_check: i.net * 1_000 / i.basicShares, approx_diluted_eps_cross_check: i.net * 1_000 / i.dilutedShares },
+    book_diluted_shares: { weighted_diluted_shares: i.dilutedShares, reported_diluted_eps: i.dilutedEps, approx_diluted_eps_cross_check: i.net * 1_000 / i.dilutedShares },
+    book_revenue: { revenue: i.sales },
+    book_gross_margin: { gross_margin: i.gross / i.sales },
+    book_ebit_margin: { ebit_margin: i.operating / i.sales },
+    book_net_margin: { net_margin: i.net / i.sales },
+    book_current_ratio: { current_ratio: b.currentAssets / b.currentLiabilities },
+    book_quick_ratio: { quick_ratio: (b.cash + b.securities + b.receivables) / b.currentLiabilities },
+    book_cash_ratio: { cash_ratio: b.cash / b.currentLiabilities },
+    book_debt_ratio: { debt_ratio: b.liabilities / b.assets },
+    book_de_ratio: { debt_to_equity: b.liabilities / b.equity },
+    book_net_debt: { net_debt: b.commercialPaper + b.currentDebt + b.noncurrentDebt - b.cash },
+    book_cfo: { operating_cash_flow: cashFlow.cfo },
+    book_capex: { capital_expenditure: cashFlow.capex },
+    book_fcf: { free_cash_flow: cashFlow.cfo - cashFlow.capex },
+    fcf: { free_cash_flow: cashFlow.cfo - cashFlow.capex },
+    book_cfo_income: { cfo_to_net_income: cashFlow.cfo / i.net },
+    book_asset_turnover: { asset_turnover: i.sales / averageAssets },
+    book_roa: { return_on_average_assets: i.net / averageAssets },
+    book_inventory_turnover: { inventory_turnover: i.cogs / ((b.inventory + prior.inventory) / 2) },
+    book_receivable_turnover: { receivable_turnover_proxy: i.sales / ((b.receivables + prior.receivables) / 2) },
+    book_dpo: { days_payable_outstanding: ((b.payables + prior.payables) / 2) / i.cogs * 364 },
+    accrual_ratio: { accrual_ratio: (i.net - cashFlow.cfo) / averageAssets },
+    book_yoy: { revenue_year_over_year: (i.sales - prior.sales) / prior.sales },
+    book_ccc: {
+      cash_conversion_cycle: ((b.inventory + prior.inventory) / 2) / i.cogs * 364 + ((b.receivables + prior.receivables) / 2) / i.sales * 364 - ((b.payables + prior.payables) / 2) / i.cogs * 364,
+      days_sales_outstanding_proxy: ((b.receivables + prior.receivables) / 2) / i.sales * 364,
+      days_inventory_outstanding: ((b.inventory + prior.inventory) / 2) / i.cogs * 364,
+      days_payable_outstanding: ((b.payables + prior.payables) / 2) / i.cogs * 364,
+    },
+    roe: { return_on_average_equity: i.net / averageEquity },
+    dupont: { net_margin: i.net / i.sales, asset_turnover: i.sales / averageAssets, equity_multiplier: averageAssets / averageEquity, dupont_roe: i.net / averageEquity },
+    book_roce: { return_on_capital_employed: i.operating / (b.assets - b.currentLiabilities) },
+  };
+  expect(Object.keys(expected)).toHaveLength(28);
+  for (const [conceptId, expectedValues] of Object.entries(expected)) {
+    const apiResponse = await request.post('/api/practice', { data: { concept_id: conceptId, module: 'data', symbol: 'AAPL', source: 'us_stock', inputs: {} } });
+    expect(apiResponse.ok(), `${conceptId}: ${await apiResponse.text()}`).toBe(true);
+    const value = await apiResponse.json();
+    expect(value.filing_case.case_id).toBe('apple_fy2025_q4_annual_gaap_press_release');
+    expect(value.context).toBe('historical_filing_case');
+    expect(value.filing_case.url).toBe(officialUrl);
+    expect(value.filing_case.audited).toBe(false);
+    expect(value.facts.annual_income_statement['2025']).toMatchObject({ page: 1, sales: i.sales, cogs: i.cogs, grossprofit: i.gross, operatingincome: i.operating, netincome: i.net, basic_eps: i.basicEps, diluted_eps: i.dilutedEps, weighted_basic_shares: i.basicShares, weighted_diluted_shares: i.dilutedShares });
+    expect(value.facts.balance_sheets['2025-09-27']).toMatchObject({ page: 2, cash: b.cash, current_securities: b.securities, accounts_receivable: b.receivables, inventory: b.inventory, current_assets: b.currentAssets, accounts_payable: b.payables, commercial_paper: b.commercialPaper, current_term_debt: b.currentDebt, current_liabilities: b.currentLiabilities, noncurrent_term_debt: b.noncurrentDebt, assets: b.assets, liabilities: b.liabilities, equity: b.equity });
+    expect(value.facts.annual_cash_flows['2025']).toMatchObject({ page: 3, cfo: cashFlow.cfo, ppe_capex_cash_outflow: cashFlow.capex, ending_cash: b.cash });
+    expect(Object.keys(value.values).sort()).toEqual(Object.keys(expectedValues).sort());
+    for (const [key, expectedValue] of Object.entries(expectedValues)) expect(value.values[key], `${conceptId}.${key}`).toBeCloseTo(expectedValue, 10);
+    if (conceptId === 'accrual_ratio') expect(value.notes.join(' ')).toContain('接近零只描述该历史期间');
+    if (conceptId === 'book_yoy') expect(value.notes.join(' ')).toContain('不是 EPS、季度收入或当前增长率');
+    if (conceptId === 'book_ccc') expect(value.notes.join(' ')).toContain('负CCC是公式结果，不按零截断');
   }
 });

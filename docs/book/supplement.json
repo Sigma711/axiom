@@ -793,11 +793,11 @@
       "id": "book_sending_receiving",
       "name": "Receiving addresses / Sending addresses",
       "category": "衍生品与链上",
-      "summary": "统计某段时间收到资产或发送资产的唯一地址数。",
-      "meaning": "统计某段时间收到资产或发送资产的唯一地址数。",
-      "pitfalls": "地址重复、交易所归集和新地址策略会扭曲真实参与者数量。",
-      "formula": "发送与接收地址分别去重；交集显示同一窗口两种活动",
-      "example": "发送A、B、A=2个；接收B、C、C=2个；B既发送又接收。",
+      "summary": "统计一个固定 Bitcoin 区块交易首页中发送侧和接收侧的可解码脚本地址集合。",
+      "meaning": "发送侧来自输入前序输出脚本地址；接收侧来自非 OP_RETURN 新输出脚本地址，包含找零。",
+      "pitfalls": "地址重复、交易所归集、找零和新地址策略会扭曲真实参与者数量；地址集合不能识别实体、收付款方或经济转账。",
+      "formula": "发送与接收脚本地址分别去重；交集只显示同一页两侧均出现的脚本标签。",
+      "example": "发送 A、B、A；接收 B、C、C 时，发送与接收集合各有2个标签，B同时出现。",
       "op": "address_sets",
       "defaults": {
         "senders": [

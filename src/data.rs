@@ -505,6 +505,9 @@ pub struct BitcoinTransaction {
     /// Values of every previous output spent by this ordinary transaction.
     /// Esplora supplies these as `vin[].prevout.value`, in satoshis.
     pub spent_prevout_values_sats: Vec<u64>,
+    /// Decoded script addresses, if Esplora exposes one for each spent prevout.
+    /// An address is a script label, not a person or an economic counterparty.
+    pub spent_prevout_addresses: Vec<Option<String>>,
     /// Outputs created by this ordinary transaction. `op_return` outputs are
     /// retained so consumers can disclose their explicit exclusion.
     pub outputs: Vec<BitcoinTransactionOutput>,
@@ -513,6 +516,7 @@ pub struct BitcoinTransaction {
 pub struct BitcoinTransactionOutput {
     pub value_sats: u64,
     pub scriptpubkey_type: String,
+    pub scriptpubkey_address: Option<String>,
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct BitcoinTransactionSample {
@@ -523,6 +527,17 @@ pub struct BitcoinTransactionSample {
     pub returned_count: usize,
     pub excluded_coinbase_count: usize,
     pub transactions: Vec<BitcoinTransaction>,
+}
+fn bitcoin_script_address(value: &serde_json::Value, field: &str) -> Result<Option<String>> {
+    match value.get("scriptpubkey_address") {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(serde_json::Value::String(address))
+            if !address.trim().is_empty() && address.len() <= 128 && address.is_ascii() =>
+        {
+            Ok(Some(address.clone()))
+        }
+        _ => anyhow::bail!("{field}.scriptpubkey_address must be a nonempty ASCII address or null"),
+    }
 }
 fn parse_bitcoin_transactions(
     raw: &serde_json::Value,
@@ -592,6 +607,13 @@ fn parse_bitcoin_transactions(
                 })
             })
             .collect::<Result<Vec<_>>>()?;
+        let spent_prevout_addresses = vin
+            .iter()
+            .enumerate()
+            .map(|(vin_index, input)| {
+                bitcoin_script_address(&input["prevout"], &format!("vin[{vin_index}].prevout"))
+            })
+            .collect::<Result<Vec<_>>>()?;
         let vout = row["vout"]
             .as_array()
             .context("ordinary transaction vout must be a nonempty array")?;
@@ -611,7 +633,8 @@ fn parse_bitcoin_transactions(
                     .filter(|kind| !kind.is_empty())
                     .with_context(|| format!("ordinary transaction vout[{vout_index}] scriptpubkey_type must be a nonempty string"))?
                     .to_owned();
-                Ok(BitcoinTransactionOutput { value_sats, scriptpubkey_type })
+                let scriptpubkey_address = bitcoin_script_address(output, &format!("vout[{vout_index}]"))?;
+                Ok(BitcoinTransactionOutput { value_sats, scriptpubkey_type, scriptpubkey_address })
             })
             .collect::<Result<Vec<_>>>()?;
         let spent_value_sats =
@@ -636,6 +659,7 @@ fn parse_bitcoin_transactions(
             fee_sats,
             size_bytes,
             spent_prevout_values_sats,
+            spent_prevout_addresses,
             outputs,
         });
     }
@@ -2557,6 +2581,22 @@ mod bitcoin_transaction_parser_tests {
             let mut v = rows();
             f(&mut v);
             assert!(parse_bitcoin_transactions(&v, &b).is_err());
+        }
+    }
+
+    #[test]
+    fn transaction_parser_accepts_missing_addresses_and_rejects_malformed_labels() {
+        let b = block();
+        let (_, _, parsed) = parse_bitcoin_transactions(&rows(), &b).unwrap();
+        assert_eq!(parsed[0].spent_prevout_addresses, vec![None]);
+        assert_eq!(parsed[0].outputs[0].scriptpubkey_address, None);
+        for address in [json!(""), json!("地址"), json!("a".repeat(129))] {
+            let mut input = rows();
+            input[1]["vin"][0]["prevout"]["scriptpubkey_address"] = address.clone();
+            assert!(parse_bitcoin_transactions(&input, &b).is_err());
+            let mut output = rows();
+            output[1]["vout"][0]["scriptpubkey_address"] = address;
+            assert!(parse_bitcoin_transactions(&output, &b).is_err());
         }
     }
 }

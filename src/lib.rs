@@ -30,6 +30,7 @@ pub mod broker;
 pub mod config;
 pub mod data;
 pub mod engine;
+pub mod filing_case;
 pub mod indicators;
 pub mod knowledge;
 pub mod metrics;

@@ -894,9 +894,11 @@ fn bitcoin_transaction_summary_uses_integer_total_and_deterministic_median() {
             fee_sats: 0,
             size_bytes: 300,
             spent_prevout_values_sats: vec![8, 2],
+            spent_prevout_addresses: vec![Some("A".into()), Some("B".into())],
             outputs: vec![BitcoinTransactionOutput {
                 value_sats: 9,
                 scriptpubkey_type: "p2pkh".into(),
+                scriptpubkey_address: Some("B".into()),
             }],
         },
         BitcoinTransaction {
@@ -904,14 +906,17 @@ fn bitcoin_transaction_summary_uses_integer_total_and_deterministic_median() {
             fee_sats: 9,
             size_bytes: 100,
             spent_prevout_values_sats: vec![1],
+            spent_prevout_addresses: vec![Some("A".into())],
             outputs: vec![
                 BitcoinTransactionOutput {
                     value_sats: 3,
                     scriptpubkey_type: "op_return".into(),
+                    scriptpubkey_address: None,
                 },
                 BitcoinTransactionOutput {
                     value_sats: 7,
                     scriptpubkey_type: "unknown".into(),
+                    scriptpubkey_address: Some("C".into()),
                 },
             ],
         },
@@ -920,9 +925,11 @@ fn bitcoin_transaction_summary_uses_integer_total_and_deterministic_median() {
             fee_sats: 3,
             size_bytes: 200,
             spent_prevout_values_sats: vec![],
+            spent_prevout_addresses: vec![],
             outputs: vec![BitcoinTransactionOutput {
                 value_sats: 5,
                 scriptpubkey_type: "v1_p2tr".into(),
+                scriptpubkey_address: Some("D".into()),
             }],
         },
     ];
@@ -944,18 +951,22 @@ fn bitcoin_utxo_summary_is_explicitly_scoped_and_never_fabricates_global_totals(
         fee_sats: 0,
         size_bytes: 100,
         spent_prevout_values_sats: vec![4, 8],
+        spent_prevout_addresses: vec![Some("A".into()), Some("B".into())],
         outputs: vec![
             BitcoinTransactionOutput {
                 value_sats: 5,
                 scriptpubkey_type: "v0_p2wpkh".into(),
+                scriptpubkey_address: Some("C".into()),
             },
             BitcoinTransactionOutput {
                 value_sats: 0,
                 scriptpubkey_type: "op_return".into(),
+                scriptpubkey_address: None,
             },
             BitcoinTransactionOutput {
                 value_sats: 9,
                 scriptpubkey_type: "unknown".into(),
+                scriptpubkey_address: None,
             },
         ],
     }];
@@ -977,6 +988,70 @@ fn bitcoin_utxo_summary_is_explicitly_scoped_and_never_fabricates_global_totals(
     let empty = book::market_bitcoin_utxo_summary("book_utxo_value_stats", &[]).unwrap();
     assert_eq!(empty["status"], "undefined");
     assert!(empty["values"]["created_mean_value_sats"].is_null());
+}
+
+#[test]
+fn bitcoin_address_summary_counts_script_labels_and_keeps_missing_slots_separate() {
+    use axiom::data::{BitcoinTransaction, BitcoinTransactionOutput};
+    let txs = vec![
+        BitcoinTransaction {
+            txid: "one".into(),
+            fee_sats: 0,
+            size_bytes: 1,
+            spent_prevout_values_sats: vec![1, 2, 3],
+            spent_prevout_addresses: vec![Some("A".into()), Some("B".into()), Some("A".into())],
+            outputs: vec![
+                BitcoinTransactionOutput {
+                    value_sats: 1,
+                    scriptpubkey_type: "p2pkh".into(),
+                    scriptpubkey_address: Some("B".into()),
+                },
+                BitcoinTransactionOutput {
+                    value_sats: 1,
+                    scriptpubkey_type: "p2pkh".into(),
+                    scriptpubkey_address: Some("C".into()),
+                },
+                BitcoinTransactionOutput {
+                    value_sats: 0,
+                    scriptpubkey_type: "op_return".into(),
+                    scriptpubkey_address: Some("ignored".into()),
+                },
+            ],
+        },
+        BitcoinTransaction {
+            txid: "two".into(),
+            fee_sats: 0,
+            size_bytes: 1,
+            spent_prevout_values_sats: vec![1],
+            spent_prevout_addresses: vec![None],
+            outputs: vec![BitcoinTransactionOutput {
+                value_sats: 1,
+                scriptpubkey_type: "unknown".into(),
+                scriptpubkey_address: None,
+            }],
+        },
+    ];
+    let out = book::market_bitcoin_address_summary("book_sending_receiving", &txs).unwrap();
+    assert_eq!(out["status"], "computed");
+    assert_eq!(out["values"]["unique_sending_script_address_count"], 2);
+    assert_eq!(out["values"]["unique_receiving_script_address_count"], 2);
+    assert_eq!(out["values"]["shared_script_address_count"], 1);
+    assert_eq!(out["values"]["union_script_address_count"], 3);
+    assert_eq!(out["values"]["missing_input_address_count"], 1);
+    assert_eq!(out["values"]["missing_output_address_count"], 1);
+    assert_eq!(out["values"]["excluded_op_return_output_count"], 1);
+    assert_eq!(
+        out["units"]["missing_output_address_count"],
+        "non_op_return_outputs"
+    );
+    assert!(book::market_bitcoin_address_summary("bad", &txs).is_err());
+    assert!(
+        book::market_bitcoin_address_summary("book_sending_receiving", &[]).unwrap()["reason"]
+            .is_string()
+    );
+    let mut mismatched = txs;
+    mismatched[0].spent_prevout_addresses.pop();
+    assert!(book::market_bitcoin_address_summary("book_sending_receiving", &mismatched).is_err());
 }
 
 #[test]

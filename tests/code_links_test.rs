@@ -117,6 +117,7 @@ fn every_published_concept_resolves_to_an_actual_implementation_branch() {
                         | "book_utxo_value_stats"
                         | "book_utxo_counts"
                         | "book_utxo_totals"
+                        | "book_sending_receiving"
                 ) {
                     assert_eq!(location.kind, "function");
                     assert!(matches!(
@@ -124,6 +125,7 @@ fn every_published_concept_resolves_to_an_actual_implementation_branch() {
                         "src/book.rs::market_bitcoin_block_summary"
                             | "src/book.rs::market_bitcoin_transaction_summary"
                             | "src/book.rs::market_bitcoin_utxo_summary"
+                            | "src/book.rs::market_bitcoin_address_summary"
                     ));
                 } else {
                     assert!(

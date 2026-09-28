@@ -1,0 +1,31 @@
+{
+  "case_id": "apple_fy2025_q4_annual_gaap_press_release",
+  "issuer": { "name": "Apple Inc.", "ticker": "AAPL", "scope": "Apple FY2025 and FY2024 annual comparative case only" },
+  "source": {
+    "kind": "issuer_official_earnings_release_pdf",
+    "audited": false,
+    "status": "Unaudited condensed consolidated financial statements in an earnings announcement; not an annual report",
+    "published": "2025-10-30",
+    "url": "https://www.apple.com/newsroom/pdfs/fy2025-q4/FY25_Q4_Consolidated_Financial_Statements.pdf",
+    "sha256": "43e7f0730b3cce0fc37301a2f43c29712bbde6ab299d97c6df345fd0c754508a",
+    "bytes": 4919649
+  },
+  "units": { "financial_statement": "USD_millions", "shares": "thousands", "eps": "USD_per_share" },
+  "annual_income_statement": {
+    "2025": { "period_start": "2024-09-29", "period_end": "2025-09-27", "page": 1, "sales": 416161, "cogs": 220960, "grossprofit": 195201, "operatingincome": 133050, "netincome": 112010, "basic_eps": 7.49, "diluted_eps": 7.46, "weighted_basic_shares": 14948500, "weighted_diluted_shares": 15004697 },
+    "2024": { "period_start": "2023-10-01", "period_end": "2024-09-28", "page": 1, "sales": 391035, "cogs": 210352, "grossprofit": 180683, "operatingincome": 123216, "netincome": 93736, "basic_eps": 6.11, "diluted_eps": 6.08, "weighted_basic_shares": 15343783, "weighted_diluted_shares": 15408095 }
+  },
+  "balance_sheets": {
+    "2025-09-27": { "page": 2, "cash": 35934, "current_securities": 18763, "accounts_receivable": 39777, "vendor_nontrade_receivables": 33180, "inventory": 5718, "current_assets": 147957, "accounts_payable": 69860, "commercial_paper": 7979, "current_term_debt": 12350, "current_liabilities": 165631, "noncurrent_term_debt": 78328, "assets": 359241, "liabilities": 285508, "equity": 73733 },
+    "2024-09-28": { "page": 2, "cash": 29943, "current_securities": 35228, "accounts_receivable": 33410, "vendor_nontrade_receivables": 32833, "inventory": 7286, "current_assets": 152987, "accounts_payable": 68960, "commercial_paper": 9967, "current_term_debt": 10912, "current_liabilities": 176392, "noncurrent_term_debt": 85750, "assets": 364980, "liabilities": 308030, "equity": 56950 }
+  },
+  "annual_cash_flows": {
+    "2025": { "period_start": "2024-09-29", "period_end": "2025-09-27", "page": 3, "cfo": 111482, "ppe_capex_cash_outflow": 12715, "depreciation_and_amortization": 11698, "cash_dividends_outflow": 15421, "share_repurchases_outflow": 90711, "ending_cash": 35934 },
+    "2024": { "period_start": "2023-10-01", "period_end": "2024-09-28", "page": 3, "cfo": 118254, "ppe_capex_cash_outflow": 9447, "depreciation_and_amortization": 11445, "cash_dividends_outflow": 15234, "share_repurchases_outflow": 94949, "ending_cash": 29943 }
+  },
+  "calculation_boundaries": {
+    "eps": "Reported EPS is authoritative. Net income in millions divided by weighted shares in thousands is only an approximate cross-check because both inputs are rounded in the release.",
+    "cash": "Cash-flow ending cash agrees to the balance-sheet cash and cash equivalents in each reported year.",
+    "capex": "PPE capex is the absolute value of the reported cash-flow line Payments for acquisition of property, plant and equipment."
+  }
+}

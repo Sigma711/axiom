@@ -39,6 +39,7 @@ pub fn all_entries() -> Vec<KnowledgeEntry> {
     entries.extend(crate::supplement::entries());
     entries.extend(crate::workflows::entries());
     for entry in &mut entries {
+        crate::filing_case::configure_knowledge(entry);
         if entry.summary.trim().is_empty() {
             entry.summary = entry
                 .meaning

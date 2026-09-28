@@ -578,6 +578,7 @@ async fn static_assets_have_correct_mime_and_missing_assets_fail() {
     let cases = [
         ("style.css", "text/css; charset=utf-8"),
         ("app.js", "application/javascript; charset=utf-8"),
+        ("worker.mjs", "application/javascript; charset=utf-8"),
         ("page.html", "text/html; charset=utf-8"),
         ("data.json", "application/json"),
         ("figure.svg", "image/svg+xml"),
@@ -641,6 +642,12 @@ async fn symbol_directory_searches_all_three_real_markets_and_pages_binance() {
         assert_eq!(body["items"][0]["symbol"], expected);
         assert_eq!(body["symbols"][0], expected);
         assert_eq!(body["count"], body["items"].as_array().unwrap().len());
+        if source == "binance" {
+            assert!(
+                body["universe_count"].as_u64().unwrap() > body["total"].as_u64().unwrap(),
+                "a filtered query must retain the complete catalog size: {body}"
+            );
+        }
     }
 
     let (status, first) = request(

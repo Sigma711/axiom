@@ -241,6 +241,7 @@ fn registry() -> &'static Registry {
             (Owner::Workflows, crate::workflows::catalog()),
         ] {
             for mut item in items {
+                crate::filing_case::configure_concept(&mut item);
                 for input in &mut item.inputs {
                     if !input.label.chars().any(|c| ('一'..='鿿').contains(&c)) {
                         if let Some(label) = labels.get(&input.key) {

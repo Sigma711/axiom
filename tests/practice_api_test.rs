@@ -83,6 +83,7 @@ async fn data_practice_accepts_only_concepts_with_a_data_plan() {
                     | "book_utxo_value_stats"
                     | "book_utxo_counts"
                     | "book_utxo_totals"
+                    | "book_sending_receiving"
             )
     }) {
         let mut first: Option<Value> = None;
@@ -825,14 +826,24 @@ async fn book_financial_practices_require_equity_evidence_and_reject_crypto() {
             .iter()
             .find(|concept| concept["id"] == id)
             .unwrap();
+        let filing_case = id == "book_current_ratio";
         assert_eq!(
             concept["plan"]["markets"],
-            json!(["cn_equity", "us_equity"]),
+            if filing_case {
+                json!(["us_equity"])
+            } else {
+                json!(["cn_equity", "us_equity"])
+            },
             "{id}"
         );
         assert_eq!(concept["plan"]["modules"], json!(["data"]), "{id}");
         assert_eq!(
-            concept["plan"]["source_policy"], "evidence_required",
+            concept["plan"]["source_policy"],
+            if filing_case {
+                "real_required"
+            } else {
+                "evidence_required"
+            },
             "{id}"
         );
         let (status, _) = request(
@@ -1285,7 +1296,7 @@ async fn result_practice_rejects_invalid_evidence_without_falling_back_to_teachi
     }
     let (status, _) = request(&app, "/api/practice", with_result("sharpe", json!([]))).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    for (source, symbol) in [("a_share", "600519"), ("us_stock", "AAPL")] {
+    for (source, symbol) in [("a_share", "600519"), ("us_stock", "MSFT")] {
         let (status, body) = request(
             &app,
             "/api/practice",
@@ -1294,8 +1305,7 @@ async fn result_practice_rejects_invalid_evidence_without_falling_back_to_teachi
             }),
         )
         .await;
-        assert_eq!(status, StatusCode::OK, "{body}");
-        assert_eq!(body["context"], "editable_teaching_inputs");
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
     }
 }
 
@@ -1990,8 +2000,8 @@ async fn mock_pinned_transactions(
     assert_eq!(hash, format!("{:064x}", 900_003));
     Json(json!([
         {"txid":format!("{:064x}",1),"fee":0,"size":150,"vin":[{"is_coinbase":true}],"status":{"confirmed":true,"block_hash":format!("{:064x}",900_003),"block_height":900_003}},
-        {"txid":format!("{:064x}",2),"fee":5,"size":101,"vin":[{"prevout":{"value":10,"scriptpubkey_type":"v0_p2wpkh"}}],"vout":[{"value":5,"scriptpubkey_type":"v0_p2wpkh"},{"value":0,"scriptpubkey_type":"op_return"}],"status":{"confirmed":true,"block_hash":format!("{:064x}",900_003),"block_height":900_003}},
-        {"txid":format!("{:064x}",3),"fee":9,"size":203,"vin":[{"prevout":{"value":8,"scriptpubkey_type":"p2pkh"}},{"prevout":{"value":9,"scriptpubkey_type":"p2pkh"}}],"vout":[{"value":8,"scriptpubkey_type":"unknown"}],"status":{"confirmed":true,"block_hash":format!("{:064x}",900_003),"block_height":900_003}}
+        {"txid":format!("{:064x}",2),"fee":5,"size":101,"vin":[{"prevout":{"value":10,"scriptpubkey_type":"v0_p2wpkh","scriptpubkey_address":"A"}}],"vout":[{"value":5,"scriptpubkey_type":"v0_p2wpkh","scriptpubkey_address":"B"},{"value":0,"scriptpubkey_type":"op_return","scriptpubkey_address":"ignored"}],"status":{"confirmed":true,"block_hash":format!("{:064x}",900_003),"block_height":900_003}},
+        {"txid":format!("{:064x}",3),"fee":9,"size":203,"vin":[{"prevout":{"value":8,"scriptpubkey_type":"p2pkh","scriptpubkey_address":"B"}},{"prevout":{"value":9,"scriptpubkey_type":"p2pkh"}}],"vout":[{"value":8,"scriptpubkey_type":"unknown"}],"status":{"confirmed":true,"block_hash":format!("{:064x}",900_003),"block_height":900_003}}
     ]))
 }
 
@@ -2048,6 +2058,88 @@ async fn bitcoin_utxo_practices_use_only_pinned_first_page_and_leave_global_tota
     }
     let (status, _) = request(&app, "/api/practice", json!({"concept_id":"book_utxo_counts","module":"data","source":"binance","symbol":"BTCUSDT","limit":24,"inputs":{}})).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+    server.abort();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn bitcoin_address_practice_uses_decoded_script_labels_and_reports_missing_slots() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            axum::Router::new()
+                .route("/api/blocks", get(mock_transaction_blocks))
+                .route("/api/block/:hash/txs/0", get(mock_pinned_transactions)),
+        )
+        .await
+        .unwrap()
+    });
+    let dir = PathBuf::from(format!("target/practice-address-{}", uuid::Uuid::new_v4()));
+    let mut state = AppState::new(default_config(), dir.clone());
+    let mut feed = HttpFeed::new(&dir);
+    feed.bitcoin_esplora_url = format!("http://127.0.0.1:{port}");
+    feed.bitcoin_mempool_url = format!("http://127.0.0.1:{port}");
+    state.feed = Arc::new(feed);
+    let app = api::router(Arc::new(state));
+    let (status, body) = request(&app, "/api/practice", json!({"concept_id":"book_sending_receiving","module":"data","source":"binance","symbol":"BTCUSDT","limit":25,"inputs":{}})).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body["provenance"],
+        "server_fetched_bitcoin_transaction_first_page"
+    );
+    assert_eq!(body["address_sample"]["block_height"], 900003);
+    assert_eq!(
+        body["address_sample"]["address_semantics"]["receiving_includes_change"],
+        true
+    );
+    assert_eq!(body["values"]["unique_sending_script_address_count"], 2);
+    assert_eq!(body["values"]["unique_receiving_script_address_count"], 1);
+    assert_eq!(body["values"]["shared_script_address_count"], 1);
+    assert_eq!(body["values"]["missing_input_address_count"], 1);
+    assert_eq!(body["values"]["missing_output_address_count"], 1);
+    assert_eq!(body["values"]["excluded_op_return_output_count"], 1);
+    assert_eq!(
+        body["address_transactions"][0]["input_addresses"],
+        json!(["A"])
+    );
+    assert_eq!(
+        body["address_transactions"][0]["output_addresses"],
+        json!(["B"])
+    );
+    assert_eq!(
+        body["address_transactions"][0]["excluded_op_return_output_count"],
+        1
+    );
+    assert_eq!(
+        body["address_transactions"][1]["missing_input_address_slots"],
+        1
+    );
+    assert_eq!(
+        body["address_transactions"][1]["missing_output_address_slots"],
+        1
+    );
+    let valid = json!({"concept_id":"book_sending_receiving","module":"data","source":"binance","symbol":"BTCUSDT","limit":25,"inputs":{}});
+    for (field, invalid) in [
+        ("limit", json!(24)),
+        ("limit", json!(26)),
+        ("source", json!("synthetic")),
+        ("source", json!("us_stock")),
+        ("symbol", json!("ETHUSDT")),
+        ("module", json!("paper")),
+        ("bars", json!([])),
+        ("inputs", json!({"receiving_addresses":999})),
+    ] {
+        let mut invalid_request = valid.clone();
+        invalid_request[field] = invalid;
+        let (bad_status, body) = request(&app, "/api/practice", invalid_request.clone()).await;
+        assert_eq!(
+            bad_status,
+            StatusCode::BAD_REQUEST,
+            "accepted {invalid_request}: {body}"
+        );
+    }
     server.abort();
     std::fs::remove_dir_all(dir).unwrap();
 }

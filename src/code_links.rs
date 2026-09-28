@@ -109,7 +109,9 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
     ROUTES.get_or_init(|| {
         let mut out = BTreeMap::new();
         for c in crate::practice::base_catalog() {
-            let candidates = if c.id == "volume_profile" {
+            let candidates = if crate::filing_case::is_supported(&c.id) {
+                vec![format!("src/filing_case.rs::metric::{}", c.id)]
+            } else if c.id == "volume_profile" {
                 vec!["src/book.rs::market_recent_trade_summary".to_string()]
             } else if c.id == "bid_ask_spread" {
                 vec!["src/book.rs::market_binance_depth_summary".to_string()]
@@ -153,19 +155,25 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
             }
         }
         for c in crate::book::catalog() {
-            let references = match c.id.as_str() {
-                "book_order_imbalance" => {
-                    vec!["src/book.rs::market_binance_depth_summary".to_string()]
+            let references = if crate::filing_case::is_supported(&c.id) {
+                vec![format!("src/filing_case.rs::metric::{}", c.id)]
+            } else {
+                match c.id.as_str() {
+                    "book_order_imbalance" => {
+                        vec!["src/book.rs::market_binance_depth_summary".to_string()]
+                    }
+                    "book_nonstandard_bar" => {
+                        vec!["src/book.rs::nonstandard_bar_ohlc4".to_string()]
+                    }
+                    "book_period" => vec!["src/book.rs::market_period_summary".to_string()],
+                    "book_trade_volume" => {
+                        vec!["src/book.rs::market_trade_volume_summary".to_string()]
+                    }
+                    "book_order_flow" => {
+                        vec!["src/book.rs::market_binance_aggressor_summary".to_string()]
+                    }
+                    _ => vec![format!("src/book.rs::evaluate::{}", c.id)],
                 }
-                "book_nonstandard_bar" => vec!["src/book.rs::nonstandard_bar_ohlc4".to_string()],
-                "book_period" => vec!["src/book.rs::market_period_summary".to_string()],
-                "book_trade_volume" => {
-                    vec!["src/book.rs::market_trade_volume_summary".to_string()]
-                }
-                "book_order_flow" => {
-                    vec!["src/book.rs::market_binance_aggressor_summary".to_string()]
-                }
-                _ => vec![format!("src/book.rs::evaluate::{}", c.id)],
             };
             if let Some(r) = first_existing(references) {
                 out.insert(c.id, r);
@@ -189,6 +197,7 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
                         | "book_utxo_value_stats"
                         | "book_utxo_counts"
                         | "book_utxo_totals"
+                        | "book_sending_receiving"
                 ) {
                     vec![
                         if matches!(id, "book_transaction_fees" | "book_transaction_bytes") {
@@ -198,6 +207,8 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
                             "book_utxo_value_stats" | "book_utxo_counts" | "book_utxo_totals"
                         ) {
                             "src/book.rs::market_bitcoin_utxo_summary".to_string()
+                        } else if id == "book_sending_receiving" {
+                            "src/book.rs::market_bitcoin_address_summary".to_string()
                         } else {
                             "src/book.rs::market_bitcoin_block_summary".to_string()
                         },

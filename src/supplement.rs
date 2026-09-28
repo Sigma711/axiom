@@ -24,6 +24,7 @@ fn uses_bitcoin_block_snapshot(id: &str) -> bool {
             | "book_utxo_value_stats"
             | "book_utxo_counts"
             | "book_utxo_totals"
+            | "book_sending_receiving"
     )
 }
 
@@ -57,9 +58,11 @@ pub fn entries() -> Vec<KnowledgeEntry> {
             code_ref: "src/supplement.rs::evaluate".into(),
             implementation: "src/supplement.rs::evaluate".into(),
             diagram: None,
-            signals:
-                "调整已标注的教学输入，观察数值变化；用于来源核对和风险分析，不自动生成买卖建议。"
-                    .into(),
+            signals: if uses_bitcoin_block_snapshot(&text(d, "id")) {
+                "核对服务器取得的 Bitcoin 主网样本、取样范围和统计口径；脚本地址不等于人物或付款关系，不自动生成买卖建议。".into()
+            } else {
+                "调整已标注的教学输入，观察数值变化；用于来源核对和风险分析，不自动生成买卖建议。".into()
+            },
         })
         .collect()
 }
@@ -89,7 +92,9 @@ pub fn catalog() -> Vec<PracticeConcept> {
                 default: v.clone(),
             })
             .collect(),
-            notes: if matches!(d["id"].as_str().unwrap_or_default(), "book_utxo_value_stats" | "book_utxo_counts" | "book_utxo_totals") {
+            notes: if d["id"].as_str() == Some("book_sending_receiving") {
+                format!("原书 PDF 第{}页；服务器固定一个已确认 Bitcoin 主网区块后，只读取 Esplora 交易首页并排除 coinbase。发送集合来自 vin.prevout.scriptpubkey_address；接收集合来自非 OP_RETURN vout.scriptpubkey_address，包含找零。集合是脚本标签，不能推断人、实体、收付款方或经济转账。{}", d["pdf_page"], text(d, "pitfalls"))
+            } else if matches!(d["id"].as_str().unwrap_or_default(), "book_utxo_value_stats" | "book_utxo_counts" | "book_utxo_totals") {
                 format!("原书 PDF 第{}页；服务器固定一个已确认 Bitcoin 主网区块后，只读取 Esplora 交易首页并排除 coinbase。只报告该页创建/花费输出观察值；全网 UTXO 总量不从样本推导。{}", d["pdf_page"], text(d, "pitfalls"))
             } else if uses_bitcoin_block_snapshot(d["id"].as_str().unwrap_or_default()) {
                 format!("原书 PDF 第{}页；服务器直接取得未缓存的10个连续Bitcoin主网区块及其 Esplora 声明的交易计数，不接受客户端输入。{}", d["pdf_page"], text(d, "pitfalls"))
@@ -355,15 +360,6 @@ pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String>
                 unit,
             );
         }
-        "blocks" => {
-            let start = nonnegative(&v, "start_height")?;
-            let end = nonnegative(&v, "end_height")?;
-            if end < start || start.fract() != 0.0 || end.fract() != 0.0 {
-                return Err("高度必须为递增非负整数".into());
-            }
-            o.number("block_height", end, unit);
-            o.number("blocks_mined", end - start, unit);
-        }
         "hashrate" => {
             o.number(
                 "estimated_hashrate",
@@ -391,18 +387,6 @@ pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String>
                 unit,
             );
         }
-        "utxo_totals" => {
-            o.number(
-                "created_value",
-                samples(&v, "created_values")?.iter().sum(),
-                unit,
-            );
-            o.number(
-                "spent_value",
-                samples(&v, "spent_values")?.iter().sum(),
-                unit,
-            );
-        }
         "rate" => {
             o.number("count", nonnegative(&v, "count")?, "count");
             o.number(
@@ -410,13 +394,6 @@ pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String>
                 nonnegative(&v, "count")? / positive(&v, "elapsed_seconds")?,
                 unit,
             );
-        }
-        "address_sets" => {
-            let s = addresses(&v, "senders")?;
-            let r = addresses(&v, "receivers")?;
-            o.number("sending_addresses", s.len() as f64, unit);
-            o.number("receiving_addresses", r.len() as f64, unit);
-            o.number("both_directions", s.intersection(&r).count() as f64, unit);
         }
         "deposits" => {
             let a = samples(&v, "new_values")?;

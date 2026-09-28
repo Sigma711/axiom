@@ -48,6 +48,7 @@ ssh root@sigma711.top "chmod 755 '$release/axiom' && ln -sfn '$release' /srv/axi
 
 python3 - <<'PYVERIFY'
 import json
+from pathlib import Path
 import time
 import urllib.parse
 import urllib.request
@@ -62,6 +63,25 @@ def read_json(path, params):
 with urllib.request.urlopen(base + "/", timeout=20) as response:
     html = response.read().decode()
     assert response.status == 200 and "/axiom/assets/" in html
+
+with urllib.request.urlopen(base + "/api/book/pdf", timeout=30) as response:
+    assert response.status == 200 and response.read(5) == b"%PDF-"
+workers = list(Path("target/deploy-web/assets").glob("pdf.worker.min-*.mjs"))
+assert len(workers) == 1
+with urllib.request.urlopen(base + "/assets/" + workers[0].name, timeout=30) as response:
+    assert response.status == 200 and "javascript" in response.headers["Content-Type"]
+print("book PDF and module worker", "ok", flush=True)
+
+filing_request = urllib.request.Request(base + "/api/practice", data=json.dumps({
+    "concept_id": "book_fcf", "module": "data", "source": "us_stock", "symbol": "AAPL", "inputs": {}
+}).encode(), headers={"Content-Type": "application/json"}, method="POST")
+with urllib.request.urlopen(filing_request, timeout=90) as response:
+    filing = json.load(response)
+assert filing["provenance"] == "verified_issuer_filing_case"
+assert filing["values"]["free_cash_flow"] == 98767
+assert filing["filing_case"]["sha256"] == "43e7f0730b3cce0fc37301a2f43c29712bbde6ab299d97c6df345fd0c754508a"
+assert filing["filing_case"]["verification"]["matched_bytes"] == 4919649
+print("Apple official historical filing", "verified", flush=True)
 
 markets = (("binance", "BTCUSDT", 200), ("a_share", "600519", 1000), ("us_stock", "AAPL", 1000))
 for source, symbol, minimum in markets:

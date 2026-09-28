@@ -35,18 +35,26 @@ export function SymbolPicker({ source, value, onChange, label = '交易对' }: {
     }
     // Opening a list and changing a page are intent actions: do not add an
     // artificial debounce. Only a typed query is delayed to avoid bursts.
+    let cancelled = false;
+    let refreshTimer: number | undefined;
     const timer = window.setTimeout(() => {
       api.listSymbols(source, query, page * 50, 50).then(data => {
-        if (id !== request.current) return;
+        if (cancelled || id !== request.current) return;
         catalogPageCache.set(key, data);
         setResult(data); setError('');
-        if (!data.complete && !query.trim()) window.setTimeout(() => setRefreshTick(tick => tick + 1), 750);
+        if (!data.complete) refreshTimer = window.setTimeout(() => {
+          if (!cancelled && id === request.current) setRefreshTick(tick => tick + 1);
+        }, 750);
       }).catch(error => {
-        if (id !== request.current) return;
+        if (cancelled || id !== request.current) return;
         setError(String(error)); setResult(null);
       });
     }, query.trim() ? 180 : 0);
-    return () => window.clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+    };
   }, [open, source, query, page, refreshTick]);
 
   useEffect(() => {

@@ -13,6 +13,7 @@ pub struct AppState {
     pub data_cache_dir: PathBuf,
     pub paper_state: Arc<RwLock<PaperState>>,
     pub feed: Arc<HttpFeed>,
+    pub filing_source: crate::filing_case::FilingSourceConfig,
 }
 
 impl AppState {
@@ -37,6 +38,13 @@ impl AppState {
             data_cache_dir,
             paper_state: Arc::new(RwLock::new(paper_state)),
             feed,
+            filing_source: crate::filing_case::FilingSourceConfig::default(),
         }
+    }
+
+    /// Replaces only the document transport identity; useful for a hermetic HTTP seam test.
+    pub fn with_filing_source(mut self, source: crate::filing_case::FilingSourceConfig) -> Self {
+        self.filing_source = source;
+        self
     }
 }

@@ -65,6 +65,40 @@ fn address_deduplication_and_net_issuance_are_not_transaction_counts() {
 }
 
 #[test]
+fn real_bitcoin_practices_cannot_fall_back_to_handwritten_teaching_values() {
+    for id in [
+        "book_block_height",
+        "book_utxo_counts",
+        "book_utxo_totals",
+        "book_sending_receiving",
+    ] {
+        let error = supplement::evaluate(id, &[], &json!({"senders":["invented"],"receivers":["invented"],"start_height":0,"end_height":100})).unwrap_err();
+        assert!(
+            error.contains("server-fetched Bitcoin mainnet"),
+            "{id}: {error}"
+        );
+    }
+    assert!(supplement::evaluate(
+        "book_difficulty_hashrate",
+        &[],
+        &json!({"bitcoin_difficulty":0})
+    )
+    .is_err());
+    assert!(supplement::evaluate(
+        "book_active_supply",
+        &[],
+        &json!({"active_tokens":2000,"total_supply":1000})
+    )
+    .is_err());
+    assert!(supplement::evaluate(
+        "book_large_holdings",
+        &[],
+        &json!({"balances":[2000],"total_supply":1000})
+    )
+    .is_err());
+}
+
+#[test]
 fn every_supplement_has_working_inputs_and_units() {
     for concept in supplement::catalog() {
         if matches!(
@@ -78,6 +112,7 @@ fn every_supplement_has_working_inputs_and_units() {
                 | "book_utxo_value_stats"
                 | "book_utxo_counts"
                 | "book_utxo_totals"
+                | "book_sending_receiving"
         ) {
             assert_eq!(concept.input_kind, "market_bars");
             assert!(concept.inputs.is_empty());
@@ -96,6 +131,18 @@ fn every_supplement_has_working_inputs_and_units() {
             assert!(out["units"][key].is_string());
         }
     }
+}
+
+#[test]
+fn sending_receiving_is_a_server_fetched_bitcoin_practice_not_teaching_input() {
+    let concept = supplement::catalog()
+        .into_iter()
+        .find(|concept| concept.id == "book_sending_receiving")
+        .unwrap();
+    assert_eq!(concept.input_kind, "market_bars");
+    assert!(concept.inputs.is_empty());
+    assert!(concept.notes.contains("非 OP_RETURN"));
+    assert!(concept.notes.contains("找零"));
 }
 
 #[test]

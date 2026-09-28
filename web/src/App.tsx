@@ -11,7 +11,10 @@ import { BlockSnapshotVisual } from './BlockSnapshotVisual';
 import { BlockTimingVisual } from './BlockTimingVisual';
 import { TransactionSampleVisual } from './TransactionSampleVisual';
 import { UtxoSampleVisual } from './UtxoSampleVisual';
+import { AddressSetVisual } from './AddressSetVisual';
+import { FinancialCaseVisual } from './FinancialCaseVisual';
 import { SymbolPicker } from './SymbolPicker';
+import { PdfBookReader } from './PdfBookReader';
 import { indicatorPanel, validSeries, type IndicatorPanel } from './chart';
 const MARKET_SOURCE_OPTIONS = [
   { v: 'binance', l: '加密货币 · Binance' },
@@ -35,7 +38,7 @@ const RECENT_TRADE_PRACTICES = new Set(['book_net_volume', 'volume_profile']);
 const BLOCK_TIMING_PRACTICES = new Set(['book_block_interval', 'book_transaction_rate']);
 const BLOCK_PRACTICES = new Set(['book_block_height', 'book_block_size', ...BLOCK_TIMING_PRACTICES]);
 const UTXO_PRACTICES = new Set(['book_utxo_value_stats', 'book_utxo_counts', 'book_utxo_totals']);
-const TRANSACTION_PRACTICES = new Set(['book_transaction_fees', 'book_transaction_bytes', ...UTXO_PRACTICES]);
+const TRANSACTION_PRACTICES = new Set(['book_transaction_fees', 'book_transaction_bytes', 'book_sending_receiving', ...UTXO_PRACTICES]);
 const SERVER_FETCHED_PRACTICES = new Set(['book_pitfall_repainting', 'book_pitfall_timeframe', 'book_pitfall_formula_variant', 'book_pitfall_open_candle', 'book_trade_volume', 'book_52w_range', ...FLOW_PRACTICES, ...DEPTH_PRACTICES, ...PAIR_PRACTICES, ...RECENT_TRADE_PRACTICES, ...BLOCK_PRACTICES, ...TRANSACTION_PRACTICES]);
 
 const CHINESE_FIELDS: Record<string, string> = {
@@ -334,17 +337,6 @@ const LEARN_SUBS: { id: LearnSub; label: string }[] = [
 ];
 
 function LearnCenter({ sub, onSubChange, onPractice }: { sub: LearnSub; onSubChange: (sub: LearnSub) => void; onPractice: (conceptId: string, module: PracticeModule, source: SourceType) => void }) {
-function BookReader() {
-  const toc = [['封面与目录', 1], ['指标基础与均线', 6], ['趋势与动量指标', 18], ['摆动与超买超卖', 31], ['成交量与量价关系', 43], ['K 线形态', 55], ['图表与实战方法', 67], ['附录与索引', 78]] as const;
-  const [tocOpen, setTocOpen] = useState(true), [page, setPage] = useState(1);
-  return <div className={'ax-book-reader' + (tocOpen ? '' : ' toc-collapsed')}><aside className={'ax-book-toc' + (tocOpen ? '' : ' collapsed')}>
-    <button className="ax-book-toc-toggle" type="button" aria-expanded={tocOpen} aria-label={tocOpen ? '收起原书目录' : '展开原书目录'} title={tocOpen ? '收起目录' : '展开目录'} onClick={() => setTocOpen(open => !open)}><span aria-hidden="true">{tocOpen ? '‹' : '›'}</span></button>
-    {tocOpen && <nav aria-label="原书目录"><h3>原书目录</h3>{toc.map(([label, target]) => <button key={target} type="button" className={page === target ? 'active' : ''} onClick={() => setPage(target)}>{label}<small>第 {target} 页</small></button>)}</nav>}
-  </aside><section className="ax-book-page" aria-label="股票交易软件专业指标全解阅读器">
-    <p className="ax-practice-note">仅提供本书阅读。点击目录定位页码；阅读区会按宽度适配，并可在 PDF 内上下滚动。</p>
-    <iframe key={page} title="股票交易软件专业指标全解" src={appPath(`/api/book/pdf#page=${page}&view=FitH`)} />
-  </section></div>;
-}
 
   return (
     <section className="ax-section">
@@ -359,7 +351,7 @@ function BookReader() {
       </nav>
       {sub === 'knowledge' && <KnowledgeView onPractice={onPractice} />}
       {sub === 'concepts' && <ConceptsView />}
-      {sub === 'book' && <BookReader />}
+      {sub === 'book' && <PdfBookReader />}
       {sub === 'build' && <BuildView />}
       {sub === 'path' && <PathView />}
     </section>
@@ -400,7 +392,7 @@ function KnowledgeView({ onPractice }: { onPractice: (conceptId: string, module:
   }, { real: 0, result: 0, pending: 0 });
   return (
     <div>
-      {practiceById.size > 0 && <p className="ax-knowledge-evidence">实践数据要求：{policies.real} 个需要真实行情或链上数据，{policies.result} 个需要本页真实业绩结果；{policies.pending} 个目前仅提供明确标注的教学计算，独立证据尚未接入。这里统计的是数据要求，不是已完成实证的数量。</p>}
+      {practiceById.size > 0 && <p className="ax-knowledge-evidence">实践数据要求：{policies.real} 个需要真实行情、链上或财务数据，{policies.result} 个需要本页真实业绩结果；{policies.pending} 个目前仅提供明确标注的教学计算，独立证据尚未接入。这里统计的是数据要求，不是已完成实证的数量。</p>}
       <div className="ax-search-bar">
         <input
           type="text"
@@ -437,7 +429,7 @@ function KbCard({ e, plan, onPractice, open, onOpenChange }: { e: KnowledgeEntry
   const pendingEvidence = plan?.source_policy === 'evidence_required';
   return (
     <div className="ax-kb-card">
-      <div className="ax-kb-header"><h4>{e.name}</h4>{plan && <span className={pendingEvidence ? 'ax-evidence-badge pending' : 'ax-evidence-badge'}>{pendingEvidence ? '待接入独立证据' : plan.source_policy === 'result_required' ? '需真实业绩结果' : '需真实市场数据'}</span>}</div>
+      <div className="ax-kb-header"><h4>{e.name}</h4>{plan && <span className={pendingEvidence ? 'ax-evidence-badge pending' : 'ax-evidence-badge'}>{pendingEvidence ? '待接入独立证据' : plan.source_policy === 'result_required' ? '需真实业绩结果' : '需真实数据'}</span>}</div>
       <div className="ax-kb-summary">{e.summary}</div>
       <div className="ax-kb-practice" aria-label={`${e.name} 实践入口`}>
         <button disabled={!practiceModule} onClick={() => { if (practiceModule) onPractice(e.id, practiceModule, practiceSource); }}>{practiceModule ? pendingEvidence ? `在${PRACTICE_MODULE_LABELS[practiceModule]}中查看教学示例` : `在${PRACTICE_MODULE_LABELS[practiceModule]}中实践` : '正在核对实践入口…'}</button>
@@ -550,13 +542,13 @@ function CandlePatternVisual({ concept }: { concept: KnowledgeEntry }) {
       const item = catalog.find(candidate => candidate.id === concept.id) || null;
       if (!active) return;
       setPracticeConcept(item);
-      if (item?.plan && (!item.plan.modules.includes('data') || !item.plan.markets.includes('crypto'))) return;
-      const value = await api.runPractice({ concept_id: concept.id, module: 'data', symbol: 'BTCUSDT', second_symbol: PAIR_PRACTICES.has(concept.id) ? 'ETHUSDT' : undefined, source: 'binance', limit: TRANSACTION_PRACTICES.has(concept.id) ? 25 : BLOCK_PRACTICES.has(concept.id) ? 10 : 80, inputs: {} });
+      if (item?.plan && (!item.plan.modules.includes('data') || (!item.plan.markets.includes('crypto') && item.input_kind !== 'filing_case'))) return;
+      const value = await api.runPractice(item?.input_kind === 'filing_case' ? { concept_id: concept.id, module: 'data', symbol: 'AAPL', source: 'us_stock', inputs: {} } : { concept_id: concept.id, module: 'data', symbol: 'BTCUSDT', second_symbol: PAIR_PRACTICES.has(concept.id) ? 'ETHUSDT' : undefined, source: 'binance', limit: TRANSACTION_PRACTICES.has(concept.id) ? 25 : BLOCK_PRACTICES.has(concept.id) ? 10 : 80, inputs: {} });
       if (active) setResult(value);
     }).catch(reason => { if (active) setError(String(reason)); });
     return () => { active = false; };
   }, [concept.id]);
-  if (practiceConcept?.plan && (!practiceConcept.plan.modules.includes('data') || !practiceConcept.plan.markets.includes('crypto'))) return <Section label="实践入口" highlight><ScalarKnowledgeDiagram concept={concept} inputs={practiceConcept.inputs} /><p className="ax-practice-note">{practiceConcept.plan.source_policy === 'result_required' ? '这个概念需要真实净值和交易结果。' : '这个概念需要适用市场的可追溯数据。'}请在{practiceConcept.plan.modules.map(module => PRACTICE_MODULE_LABELS[module]).join('、')}中实践；这里不拿加密市场或默认教学值冒充结论。</p></Section>;
+  if (practiceConcept?.plan && (!practiceConcept.plan.modules.includes('data') || (!practiceConcept.plan.markets.includes('crypto') && practiceConcept.input_kind !== 'filing_case'))) return <Section label="实践入口" highlight><ScalarKnowledgeDiagram concept={concept} inputs={practiceConcept.inputs} /><p className="ax-practice-note">{practiceConcept.plan.source_policy === 'result_required' ? '这个概念需要真实净值和交易结果。' : '这个概念需要适用市场的可追溯数据。'}请在{practiceConcept.plan.modules.map(module => PRACTICE_MODULE_LABELS[module]).join('、')}中实践；这里不拿加密市场或默认教学值冒充结论。</p></Section>;
   if (error) return <Section label="可计算示例" highlight><ScalarKnowledgeDiagram concept={concept} inputs={concept.inputs || []} /><p className="ax-practice-note">示例结果暂不可用：{error}</p></Section>;
   if (!result) return <Section label="可计算示例" highlight><ScalarKnowledgeDiagram concept={concept} inputs={concept.inputs || []} loading /><p className="ax-practice-note">正在生成与 {concept.name} 对应的示例…</p></Section>;
   const series = result.series.find(item => item.values.some(value => value != null));
@@ -565,8 +557,8 @@ function CandlePatternVisual({ concept }: { concept: KnowledgeEntry }) {
   const inputs = practiceConcept?.inputs || concept.inputs || [];
   const isCandlePattern = ['k_pattern_hammer', 'k_pattern_doji', 'k_pattern_engulfing', 'k_pattern_star'].includes(concept.id);
   return <Section label="可计算示例" highlight>
-    <p className="ax-practice-note">{result.transaction_sample ? '基于 Bitcoin 主网一个已确认区块的交易首页计算；它是链上样本，不是所选交易所的现货行情。' : result.block_snapshot ? '基于 Bitcoin 主网区块浏览器最近区块计算；它是链上样本，不是所选交易所的现货行情。' : result.recent_trades ? '基于 Binance 最近逐笔成交计算；窗口时长随成交速度变化，不代表全天。' : result.pair ? `基于 ${result.pair.first_symbol} 与 ${result.pair.second_symbol} 同时刻的真实已收盘小时线计算；不补缺，也不把样本内关系当作交易建议。` : result.provenance === 'provided_market_bars' ? '基于已收盘的真实市场行情计算，用来观察数值变化，不代表交易建议。' : '基于可编辑教学输入计算，不代表当前币种行情。'}</p>
-    {isCandlePattern ? <CandlePatternVisual concept={concept} /> : (result.utxo_sample ? <UtxoSampleVisual result={result} /> : result.transaction_sample ? <TransactionSampleVisual result={result} /> : result.block_snapshot && BLOCK_TIMING_PRACTICES.has(concept.id) ? <BlockTimingVisual result={result} /> : result.block_snapshot ? <BlockSnapshotVisual result={result} /> : result.recent_trades ? <RecentTradesVisual result={result} /> : result.chart ? <BookChartVisual chart={result.chart} name={concept.name} /> : series && values.length > 1 ? <KnowledgeSeriesVisual name={concept.name} result={result} /> : <ScalarKnowledgeDiagram concept={concept} inputs={inputs} scalar={scalar} unit={scalar ? result.units?.[scalar[0]] : undefined} />)}
+    <p className="ax-practice-note">{result.filing_case ? '基于已验证的 Apple FY2025 与 FY2024 历史财务公告计算；不是当前所选股票的财务数据。' : result.address_sample ? '基于 Bitcoin 主网一个已确认区块交易首页的脚本地址集合；它只描述可解出的脚本地址，不识别人物或付款关系。' : result.utxo_sample ? '基于 Bitcoin 主网已确认区块交易首页的输入引用与输出计算；它是局部样本，不能推导当前全网 UTXO 总量。' : result.transaction_sample ? '基于 Bitcoin 主网一个已确认区块的交易首页计算；它是链上样本，不是所选交易所的现货行情。' : result.block_snapshot ? '基于 Bitcoin 主网区块浏览器最近区块计算；它是链上样本，不是所选交易所的现货行情。' : result.recent_trades ? '基于 Binance 最近逐笔成交计算；窗口时长随成交速度变化，不代表全天。' : result.pair ? `基于 ${result.pair.first_symbol} 与 ${result.pair.second_symbol} 同时刻的真实已收盘小时线计算；不补缺，也不把样本内关系当作交易建议。` : result.provenance === 'provided_market_bars' ? '基于已收盘的真实市场行情计算，用来观察数值变化，不代表交易建议。' : '基于可编辑教学输入计算，不代表当前币种行情。'}</p>
+    {isCandlePattern ? <CandlePatternVisual concept={concept} /> : (result.filing_case ? <FinancialCaseVisual result={result} name={concept.name} /> : result.address_sample ? <AddressSetVisual result={result} /> : result.utxo_sample ? <UtxoSampleVisual result={result} /> : result.transaction_sample ? <TransactionSampleVisual result={result} /> : result.block_snapshot && BLOCK_TIMING_PRACTICES.has(concept.id) ? <BlockTimingVisual result={result} /> : result.block_snapshot ? <BlockSnapshotVisual result={result} /> : result.recent_trades ? <RecentTradesVisual result={result} /> : result.chart ? <BookChartVisual chart={result.chart} name={concept.name} /> : series && values.length > 1 ? <KnowledgeSeriesVisual name={concept.name} result={result} /> : <ScalarKnowledgeDiagram concept={concept} inputs={inputs} scalar={scalar} unit={scalar ? result.units?.[scalar[0]] : undefined} />)}
     {!result.recent_trades && !result.block_snapshot && !result.transaction_sample && <p className="ax-practice-reading">{resultSentence(concept.name, result.values, result.units, Boolean(series && values.length > 1))}</p>}
     {!result.recent_trades && !result.block_snapshot && !result.transaction_sample && result.notes.slice(0, 1).map(note => <p className="ax-practice-note" key={note}>{note}</p>)}
   </Section>;
@@ -648,7 +640,7 @@ function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}
     setLoading(true);
     setError('');
     try {
-      setResult(await api.runPractice({ concept_id: concept.id, module, symbol, second_symbol: PAIR_PRACTICES.has(concept.id) ? secondSymbol : undefined, source, limit: TRANSACTION_PRACTICES.has(concept.id) ? 25 : BLOCK_PRACTICES.has(concept.id) ? 10 : DEPTH_PRACTICES.has(concept.id) ? 5 : limit, inputs: parsed, bars: SERVER_FETCHED_PRACTICES.has(concept.id) ? undefined : bars?.length ? bars : undefined }));
+      setResult(await api.runPractice(concept.input_kind === 'filing_case' ? { concept_id: concept.id, module, symbol: 'AAPL', source: 'us_stock', inputs: {} } : { concept_id: concept.id, module, symbol, second_symbol: PAIR_PRACTICES.has(concept.id) ? secondSymbol : undefined, source, limit: TRANSACTION_PRACTICES.has(concept.id) ? 25 : BLOCK_PRACTICES.has(concept.id) ? 10 : DEPTH_PRACTICES.has(concept.id) ? 5 : limit, inputs: parsed, bars: SERVER_FETCHED_PRACTICES.has(concept.id) ? undefined : bars?.length ? bars : undefined }));
     } catch (e) {
       setError(String(e));
       setResult(null);
@@ -674,13 +666,13 @@ function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}
         </>}
       </>}
       {result && <div className="ax-practice-result">
-        {result.utxo_sample ? <UtxoSampleVisual result={result} /> : result.transaction_sample ? <TransactionSampleVisual result={result} /> : result.block_snapshot && BLOCK_TIMING_PRACTICES.has(conceptId) ? <BlockTimingVisual result={result} /> : result.block_snapshot ? <BlockSnapshotVisual result={result} /> : FLOW_PRACTICES.has(conceptId) ? <AggressorFlowVisual result={result} /> : DEPTH_PRACTICES.has(conceptId) ? <SpotDepthVisual result={result} /> : result.recent_trades ? <RecentTradesVisual result={result} /> : conceptId === 'book_pitfall_open_candle' ? <OpenCandleVisual result={result} /> : conceptId === 'book_52w_range' ? <YearRangeVisual result={result} /> : result.chart ? <BookChartVisual chart={result.chart} name={concept?.name || '当前图形'} /> : result.series.length > 0 ? <KnowledgeSeriesVisual name={concept?.name || '当前序列'} result={result} /> : null}
+        {result.filing_case ? <FinancialCaseVisual result={result} name={concept?.name || '财务案例'} /> : result.address_sample ? <AddressSetVisual result={result} /> : result.utxo_sample ? <UtxoSampleVisual result={result} /> : result.transaction_sample ? <TransactionSampleVisual result={result} /> : result.block_snapshot && BLOCK_TIMING_PRACTICES.has(conceptId) ? <BlockTimingVisual result={result} /> : result.block_snapshot ? <BlockSnapshotVisual result={result} /> : FLOW_PRACTICES.has(conceptId) ? <AggressorFlowVisual result={result} /> : DEPTH_PRACTICES.has(conceptId) ? <SpotDepthVisual result={result} /> : result.recent_trades ? <RecentTradesVisual result={result} /> : conceptId === 'book_pitfall_open_candle' ? <OpenCandleVisual result={result} /> : conceptId === 'book_52w_range' ? <YearRangeVisual result={result} /> : result.chart ? <BookChartVisual chart={result.chart} name={concept?.name || '当前图形'} /> : result.series.length > 0 ? <KnowledgeSeriesVisual name={concept?.name || '当前序列'} result={result} /> : null}
         {result.pair && <p className="ax-practice-provenance">{result.pair.first_symbol} 与 {result.pair.second_symbol} · {result.pair.interval} 已收盘行情 · 同时刻 {result.pair.matched_count} 根 · 两侧各剔除 {result.pair.dropped_first}/{result.pair.dropped_second} 根 · {result.pair.start} 至 {result.pair.end}。{conceptId === 'book_cointegration_diagnostic' ? '这里是样本内诊断，不单凭该统计量认定协整。' : conceptId === 'book_pair_spread' ? '对冲比率为教学设定，不是自动寻优所得。' : '比值只比较同一计价资产的两只标的。'}</p>}
-        <p className={result.status === 'computed' || result.status === 'partial' ? 'positive' : 'negative'}>{result.status === 'computed' ? '已计算' : result.status === 'partial' ? '已计算样本 · 全网总量无定义' : '无法计算'} · {result.utxo_sample ? '服务器读取 Bitcoin 主网已确认区块交易首页的输入引用与输出；与 Binance 现货价格无关' : result.transaction_sample ? '服务器读取 Bitcoin 主网已确认区块的交易首页；与 Binance 现货价格无关' : result.block_snapshot ? '服务器读取 Bitcoin 主网区块浏览器最近区块；与 Binance 现货价格无关' : result.recent_trades ? '服务器读取 Binance 现货最近逐笔成交；窗口随市场活跃度变化' : result.year_range ? '服务器获取所选股票的真实已收盘日线，按末根日线锚定 52 周窗口' : PAIR_PRACTICES.has(conceptId) ? '服务器获取并按相同时间戳对齐两只 Binance USDT 现货的已收盘小时线' : FLOW_PRACTICES.has(conceptId) ? '服务器直接取得 Binance 现货已收盘 K 线的主动成交分类字段' : DEPTH_PRACTICES.has(conceptId) ? '服务器直接取得 Binance 现货订单簿快照；交易所只给更新编号，没有历史时间戳' : conceptId === 'book_pitfall_open_candle' ? '服务器直接取得 Binance 当前 1 小时 K 线快照；临时价尚未收盘' : result.bar_origin === 'server_fetched_completed_binance_usdt_spot_bars' ? '服务器取得 Binance 已收盘现货 K 线及真实计价资产成交额' : result.bar_origin === 'server_fetched_completed_source_bars' ? '服务器重新获取并过滤已收盘行情，实际时间戳见结果数据' : result.provenance === 'provided_market_bars' ? '使用当前模块行情上下文' : result.provenance === 'provided_result_context' ? '使用当前模块真实结果' : '使用可编辑教学输入'}</p>
+        <p className={result.status === 'computed' || result.status === 'partial' ? 'positive' : 'negative'}>{result.status === 'computed' ? '已计算' : result.status === 'partial' ? '已计算样本 · 全网总量无定义' : '无法计算'} · {result.filing_case ? '服务器已核验 Apple 官方历史业绩公告；未经审计，不是当前行情或当前所选股票财务数据' : result.address_sample ? '服务器读取 Bitcoin 主网已确认区块交易首页中的输入与非 OP_RETURN 输出脚本地址；与 Binance 现货价格无关' : result.utxo_sample ? '服务器读取 Bitcoin 主网已确认区块交易首页的输入引用与输出；与 Binance 现货价格无关' : result.transaction_sample ? '服务器读取 Bitcoin 主网已确认区块的交易首页；与 Binance 现货价格无关' : result.block_snapshot ? '服务器读取 Bitcoin 主网区块浏览器最近区块；与 Binance 现货价格无关' : result.recent_trades ? '服务器读取 Binance 现货最近逐笔成交；窗口随市场活跃度变化' : result.year_range ? '服务器获取所选股票的真实已收盘日线，按末根日线锚定 52 周窗口' : PAIR_PRACTICES.has(conceptId) ? '服务器获取并按相同时间戳对齐两只 Binance USDT 现货的已收盘小时线' : FLOW_PRACTICES.has(conceptId) ? '服务器直接取得 Binance 现货已收盘 K 线的主动成交分类字段' : DEPTH_PRACTICES.has(conceptId) ? '服务器直接取得 Binance 现货订单簿快照；交易所只给更新编号，没有历史时间戳' : conceptId === 'book_pitfall_open_candle' ? '服务器直接取得 Binance 当前 1 小时 K 线快照；临时价尚未收盘' : result.bar_origin === 'server_fetched_completed_binance_usdt_spot_bars' ? '服务器取得 Binance 已收盘现货 K 线及真实计价资产成交额' : result.bar_origin === 'server_fetched_completed_source_bars' ? '服务器重新获取并过滤已收盘行情，实际时间戳见结果数据' : result.provenance === 'provided_market_bars' ? '使用当前模块行情上下文' : result.provenance === 'provided_result_context' ? '使用当前模块真实结果' : '使用可编辑教学输入'}</p>
         {result.reason && <p>{result.reason}</p>}
-        {!FLOW_PRACTICES.has(conceptId) && !DEPTH_PRACTICES.has(conceptId) && !result.year_range && !result.recent_trades && !result.block_snapshot && !result.transaction_sample && !result.utxo_sample && Object.keys(result.values).length > 0 && <dl>{Object.entries(result.values).map(([key, value]) => <div key={key}><dt>{chineseField(key, key === conceptId ? concept?.name : undefined)}{result.units?.[key] && !key.endsWith('_timestamp') && key !== 'is_current_candle_closed' ? `（${practiceUnit(result.units[key], result)}）` : ''}</dt><dd>{practiceValue(key, value)}</dd></div>)}</dl>}
-        {!FLOW_PRACTICES.has(conceptId) && !DEPTH_PRACTICES.has(conceptId) && !result.year_range && !result.recent_trades && !result.block_snapshot && !result.transaction_sample && !result.utxo_sample && <p className="ax-practice-reading">{conceptId === 'book_trade_volume' ? `最新一根已收盘 K 线实际成交 ${practiceValue('base_volume', result.values.base_volume)} ${result.asset_units?.base_asset || '基本单位'}，成交额 ${practiceValue('quote_volume', result.values.quote_volume)} ${result.asset_units?.quote_asset || '计价资产'}；这根 1 小时 K 线内的成交均价为 ${practiceValue('vwap', result.values.vwap)} ${result.asset_units?.quote_asset || '计价资产'}/${result.asset_units?.base_asset || '基本单位'}。成交额取自交易所汇总字段，不拿收盘价乘成交数量代替。` : conceptId === 'book_pitfall_open_candle' ? `上一根 1 小时 K 线已收于 ${practiceValue('last_completed_close', result.values.last_completed_close)}；当前 K 线从 ${practiceValue('current_candle_open', result.values.current_candle_open)} 开始，在交易所快照时的临时价为 ${practiceValue('provisional_close', result.values.provisional_close)}。预计 ${practiceValue('expected_close_timestamp', result.values.expected_close_timestamp)} 收盘前，它仍会变化；此值不能当作最终收盘价参与策略判断。` : conceptId === 'book_pitfall_repainting' ? `在 ${result.bars?.length ?? 0} 根已收盘 K 线里确认了 ${fmtNum(result.values.confirmed_pivot_count ?? 0, 0)} 个局部高低点。空心点标在枢轴发生的 K 线上，只供事后回看；实心点标在两根右侧 K 线收盘后的确认位置，才是当时可知的信息。` : conceptId === 'book_pitfall_timeframe' ? `同一根已收盘 K 线为截止，近 5 根变化 ${result.values.short_horizon_return == null ? '—' : `${fmtNum(result.values.short_horizon_return * 100, 2)}%`}，近 20 根变化 ${result.values.long_horizon_return == null ? '—' : `${fmtNum(result.values.long_horizon_return * 100, 2)}%`}。图上的两点是各自的起算价；窗口来自同一行情，不能当作相互独立的确认。` : conceptId === 'book_pitfall_formula_variant' ? `同一段已收盘行情按 MACD(12, 26, 9) 只计算一次柱体：x2 曲线恒为 x1 的两倍。最新 x1 ${result.values.latest_histogram_x1 == null ? '—' : fmtNum(result.values.latest_histogram_x1, 6)}，x2 ${result.values.latest_histogram_x2 == null ? '—' : fmtNum(result.values.latest_histogram_x2, 6)}，两种约定之差 ${result.values.latest_histogram_difference == null ? '—' : fmtNum(result.values.latest_histogram_difference, 6)}；这不是两家供应商的独立实测输出。` : resultSentence(concept?.name || '该概念', result.values, result.units, !result.chart && result.series.length > 0, result.provenance)}</p>}
-        {!result.year_range && !result.recent_trades && !result.block_snapshot && !result.transaction_sample && !result.utxo_sample && result.notes.map((note, index) => <p className="ax-practice-note" key={index}>{note}</p>)}
+        {!FLOW_PRACTICES.has(conceptId) && !DEPTH_PRACTICES.has(conceptId) && !result.year_range && !result.recent_trades && !result.block_snapshot && !result.transaction_sample && !result.utxo_sample && !result.address_sample && !result.filing_case && Object.keys(result.values).length > 0 && <dl>{Object.entries(result.values).map(([key, value]) => <div key={key}><dt>{chineseField(key, key === conceptId ? concept?.name : undefined)}{result.units?.[key] && !key.endsWith('_timestamp') && key !== 'is_current_candle_closed' ? `（${practiceUnit(result.units[key], result)}）` : ''}</dt><dd>{practiceValue(key, value)}</dd></div>)}</dl>}
+        {!FLOW_PRACTICES.has(conceptId) && !DEPTH_PRACTICES.has(conceptId) && !result.year_range && !result.recent_trades && !result.block_snapshot && !result.transaction_sample && !result.utxo_sample && !result.address_sample && !result.filing_case && <p className="ax-practice-reading">{conceptId === 'book_trade_volume' ? `最新一根已收盘 K 线实际成交 ${practiceValue('base_volume', result.values.base_volume)} ${result.asset_units?.base_asset || '基本单位'}，成交额 ${practiceValue('quote_volume', result.values.quote_volume)} ${result.asset_units?.quote_asset || '计价资产'}；这根 1 小时 K 线内的成交均价为 ${practiceValue('vwap', result.values.vwap)} ${result.asset_units?.quote_asset || '计价资产'}/${result.asset_units?.base_asset || '基本单位'}。成交额取自交易所汇总字段，不拿收盘价乘成交数量代替。` : conceptId === 'book_pitfall_open_candle' ? `上一根 1 小时 K 线已收于 ${practiceValue('last_completed_close', result.values.last_completed_close)}；当前 K 线从 ${practiceValue('current_candle_open', result.values.current_candle_open)} 开始，在交易所快照时的临时价为 ${practiceValue('provisional_close', result.values.provisional_close)}。预计 ${practiceValue('expected_close_timestamp', result.values.expected_close_timestamp)} 收盘前，它仍会变化；此值不能当作最终收盘价参与策略判断。` : conceptId === 'book_pitfall_repainting' ? `在 ${result.bars?.length ?? 0} 根已收盘 K 线里确认了 ${fmtNum(result.values.confirmed_pivot_count ?? 0, 0)} 个局部高低点。空心点标在枢轴发生的 K 线上，只供事后回看；实心点标在两根右侧 K 线收盘后的确认位置，才是当时可知的信息。` : conceptId === 'book_pitfall_timeframe' ? `同一根已收盘 K 线为截止，近 5 根变化 ${result.values.short_horizon_return == null ? '—' : `${fmtNum(result.values.short_horizon_return * 100, 2)}%`}，近 20 根变化 ${result.values.long_horizon_return == null ? '—' : `${fmtNum(result.values.long_horizon_return * 100, 2)}%`}。图上的两点是各自的起算价；窗口来自同一行情，不能当作相互独立的确认。` : conceptId === 'book_pitfall_formula_variant' ? `同一段已收盘行情按 MACD(12, 26, 9) 只计算一次柱体：x2 曲线恒为 x1 的两倍。最新 x1 ${result.values.latest_histogram_x1 == null ? '—' : fmtNum(result.values.latest_histogram_x1, 6)}，x2 ${result.values.latest_histogram_x2 == null ? '—' : fmtNum(result.values.latest_histogram_x2, 6)}，两种约定之差 ${result.values.latest_histogram_difference == null ? '—' : fmtNum(result.values.latest_histogram_difference, 6)}；这不是两家供应商的独立实测输出。` : resultSentence(concept?.name || '该概念', result.values, result.units, !result.chart && result.series.length > 0, result.provenance)}</p>}
+        {!result.year_range && !result.recent_trades && !result.block_snapshot && !result.transaction_sample && !result.utxo_sample && !result.address_sample && !result.filing_case && result.notes.map((note, index) => <p className="ax-practice-note" key={index}>{note}</p>)}
       </div>}
     </aside>
   );
@@ -798,7 +790,7 @@ const PITFALLS = [
 // 学习路径
 const LEARNING_PATH = [
   { title: '统一词汇与数据契约', learn: '理解 Bar、Signal、Order、Fill、Position 和 Equity 如何串成事件链。', practice: '在概念速览里打开 K线与信号模块，确认字段与含义。', codeRef: 'src/types.rs::Bar' },
-  { title: '获取、校验与版本化行情', learn: '分清合成、CSV 缓存和 HTTP 行情；知道清洗、复权、时区对齐和数据版本为什么先于指标。', practice: '在数据探索切换数据源，比较同一指标在不同输入下的表现。', codeRef: 'src/data.rs::DataFeed' },
+  { title: '获取、校验与版本化行情', learn: '区分交易所行情、股票日线与历史缓存；先核对清洗、复权、时区、收盘状态和数据版本，再计算指标。', practice: '在数据探索切换加密、A股和美股数据，检查来源、周期和采样范围。', codeRef: 'src/data.rs::DataFeed' },
   { title: '指标与可证伪假设', learn: '指标是特征，不是交易建议；预热期为空是诚实的数据状态。', practice: '在指标大全展开一个概念，再用“在数据探索中实践”重算。', codeRef: 'src/indicators/ma.rs::sma' },
   { title: '策略只产生意图', learn: 'Strategy 读取一根已完成 K 线，输出 Signal；它不能直接改持仓。', practice: '阅读均线交叉策略，写下一个可验证的入场与退出条件。', codeRef: 'src/strategy.rs::Strategy' },
   { title: '风控、仓位与订单', learn: '组合把信号换为订单，风险模块会拒绝或强平不符合约束的订单。', practice: '在回测调整止损、止盈和仓位，观察风险调整后指标。', codeRef: 'src/portfolio.rs::Portfolio::on_signal' },
