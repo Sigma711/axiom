@@ -2,6 +2,23 @@
 use axiom::knowledge;
 
 #[test]
+fn split_adjustment_knowledge_explains_the_real_historical_case_without_teaching_input_claims() {
+    let concept = knowledge::all_entries()
+        .into_iter()
+        .find(|entry| entry.id == "book_adjustment")
+        .expect("the original book's adjustment concept remains registered");
+    assert_eq!(concept.category, "公司行动");
+    assert!(concept.summary.contains("Apple"));
+    assert!(concept.formula.contains("旧股数/新股数"));
+    assert!(!concept.summary.contains("教学输入"));
+    assert!(!concept.example.contains("教学输入"));
+    assert_eq!(
+        concept.code_ref,
+        "src/api.rs::post_practice::book_adjustment"
+    );
+}
+
+#[test]
 fn test_no_implementation_placeholder() {
     let entries = knowledge::all_entries();
     let bad: Vec<String> = entries

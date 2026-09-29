@@ -1488,6 +1488,17 @@ pub fn locate_symbol_for_test(reference: &str) -> Option<usize> {
 }
 
 fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
+    if concept.id == "book_adjustment" {
+        return json!({
+            "markets":["us_equity"],
+            "modules":["data"],
+            "required_datasets":["dated_corporate_actions","provider_quote","provider_adjusted_close"],
+            "source_policy":"real_required",
+            "fixed_source":"us_stock",
+            "fixed_symbol":"AAPL",
+            "goal":"观察 Yahoo 历史响应中明确给出的 Apple 2020-08-31 4:1 拆股事件、同期供应商报价与供应商调整收盘价。只由事件比例计算拆股价格乘数；不把供应商报价称为原始成交价，也不把 adjusted close 称为已核验总回报。"
+        });
+    }
     if crate::industry_case::is_supported(&concept.id) {
         return json!({
             "markets":["issuer_disclosure"],
@@ -2285,6 +2296,78 @@ async fn post_practice(
         return Err(validate::bad(
             "practice module is not applicable to this concept",
         ));
+    }
+    if concept.id == "book_adjustment" {
+        if source != "us_stock"
+            || symbol != "AAPL"
+            || req.limit.is_some()
+            || req.second_symbol.is_some()
+            || req.bars.is_some()
+            || !req
+                .inputs
+                .as_object()
+                .is_some_and(serde_json::Map::is_empty)
+        {
+            return Err(validate::bad(
+                "book_adjustment is fixed to AAPL/us_stock with module=data, empty inputs, and no bars, limit, or second symbol",
+            ));
+        }
+        if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Stock corporate-action verification is disabled in offline mode".into(),
+            ));
+        }
+        let evidence = state
+            .feed
+            .fetch_aapl_split_adjustment_evidence()
+            .await
+            .map_err(|error| (StatusCode::BAD_GATEWAY, error.to_string()))?;
+        let numerator = evidence.event.numerator;
+        let denominator = evidence.event.denominator;
+        let market_data_as_of = evidence
+            .observations
+            .last()
+            .map(|observation| observation.timestamp);
+        let market_provenance = MarketProvenance {
+            provider: evidence.provider.into(),
+            endpoint: evidence.endpoint.clone(),
+            price_basis: "provider_quote_and_adjusted_close_semantics_unverified".into(),
+            corporate_actions: "dated_split_event_observed".into(),
+        };
+        return Ok(Json(json!({
+            "concept_id":"book_adjustment",
+            "status":"computed",
+            "reason":Value::Null,
+            "input_kind":"stock_action_case",
+            "provenance":"server_fetched_stock_corporate_action",
+            "context":"historical_corporate_action",
+            "module":"data",
+            "source":"us_stock",
+            "symbol":"AAPL",
+            "values":{
+                "new_shares_per_old_share":numerator / denominator,
+                "old_shares_per_new_share":denominator / numerator,
+                "split_only_price_multiplier":denominator / numerator
+            },
+            "units":{
+                "new_shares_per_old_share":"ratio",
+                "old_shares_per_new_share":"ratio",
+                "split_only_price_multiplier":"ratio"
+            },
+            "adjustment_evidence":evidence,
+            "market_provenance":market_provenance,
+            "market_data_as_of":market_data_as_of,
+            "bar_origin":"server_fetched_us_stock_adjustment_evidence",
+            "bars":[],
+            "series":[],
+            "inputs":{},
+            "notes":[
+                "拆股价格乘数只由明确的 4:1 事件比例计算，不由 quote/adjusted close 的比值反推。",
+                "provider quote 可能已按拆股重述，不能称为未复权原始成交价；provider adjusted close 的分红再投资与修订口径未经独立核验，不能称为已核验总回报。",
+                "这是固定 AAPL 历史案例，不代表任意股票、当前行情或完整公司行动账务。"
+            ]
+        })));
     }
     if crate::industry_case::is_supported(&concept.id) {
         let expected_symbol = industry_case_symbol(&concept.id);

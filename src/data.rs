@@ -299,6 +299,42 @@ pub struct BinanceRecentTrade {
     pub timestamp: DateTime<Utc>,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct StockAdjustmentObservation {
+    pub timestamp: DateTime<Utc>,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
+    pub volume: f64,
+    pub adjusted_close: f64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct StockSplitEvent {
+    pub kind: &'static str,
+    pub effective_at: DateTime<Utc>,
+    pub effective_trading_date: NaiveDate,
+    pub numerator: f64,
+    pub denominator: f64,
+    pub split_ratio: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct StockAdjustmentEvidence {
+    pub provider: &'static str,
+    pub endpoint: String,
+    pub fetched_at: DateTime<Utc>,
+    pub scope: &'static str,
+    pub event: StockSplitEvent,
+    pub issuer_confirmation_url: &'static str,
+    pub issuer_confirmation: &'static str,
+    pub observations: Vec<StockAdjustmentObservation>,
+    pub quote_basis: &'static str,
+    pub adjusted_close_basis: &'static str,
+    pub calculation: &'static str,
+}
+
 fn parse_binance_recent_trades(
     raw: &serde_json::Value,
     fetched_at: DateTime<Utc>,
@@ -741,6 +777,7 @@ fn parse_binance_depth_snapshot(raw: &serde_json::Value) -> Result<BinanceDepthS
 
 pub struct HttpFeed {
     pub base_url: String,
+    pub us_stock_adjustment_url: String,
     pub bitcoin_esplora_url: String,
     pub bitcoin_mempool_url: String,
     pub csv: CsvFeed,
@@ -751,6 +788,8 @@ impl HttpFeed {
     pub fn new(cache_dir: impl Into<PathBuf>) -> Self {
         Self {
             base_url: "https://data-api.binance.vision".to_string(),
+            us_stock_adjustment_url: "https://query1.finance.yahoo.com/v8/finance/chart"
+                .to_string(),
             bitcoin_esplora_url: "https://blockstream.info".to_string(),
             bitcoin_mempool_url: "https://mempool.space".to_string(),
             csv: CsvFeed::new(cache_dir),
@@ -759,6 +798,39 @@ impl HttpFeed {
                 .build()
                 .expect("无法创建 HTTP client"),
         }
+    }
+
+    pub async fn fetch_aapl_split_adjustment_evidence(&self) -> Result<StockAdjustmentEvidence> {
+        let endpoint = format!(
+            "{}/AAPL",
+            self.us_stock_adjustment_url.trim_end_matches('/')
+        );
+        let response = self
+            .client
+            .get(&endpoint)
+            .header(
+                reqwest::header::USER_AGENT,
+                "AXIOM educational market reader/1.0",
+            )
+            .query(&[
+                ("period1", "1595808000"),
+                ("period2", "1601510400"),
+                ("interval", "1d"),
+                ("includePrePost", "false"),
+                ("events", "div,splits"),
+            ])
+            .timeout(std::time::Duration::from_secs(15))
+            .send()
+            .await
+            .context("AAPL adjustment evidence request failed")?
+            .error_for_status()
+            .context("AAPL adjustment evidence returned HTTP error")?;
+        let selected_endpoint = response.url().to_string();
+        let raw: serde_json::Value = response
+            .json()
+            .await
+            .context("invalid AAPL adjustment evidence JSON")?;
+        parse_aapl_split_adjustment_evidence(&raw, selected_endpoint, Utc::now())
     }
 
     async fn fetch_bitcoin_blocks_from(
@@ -1464,6 +1536,152 @@ fn parse_eastmoney_kline(row: &str) -> Option<Bar> {
         fields.get(2)?.trim().parse().ok()?,
         fields.get(5)?.trim().parse().ok()?,
     )
+}
+
+fn parse_aapl_split_adjustment_evidence(
+    raw: &serde_json::Value,
+    endpoint: String,
+    fetched_at: DateTime<Utc>,
+) -> Result<StockAdjustmentEvidence> {
+    let result = raw
+        .pointer("/chart/result/0")
+        .context("AAPL adjustment response has no result")?;
+    anyhow::ensure!(
+        result
+            .pointer("/meta/symbol")
+            .and_then(serde_json::Value::as_str)
+            == Some("AAPL"),
+        "AAPL adjustment response symbol does not match"
+    );
+    let times = result["timestamp"]
+        .as_array()
+        .context("AAPL adjustment timestamps missing")?;
+    let quote = result
+        .pointer("/indicators/quote/0")
+        .context("AAPL provider quotes missing")?;
+    let adjusted = result
+        .pointer("/indicators/adjclose/0/adjclose")
+        .and_then(serde_json::Value::as_array)
+        .context("AAPL provider adjusted closes missing")?;
+    let arrays = ["open", "high", "low", "close", "volume"]
+        .map(|field| {
+            quote[field]
+                .as_array()
+                .with_context(|| format!("AAPL provider quote {field} missing"))
+        })
+        .into_iter()
+        .collect::<Result<Vec<_>>>()?;
+    anyhow::ensure!(
+        !times.is_empty()
+            && adjusted.len() == times.len()
+            && arrays.iter().all(|values| values.len() == times.len()),
+        "AAPL provider quote and adjusted close observations are not aligned"
+    );
+
+    let mut observations = Vec::with_capacity(times.len());
+    for index in 0..times.len() {
+        let timestamp = Utc
+            .timestamp_opt(
+                times[index]
+                    .as_i64()
+                    .context("AAPL adjustment timestamp must be an integer")?,
+                0,
+            )
+            .single()
+            .context("AAPL adjustment timestamp is invalid")?;
+        let number = |values: &[serde_json::Value], field: &str| -> Result<f64> {
+            let value = values[index]
+                .as_f64()
+                .with_context(|| format!("AAPL {field} observation is missing"))?;
+            anyhow::ensure!(value.is_finite(), "AAPL {field} observation is not finite");
+            Ok(value)
+        };
+        let bar = Bar {
+            timestamp,
+            open: number(arrays[0], "open")?,
+            high: number(arrays[1], "high")?,
+            low: number(arrays[2], "low")?,
+            close: number(arrays[3], "close")?,
+            volume: number(arrays[4], "volume")?,
+        };
+        crate::practice::validate_bars(&[bar]).map_err(anyhow::Error::msg)?;
+        let adjusted_close = number(adjusted, "adjusted close")?;
+        anyhow::ensure!(adjusted_close > 0.0, "AAPL adjusted close must be positive");
+        observations.push(StockAdjustmentObservation {
+            timestamp,
+            open: bar.open,
+            high: bar.high,
+            low: bar.low,
+            close: bar.close,
+            volume: bar.volume,
+            adjusted_close,
+        });
+    }
+    anyhow::ensure!(
+        observations
+            .windows(2)
+            .all(|pair| pair[0].timestamp < pair[1].timestamp),
+        "AAPL adjustment observations are not strictly chronological"
+    );
+
+    let target_date = NaiveDate::from_ymd_opt(2020, 8, 31).expect("valid fixed case date");
+    let splits = result
+        .pointer("/events/splits")
+        .and_then(serde_json::Value::as_object)
+        .context("AAPL adjustment response has no dated split events")?;
+    let event = splits
+        .values()
+        .find_map(|value| {
+            let effective_at = Utc.timestamp_opt(value["date"].as_i64()?, 0).single()?;
+            let numerator = value["numerator"].as_f64()?;
+            let denominator = value["denominator"].as_f64()?;
+            let split_ratio = value["splitRatio"].as_str()?.to_owned();
+            (effective_at.date_naive() == target_date
+                && numerator == 4.0
+                && denominator == 1.0
+                && split_ratio == "4:1")
+                .then_some(StockSplitEvent {
+                    kind: "split",
+                    effective_at,
+                    effective_trading_date: target_date,
+                    numerator,
+                    denominator,
+                    split_ratio,
+                })
+        })
+        .context("AAPL 2020-08-31 4:1 split event is missing")?;
+    anyhow::ensure!(
+        observations
+            .iter()
+            .any(|item| item.timestamp.date_naive() < target_date)
+            && observations
+                .iter()
+                .any(|item| item.timestamp.date_naive() == target_date),
+        "AAPL adjustment evidence needs provider observations before and on the split date"
+    );
+
+    let provider = reqwest::Url::parse(&endpoint)
+        .ok()
+        .and_then(|url| {
+            (url.scheme() == "https" && url.host_str() == Some("query1.finance.yahoo.com"))
+                .then_some("yahoo")
+        })
+        .unwrap_or("configured_endpoint");
+    Ok(StockAdjustmentEvidence {
+        provider,
+        endpoint,
+        fetched_at,
+        scope: "aapl_2020_4_for_1_split_historical_window",
+        event,
+        issuer_confirmation_url:
+            "https://www.apple.com/newsroom/2020/07/apple-reports-third-quarter-results/",
+        issuer_confirmation:
+            "Apple announced a four-for-one split with split-adjusted trading beginning 2020-08-31",
+        observations,
+        quote_basis: "provider_quote_semantics_unverified_for_split_adjustment",
+        adjusted_close_basis: "provider_adjusted_close_semantics_unverified_for_total_return",
+        calculation: "split_only_price_multiplier = denominator / numerator",
+    })
 }
 
 fn parse_yahoo_bars(raw: &serde_json::Value) -> Result<Vec<Bar>> {

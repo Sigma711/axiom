@@ -169,6 +169,7 @@ fn every_book_catalog_default_is_executable_and_all_inputs_are_described() {
         if matches!(
             concept.id.as_str(),
             "book_period"
+                | "book_adjustment"
                 | "book_trade_volume"
                 | "book_order_flow"
                 | "book_order_imbalance"
@@ -205,6 +206,27 @@ fn every_book_catalog_default_is_executable_and_all_inputs_are_described() {
         book::evaluate(&concept.id, &bars, &json!({}))
             .unwrap_or_else(|e| panic!("{} defaults: {e}", concept.id));
     }
+}
+
+#[test]
+fn adjustment_rejects_legacy_handwritten_price_and_factor() {
+    let concept = book::catalog()
+        .into_iter()
+        .find(|concept| concept.id == "book_adjustment")
+        .unwrap();
+    assert_eq!(concept.input_kind, "stock_action_case");
+    assert!(concept.inputs.is_empty());
+    assert!(book::evaluate("book_adjustment", &[], &json!({}))
+        .unwrap_err()
+        .contains("API"));
+    assert!(
+        axiom::practice::evaluate("book_adjustment", &[], &json!({}))
+            .unwrap_err()
+            .contains("API")
+    );
+    let stale = json!({"raw_price": 10.0, "adjustment_factor": 1.2});
+    assert!(book::evaluate("book_adjustment", &[], &stale).is_err());
+    assert!(axiom::practice::evaluate("book_adjustment", &[], &stale).is_err());
 }
 
 #[test]

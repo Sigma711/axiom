@@ -42,6 +42,176 @@ async fn request(app: &axum::Router, path: &str, value: Value) -> (StatusCode, V
     )
 }
 
+async fn mock_aapl_adjustment(Query(q): Query<HashMap<String, String>>) -> Json<Value> {
+    assert_eq!(q.get("interval").map(String::as_str), Some("1d"));
+    assert_eq!(q.get("events").map(String::as_str), Some("div,splits"));
+    Json(aapl_adjustment_payload())
+}
+
+fn aapl_adjustment_payload() -> Value {
+    json!({"chart":{"result":[{
+        "meta":{"symbol":"AAPL"},
+        "timestamp":[1598621400,1598880600],
+        "indicators":{
+            "quote":[{
+                "open":[126.0125,127.58],"high":[126.4425,131.0],
+                "low":[124.5775,126.0],"close":[124.8075,129.04],
+                "volume":[187630000.0,225702700.0]
+            }],
+            "adjclose":[{"adjclose":[120.90118408203125,124.82486724853516]}]
+        },
+        "events":{"splits":{"1598880600":{
+            "date":1598880600,"numerator":4.0,"denominator":1.0,"splitRatio":"4:1"
+        }}}
+    }],"error":null}})
+}
+
+async fn mock_aapl_adjustment_missing_split() -> Json<Value> {
+    let mut payload = aapl_adjustment_payload();
+    payload["chart"]["result"][0]["events"] = json!({});
+    Json(payload)
+}
+
+async fn mock_aapl_adjustment_misaligned_adjusted_close() -> Json<Value> {
+    let mut payload = aapl_adjustment_payload();
+    payload["chart"]["result"][0]["indicators"]["adjclose"][0]["adjclose"] =
+        json!([120.90118408203125]);
+    Json(payload)
+}
+
+async fn mock_aapl_adjustment_invalid_adjusted_close() -> Json<Value> {
+    let mut payload = aapl_adjustment_payload();
+    payload["chart"]["result"][0]["indicators"]["adjclose"][0]["adjclose"][0] = json!(0);
+    Json(payload)
+}
+
+#[tokio::test]
+async fn aapl_adjustment_practice_uses_dated_split_evidence_without_calling_quotes_raw() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            axum::Router::new().route("/v8/finance/chart/AAPL", get(mock_aapl_adjustment)),
+        )
+        .await
+        .unwrap()
+    });
+    let dir = PathBuf::from(format!(
+        "target/practice-adjustment-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let mut state = AppState::new(default_config(), dir.clone());
+    let mut feed = HttpFeed::new(&dir);
+    feed.us_stock_adjustment_url = format!("http://127.0.0.1:{port}/v8/finance/chart");
+    state.feed = Arc::new(feed);
+    let app = api::router(Arc::new(state));
+
+    let (status, body) = request(
+        &app,
+        "/api/practice",
+        json!({"concept_id":"book_adjustment","module":"data","symbol":"AAPL","source":"us_stock","inputs":{}}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["input_kind"], "stock_action_case");
+    assert_eq!(body["provenance"], "server_fetched_stock_corporate_action");
+    assert_eq!(body["context"], "historical_corporate_action");
+    assert_eq!(
+        body["adjustment_evidence"]["provider"],
+        "configured_endpoint"
+    );
+    assert_eq!(body["values"]["new_shares_per_old_share"], 4.0);
+    assert_eq!(body["values"]["old_shares_per_new_share"], 0.25);
+    assert_eq!(body["values"]["split_only_price_multiplier"], 0.25);
+    assert_eq!(body["adjustment_evidence"]["event"]["split_ratio"], "4:1");
+    assert_eq!(
+        body["adjustment_evidence"]["issuer_confirmation_url"],
+        "https://www.apple.com/newsroom/2020/07/apple-reports-third-quarter-results/"
+    );
+    assert_eq!(
+        body["adjustment_evidence"]["observations"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        body["market_provenance"]["price_basis"],
+        "provider_quote_and_adjusted_close_semantics_unverified"
+    );
+    assert!(body.to_string().contains("provider_quote"));
+    assert!(!body.to_string().contains("raw_price"));
+
+    server.abort();
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn aapl_adjustment_practice_rejects_missing_events_and_misaligned_adjusted_close() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            axum::Router::new()
+                .route(
+                    "/missing/v8/finance/chart/AAPL",
+                    get(mock_aapl_adjustment_missing_split),
+                )
+                .route(
+                    "/misaligned/v8/finance/chart/AAPL",
+                    get(mock_aapl_adjustment_misaligned_adjusted_close),
+                )
+                .route(
+                    "/invalid/v8/finance/chart/AAPL",
+                    get(mock_aapl_adjustment_invalid_adjusted_close),
+                ),
+        )
+        .await
+        .unwrap()
+    });
+    for (case, expected) in [
+        ("missing", "no dated split events"),
+        ("misaligned", "not aligned"),
+        ("invalid", "adjusted close must be positive"),
+    ] {
+        let dir = PathBuf::from(format!(
+            "target/practice-adjustment-{case}-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let mut state = AppState::new(default_config(), dir.clone());
+        let mut feed = HttpFeed::new(&dir);
+        feed.us_stock_adjustment_url = format!("http://127.0.0.1:{port}/{case}/v8/finance/chart");
+        state.feed = Arc::new(feed);
+        let app = api::router(Arc::new(state));
+        let (status, body) = request(
+            &app,
+            "/api/practice",
+            json!({"concept_id":"book_adjustment","module":"data","symbol":"AAPL","source":"us_stock","inputs":{}}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_GATEWAY, "{case}: {body}");
+        assert!(body.to_string().contains(expected), "{case}: {body}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    server.abort();
+}
+
+#[tokio::test]
+async fn aapl_adjustment_practice_rejects_fallback_symbols_and_editable_inputs() {
+    let app = app();
+    for body in [
+        json!({"concept_id":"book_adjustment","module":"data","symbol":"MSFT","source":"us_stock","inputs":{}}),
+        json!({"concept_id":"book_adjustment","module":"data","symbol":"AAPL","source":"a_share","inputs":{}}),
+        json!({"concept_id":"book_adjustment","module":"data","symbol":"AAPL","source":"us_stock","inputs":{"adjustment_factor":4.0}}),
+    ] {
+        let (status, response) = request(&app, "/api/practice", body).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{response}");
+        assert!(response.to_string().contains("fixed to AAPL/us_stock"));
+    }
+}
+
 #[tokio::test]
 async fn data_practice_accepts_only_concepts_with_a_data_plan() {
     let app = app();
@@ -833,12 +1003,15 @@ async fn book_financial_practices_require_equity_evidence_and_reject_crypto() {
             .unwrap();
         let filing_case = id == "book_current_ratio";
         let industry_case = id == "book_bank_nim";
+        let stock_action_case = id == "book_adjustment";
         assert_eq!(
             concept["plan"]["markets"],
             if filing_case {
                 json!(["us_equity"])
             } else if industry_case {
                 json!(["issuer_disclosure"])
+            } else if stock_action_case {
+                json!(["us_equity"])
             } else {
                 json!(["cn_equity", "us_equity"])
             },
@@ -847,7 +1020,7 @@ async fn book_financial_practices_require_equity_evidence_and_reject_crypto() {
         assert_eq!(concept["plan"]["modules"], json!(["data"]), "{id}");
         assert_eq!(
             concept["plan"]["source_policy"],
-            if filing_case || industry_case {
+            if filing_case || industry_case || stock_action_case {
                 "real_required"
             } else {
                 "evidence_required"
@@ -880,8 +1053,17 @@ async fn book_financial_practices_require_equity_evidence_and_reject_crypto() {
         .unwrap();
     assert_eq!(
         action["plan"]["required_datasets"],
-        json!(["dated_corporate_actions", "raw_market_price"])
+        json!([
+            "dated_corporate_actions",
+            "provider_quote",
+            "provider_adjusted_close"
+        ])
     );
+    assert_eq!(action["input_kind"], "stock_action_case");
+    assert_eq!(action["category"], "公司行动");
+    assert_eq!(action["inputs"], json!([]));
+    assert_eq!(action["plan"]["fixed_source"], "us_stock");
+    assert_eq!(action["plan"]["fixed_symbol"], "AAPL");
     let share_count = document["concepts"]
         .as_array()
         .unwrap()

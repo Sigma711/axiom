@@ -35,4 +35,11 @@ describe('ExecutionAssumptionsVisual', () => {
       expect(html).toContain('不代表含分红再投资的总回报');
     }
   });
+  it('distinguishes an observed split event from portfolio accounting', () => {
+    const html = renderToStaticMarkup(<ExecutionAssumptionsVisual provenance={{ provider: 'yahoo', endpoint: 'https://query1.finance.yahoo.com/v8/finance/chart/AAPL', price_basis: 'provider_quote_and_adjusted_close_semantics_unverified', corporate_actions: 'dated_split_event_observed' }} />);
+    expect(html).toContain('供应商报价与调整收盘价，口径未独立核验');
+    expect(html).toContain('已观察到有日期的拆股事件');
+    expect(html).toContain('持仓与现金尚未按公司行动记账');
+    expect(html).not.toContain('>dated_split_event_observed<');
+  });
 });

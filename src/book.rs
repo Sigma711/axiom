@@ -163,20 +163,21 @@ pub fn entries() -> Vec<KnowledgeEntry> {
         })
         .collect();
     for (id, name, formula) in EXTRA {
+        let adjustment = *id == "book_adjustment";
         out.push(KnowledgeEntry {
             id: (*id).into(),
-            summary: format!("{}：使用透明教学输入计算。", name),
-            example: "示例输入由实践面板提供；结果只反映输入，不声称来自当前币价。".into(),
+            summary: if adjustment { "Apple 2020 年 8 月 31 日实施 4:1 拆股：每 1 股变为 4 股；比较拆股前后价格时先确认复权口径。".into() } else { format!("{}：使用透明教学输入计算。", name) },
+            example: if adjustment { "在数据探索中查看 Apple 官方公告，以及供应商返回的拆股日期、比例、报价和调整收盘价；4:1 拆股对应的价格乘数为 1/4。".into() } else { "示例输入由实践面板提供；结果只反映输入，不声称来自当前币价。".into() },
             related: vec![],
-            code_url: "https://github.com/Sigma711/axiom/blob/main/src/book.rs".into(),
-            code_ref: "src/book.rs::evaluate".into(),
-            category: "原书行情与财务实践".into(),
+            code_url: if adjustment { "https://github.com/Sigma711/axiom/blob/main/src/api.rs".into() } else { "https://github.com/Sigma711/axiom/blob/main/src/book.rs".into() },
+            code_ref: if adjustment { "src/api.rs::post_practice::book_adjustment".into() } else { "src/book.rs::evaluate".into() },
+            category: if adjustment { "公司行动".into() } else { "原书行情与财务实践".into() },
             name: (*name).into(),
-            formula: (*formula).into(),
-            meaning: "需要外部披露、盘口或报告期数据时，调用方必须提供来源与同一时点口径。".into(),
+            formula: if adjustment { "拆股价格乘数=旧股数/新股数；4:1 拆股的乘数为 1/4。".into() } else { (*formula).into() },
+            meaning: if adjustment { "拆股改变每股计价和股数，不直接改变持有人的总权益；历史行情还要区分供应商报价与调整收盘价的具体口径。".into() } else { "需要外部披露、盘口或报告期数据时，调用方必须提供来源与同一时点口径。".into() },
             signals: "作为可复算描述，不构成交易建议。".into(),
-            pitfalls: "缺失输入、零分母或混合报告期会导致无定义。".into(),
-            implementation: "src/book.rs::evaluate".into(),
+            pitfalls: if adjustment { "不能仅用报价与调整收盘价的比值反推拆股比例；分红及供应商复权规则会改变这个比值。".into() } else { "缺失输入、零分母或混合报告期会导致无定义。".into() },
+            implementation: if adjustment { "src/api.rs::post_practice::book_adjustment".into() } else { "src/book.rs::evaluate".into() },
             diagram: None,
         });
     }
@@ -562,10 +563,7 @@ fn extra_inputs(id: &str) -> Option<Vec<(&'static str, &'static str, f64)>> {
         "book_order_imbalance" => vec![],
         "book_order_flow" => vec![],
         "book_period" => vec![],
-        "book_adjustment" => vec![
-            ("raw_price", "原始价格（元）", 10.),
-            ("adjustment_factor", "复权因子", 1.2),
-        ],
+        "book_adjustment" => vec![],
         "book_log_return" => vec![],
         "book_nonstandard_bar" => vec![],
         "book_dcf" => vec![
@@ -887,6 +885,7 @@ pub fn catalog() -> Vec<crate::practice::PracticeConcept> {
         })
         .collect();
     for (id, name, formula) in EXTRA {
+        let adjustment = *id == "book_adjustment";
         let market_bars = matches!(
             *id,
             "book_log_return"
@@ -908,14 +907,18 @@ pub fn catalog() -> Vec<crate::practice::PracticeConcept> {
         out.push(crate::practice::PracticeConcept {
             id: (*id).into(),
             name: (*name).into(),
-            category: "原书教学输入".into(),
-            input_kind: if market_bars {
+            category: if adjustment { "公司行动".into() } else { "原书教学输入".into() },
+            input_kind: if adjustment {
+                "stock_action_case".into()
+            } else if market_bars {
                 "market_bars".into()
             } else {
                 "independent_inputs".into()
             },
-            inputs: fs,
-            notes: if *id == "book_52w_range" {
+            inputs: if adjustment { vec![] } else { fs },
+            notes: if adjustment {
+                "固定 AAPL 2020-08-31 4:1 拆股历史案例；服务器重新取得 Yahoo 的 dated split event、provider quote 与 provider adjusted close。后两者口径按供应商原样披露，未经独立核验为原始成交价或含分红再投资总回报。".into()
+            } else if *id == "book_52w_range" {
                 "只使用服务器取得的A股或美股已收盘日线，以实际最后交易日为截止取前364自然日；要求至少180根窗口内观测和窗口之前的历史锚点，不把252根或不足一年历史冒称52周。提供者OHLC复权口径与交易日完整性未独立核验。".into()
             } else if *id == "book_order_flow" {
                 "只使用 Binance USDT 现货最近24根连续已收盘1小时K线；服务器直接读取字段5、7、9、10计算主动买卖成交量、成交额及差额。这是 Binance taker 主动买卖分类，非A股内外盘或资本净流入；不接受手填或客户端K线。".into()
@@ -1982,7 +1985,9 @@ pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String>
             return Err("订单流必须由 API 使用 Binance 已收盘现货K线的主动成交字段计算".into())
         }
         "book_period" => return Err("K线周期必须由 API 根据已验证真实来源和已收盘K线计算".into()),
-        "book_adjustment" => n("raw_price")? * n("adjustment_factor")?,
+        "book_adjustment" => {
+            return Err("拆股与复权案例必须由 API 取得具名公司行动和历史行情证据".into())
+        }
         "book_log_return" => {
             let bars = log_return_bars(bars)?;
             (bars[bars.len() - 1].close / bars[bars.len() - 2].close).ln()

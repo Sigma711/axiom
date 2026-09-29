@@ -86,6 +86,19 @@ assert filing["filing_case"]["sha256"] == "43e7f0730b3cce0fc37301a2f43c29712bbde
 assert filing["filing_case"]["verification"]["matched_bytes"] == 4919649
 print("Apple official historical filing", "verified", flush=True)
 
+adjustment_request = urllib.request.Request(base + "/api/practice", data=json.dumps({
+    "concept_id": "book_adjustment", "module": "data", "source": "us_stock", "symbol": "AAPL", "inputs": {}
+}).encode(), headers={"Content-Type": "application/json"}, method="POST")
+with urllib.request.urlopen(adjustment_request, timeout=90) as response:
+    adjustment = json.load(response)
+assert adjustment["provenance"] == "server_fetched_stock_corporate_action"
+assert adjustment["values"]["new_shares_per_old_share"] == 4
+assert adjustment["values"]["split_only_price_multiplier"] == 0.25
+assert adjustment["adjustment_evidence"]["provider"] == "yahoo"
+assert adjustment["adjustment_evidence"]["event"]["effective_trading_date"] == "2020-08-31"
+assert len(adjustment["adjustment_evidence"]["observations"]) >= 2
+print("AAPL historical split event and provider observations", "verified", flush=True)
+
 # Verify each issuer can actually be retrieved by the production host. These
 # expected values are transcribed from the original disclosure pages.
 industry_cases = (

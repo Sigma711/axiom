@@ -1147,11 +1147,11 @@
         "sha256": "10530b8314c4dc49f9737b938f28ead7a70212885c35919fb361d145401f37fb",
         "source_kind": "issuer_official_annual_report_pdf",
         "status": "年度报告管理层运营指标；财务报表审计不等于GMV与Take Rate获得审计保证。",
-        "url": "https://investors.ebayinc.com/files/doc_financials/2024/q4/eBay-10-K-2024.pdf",
+        "url": "https://ebay.q4cdn.com/610426115/files/doc_financials/2024/q4/eBay-10-K-2024.pdf",
         "verification": {
           "matched_bytes": 1004020,
           "matched_sha256": "10530b8314c4dc49f9737b938f28ead7a70212885c35919fb361d145401f37fb",
-          "requested_url": "https://investors.ebayinc.com/files/doc_financials/2024/q4/eBay-10-K-2024.pdf",
+          "requested_url": "https://ebay.q4cdn.com/610426115/files/doc_financials/2024/q4/eBay-10-K-2024.pdf",
           "status": "verified_immutable_cache",
           "verified_at": "2026-09-28T18:39:40.896397514Z"
         }

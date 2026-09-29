@@ -1,0 +1,16 @@
+.ax-stock-adjustment { margin: 1rem 0; padding: clamp(1rem, 2.5vw, 1.6rem); border: 1px solid var(--border-soft); border-radius: 16px; background: var(--bg-elev); color: var(--text); }
+.ax-stock-adjustment figcaption { display: flex; flex-wrap: wrap; align-items: baseline; gap: .45rem 1rem; margin-bottom: 1rem; }
+.ax-stock-adjustment figcaption strong { font-size: 1.15rem; }
+.ax-stock-adjustment figcaption span { color: var(--text-dim); font-size: .86rem; }
+.ax-stock-adjustment-flow { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); align-items: center; gap: 1rem; padding: 1.2rem; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-soft); text-align: center; }
+.ax-stock-adjustment-flow > div { min-width: 0; }
+.ax-stock-adjustment-flow p { margin: .55rem 0 0; color: var(--text-dim); font-size: .84rem; }
+.ax-stock-share { display: inline-block; width: 2.1rem; height: 2.1rem; border: 2px solid var(--accent); border-radius: 9px; background: color-mix(in srgb, var(--accent) 16%, transparent); transform: rotate(-6deg); }
+.ax-stock-shares { display: flex; justify-content: center; flex-wrap: wrap; gap: .35rem; }
+.ax-stock-adjustment-arrow { color: var(--accent); font-size: 1.6rem; font-weight: 700; }
+.ax-stock-adjustment > p { margin: 1rem 0; line-height: 1.65; }
+.ax-stock-adjustment details { border-top: 1px solid var(--border-soft); padding-top: .8rem; }
+.ax-stock-adjustment summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+.ax-stock-adjustment details p { color: var(--text-dim); line-height: 1.6; }
+.ax-stock-adjustment a { display: inline-block; margin-right: 1rem; color: var(--accent-2); overflow-wrap: anywhere; }
+@media (max-width: 540px) { .ax-stock-adjustment-flow { gap: .5rem; padding: .8rem .35rem; } .ax-stock-share { width: 1.55rem; height: 1.55rem; } }

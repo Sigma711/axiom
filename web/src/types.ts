@@ -119,7 +119,7 @@ export interface PracticeConcept {
   id: string;
   name: string;
   category: string;
-  input_kind: 'market_bars' | 'independent_inputs' | 'manual_annotation' | 'filing_case' | 'industry_case';
+  input_kind: 'market_bars' | 'independent_inputs' | 'manual_annotation' | 'filing_case' | 'industry_case' | 'stock_action_case';
   inputs: Array<{ key: string; label: string; default: unknown }>;
   notes: string;
   plan?: {
@@ -128,7 +128,7 @@ export interface PracticeConcept {
     required_datasets: string[];
     source_policy: 'real_required' | 'result_required' | 'evidence_required';
     goal: string;
-    fixed_source?: 'issuer_disclosure';
+    fixed_source?: 'issuer_disclosure' | 'us_stock';
     fixed_symbol?: string;
   };
 }
@@ -138,7 +138,13 @@ export interface PracticeResult {
   status: 'computed' | 'partial' | 'undefined' | 'insufficient_data';
   reason: string | null;
   input_kind: PracticeConcept['input_kind'];
-  provenance: 'provided_market_bars' | 'provided_result_context' | 'editable_teaching_inputs' | 'server_fetched_provisional_snapshot' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_spot_order_book' | 'server_fetched_completed_stock_daily_bars' | 'server_fetched_binance_recent_trades' | 'server_fetched_bitcoin_block_snapshot' | 'server_fetched_bitcoin_transaction_sample' | 'server_fetched_bitcoin_transaction_first_page' | 'verified_issuer_filing_case' | 'verified_original_issuer_disclosure';
+  provenance: 'provided_market_bars' | 'provided_result_context' | 'editable_teaching_inputs' | 'server_fetched_provisional_snapshot' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_spot_order_book' | 'server_fetched_completed_stock_daily_bars' | 'server_fetched_binance_recent_trades' | 'server_fetched_bitcoin_block_snapshot' | 'server_fetched_bitcoin_transaction_sample' | 'server_fetched_bitcoin_transaction_first_page' | 'verified_issuer_filing_case' | 'verified_original_issuer_disclosure' | 'server_fetched_stock_corporate_action';
+  adjustment_evidence?: {
+    provider: string; endpoint: string; fetched_at: string; scope: string; issuer_confirmation_url?: string; issuer_confirmation?: string;
+    event: { kind: 'split'; effective_at: string; effective_trading_date: string; numerator: number; denominator: number; split_ratio: string };
+    observations: Array<Bar & { adjusted_close: number }>;
+    quote_basis: string; adjusted_close_basis: string; calculation: string;
+  };
   filing_case?: {
     case_id: string; issuer: string; ticker: string; scope: string;
     period: { start: string; end: string; fiscal_year: number };
@@ -207,7 +213,7 @@ export interface PracticeResult {
   levels?: { bids: Array<{ price: number; quantity: number }>; asks: Array<{ price: number; quantity: number }> };
   depth_snapshot?: { source: string; endpoint: string; symbol: string; depth_limit: number; update_id: number; timestamp: null; timestamp_note: string };
   provisional_snapshot?: { candle: Bar; is_closed: false; fetched_at: string; expected_close_at: string; completion_evidence: string };
-  context?: 'module_snapshot' | 'selected_dataset' | 'editable_teaching_inputs' | 'provided_result_context' | 'historical_filing_case' | 'historical_industry_disclosure';
+  context?: 'module_snapshot' | 'selected_dataset' | 'editable_teaching_inputs' | 'provided_result_context' | 'historical_filing_case' | 'historical_industry_disclosure' | 'historical_corporate_action';
   bar_origin?: 'server_fetched_completed_source_bars' | 'server_fetched_completed_binance_usdt_spot_bars' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_provisional_snapshot' | 'server_verified_issuer_filing_pdf';
   execution_assumptions?: ExecutionAssumption[];
   market_provenance?: MarketProvenance;

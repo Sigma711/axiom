@@ -2,6 +2,58 @@ import { createHash } from 'node:crypto';
 import { expect, test } from './v8-coverage';
 import type { Locator, Page } from '@playwright/test';
 
+test('Apple split practice independently matches the issuer announcement and live provider event', async ({ page, request }) => {
+  test.setTimeout(120_000);
+  const issuerUrl = 'https://www.apple.com/newsroom/2020/07/apple-reports-third-quarter-results/';
+  const issuerResponse = await request.get(issuerUrl, { timeout: 25_000 });
+  expect(issuerResponse.ok()).toBe(true);
+  const issuerText = await issuerResponse.text();
+  expect(issuerText).toMatch(/four-for-one stock split/i);
+  expect(issuerText).toMatch(/August 31, 2020/i);
+
+  const providerUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/AAPL?period1=1595808000&period2=1601510400&interval=1d&includePrePost=false&events=div%2Csplits';
+  const upstreamResponse = await request.get(providerUrl, { headers: { 'user-agent': 'AXIOM educational market reader/1.0' }, timeout: 25_000 });
+  expect(upstreamResponse.ok()).toBe(true);
+  const upstream = (await upstreamResponse.json()).chart.result[0];
+  const event = Object.values(upstream.events.splits).find((item: any) => item.date === 1598880600) as { date: number; numerator: number; denominator: number; splitRatio: string } | undefined;
+  expect(event).toMatchObject({ numerator: 4, denominator: 1, splitRatio: '4:1' });
+
+  await page.goto('/learn');
+  await page.getByRole('textbox', { name: '搜索 概念 / 公式 / 关键词' }).fill('book_adjustment');
+  const card = page.locator('.ax-kb-card[data-concept-id="book_adjustment"]');
+  await expect(card).toHaveCount(1);
+  await card.getByRole('button', { name: '在数据探索中实践' }).click();
+  await expect(page).toHaveURL(/\/data\?concept=book_adjustment&source=us_stock$/);
+  const panel = page.getByLabel('概念实践');
+  await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+  const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  const response = await responsePromise;
+  expect(response.ok(), await response.text()).toBe(true);
+  const result = await response.json();
+  expect(result).toMatchObject({ concept_id: 'book_adjustment', input_kind: 'stock_action_case', provenance: 'server_fetched_stock_corporate_action', source: 'us_stock', symbol: 'AAPL', values: { new_shares_per_old_share: 4, split_only_price_multiplier: .25 } });
+  expect(result.adjustment_evidence.event).toMatchObject({ effective_trading_date: '2020-08-31', numerator: event!.numerator, denominator: event!.denominator, split_ratio: event!.splitRatio });
+  const first = result.adjustment_evidence.observations[0];
+  const index = upstream.timestamp.indexOf(Date.parse(first.timestamp) / 1000);
+  expect(index).toBeGreaterThanOrEqual(0);
+  expect(first.close).toBeCloseTo(upstream.indicators.quote[0].close[index], 10);
+  // Yahoo recalculates adjusted-close floats between otherwise identical live requests.
+  expect(Math.abs(first.adjusted_close - upstream.indicators.adjclose[0].adjclose[index])).toBeLessThan(0.001);
+  const visual = panel.getByRole('figure', { name: '苹果公司历史拆股示意' });
+  await expect(visual).toContainText('一股变四股');
+  await expect(visual).toContainText('不是收益');
+  await visual.getByText('核对事件与行情来源').click();
+  await expect(visual.getByRole('link', { name: 'Apple 官方拆股公告 ↗' })).toHaveAttribute('href', issuerUrl);
+  await expect(visual.getByRole('link', { name: '查看行情接口 ↗' })).toHaveAttribute('href', new RegExp('query1\\.finance\\.yahoo\\.com'));
+  await visual.screenshot({ path: test.info().outputPath('stock-adjustment-real-dark.png') });
+  await page.getByLabel('切换到浅色模式').click();
+  await expect(visual).toBeVisible();
+  await visual.screenshot({ path: test.info().outputPath('stock-adjustment-real-light.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await visual.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await visual.screenshot({ path: test.info().outputPath('stock-adjustment-real-mobile.png') });
+});
+
 async function assertExecutionDisclosure(page: Page, payload: any) {
   const disclosure = page.getByLabel('成交与价格口径').first();
   await expect(disclosure).toBeVisible();
@@ -57,7 +109,7 @@ test('every historical industry case follows its verified original disclosure fr
     { symbol: '2318.HK', url: 'https://pagroup.pingan.com/resource/pingan/IR-Docs/2025/pingan-ar24-report.pdf', bytes: 14_886_158, hash: '62a5bd793ef9a787cc95750d65e52803aa58fa424b01d94e754ea0120d5be8a3' },
     { symbol: 'SHOP', url: 'https://s27.q4cdn.com/572064924/files/doc_financials/2024/q4/Q4-2024-Press-Release-Final.pdf', bytes: 86_468, hash: '4bf71232697a2270b2dbc38fc9609c11c27d545d6f4301fce3356fa60c6ef6de' },
     { symbol: 'O', url: 'https://www.realtyincome.com/sites/realty-income/files/2025-02/realty-income-q4-2024-supplemental-information.pdf', bytes: 17_522_920, hash: 'a0b3bf067c7b19ebde01ceaac3ecb172ed6a4c7084eeabe276ad1d4599c62a3f' },
-    { symbol: 'EBAY', url: 'https://investors.ebayinc.com/files/doc_financials/2024/q4/eBay-10-K-2024.pdf', bytes: 1_004_020, hash: '10530b8314c4dc49f9737b938f28ead7a70212885c35919fb361d145401f37fb' },
+    { symbol: 'EBAY', url: 'https://ebay.q4cdn.com/610426115/files/doc_financials/2024/q4/eBay-10-K-2024.pdf', bytes: 1_004_020, hash: '10530b8314c4dc49f9737b938f28ead7a70212885c35919fb361d145401f37fb' },
   ];
   for (const source of sources) {
     const response = await request.get(source.url, { timeout: 60_000 });

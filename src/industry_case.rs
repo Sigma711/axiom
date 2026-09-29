@@ -23,7 +23,7 @@ pub const REALTY_INCOME_SHA256: &str =
     "a0b3bf067c7b19ebde01ceaac3ecb172ed6a4c7084eeabe276ad1d4599c62a3f";
 pub const REALTY_INCOME_BYTES: usize = 17_522_920;
 pub const EBAY_URL: &str =
-    "https://investors.ebayinc.com/files/doc_financials/2024/q4/eBay-10-K-2024.pdf";
+    "https://ebay.q4cdn.com/610426115/files/doc_financials/2024/q4/eBay-10-K-2024.pdf";
 pub const EBAY_SHA256: &str = "10530b8314c4dc49f9737b938f28ead7a70212885c35919fb361d145401f37fb";
 pub const EBAY_BYTES: usize = 1_004_020;
 

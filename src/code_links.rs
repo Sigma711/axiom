@@ -169,6 +169,9 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
                     "book_nonstandard_bar" => {
                         vec!["src/book.rs::nonstandard_bar_ohlc4".to_string()]
                     }
+                    "book_adjustment" => {
+                        vec!["src/api.rs::post_practice::book_adjustment".to_string()]
+                    }
                     "book_period" => vec!["src/book.rs::market_period_summary".to_string()],
                     "book_trade_volume" => {
                         vec!["src/book.rs::market_trade_volume_summary".to_string()]

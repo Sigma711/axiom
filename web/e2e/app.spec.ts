@@ -33,6 +33,43 @@ async function mockApi(page: Page) {
 
 test.beforeEach(async ({ page }) => { await mockApi(page); });
 
+test('historical split practice uses the fixed stock source and shows a readable split diagram in both themes', async ({ page }) => {
+  const concept = { id: 'book_adjustment', name: '复权价格', category: '原书财务计算', input_kind: 'stock_action_case', inputs: [], notes: '历史拆股只演示事件比例。', plan: { markets: ['us_equity'], modules: ['data'], required_datasets: ['dated_corporate_actions', 'provider_quote_and_adjusted_close'], source_policy: 'real_required', fixed_source: 'us_stock', fixed_symbol: 'AAPL', goal: '使用有日期的历史拆股事件。' } };
+  await page.route('**/api/practice', route => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: { concepts: [concept], total: 1, modules: ['data'] } });
+    expect(route.request().postDataJSON()).toEqual({ concept_id: 'book_adjustment', module: 'data', symbol: 'AAPL', source: 'us_stock', inputs: {} });
+    return route.fulfill({ json: {
+      concept_id: 'book_adjustment', status: 'computed', reason: null, input_kind: 'stock_action_case', provenance: 'server_fetched_stock_corporate_action',
+      module: 'data', source: 'us_stock', symbol: 'AAPL', values: { new_shares_per_old_share: 4, old_shares_per_new_share: .25, split_only_price_multiplier: .25 },
+      units: {}, series: [], bars: [], notes: [], adjustment_evidence: {
+        provider: 'yahoo', endpoint: 'https://query1.finance.yahoo.com/v8/finance/chart/AAPL', fetched_at: '2026-09-30T00:00:00Z', scope: 'aapl_2020_4_for_1_split_historical_window', issuer_confirmation_url: 'https://www.apple.com/newsroom/2020/07/apple-reports-third-quarter-results/',
+        event: { kind: 'split', effective_at: '2020-08-31T13:30:00Z', effective_trading_date: '2020-08-31', numerator: 4, denominator: 1, split_ratio: '4:1' },
+        observations: [{ timestamp: '2020-08-28T00:00:00Z', open: 125, high: 126, low: 124, close: 125, volume: 1, adjusted_close: 122 }],
+        quote_basis: 'provider_quote_semantics_unverified_for_split_adjustment', adjusted_close_basis: 'provider_adjusted_close_semantics_unverified_for_total_return', calculation: 'split_only_price_multiplier = denominator / numerator',
+      },
+    } });
+  });
+  await page.goto('/data?concept=book_adjustment&source=us_stock');
+  const panel = page.getByLabel('概念实践');
+  await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  const visual = panel.getByRole('figure', { name: '苹果公司历史拆股示意' });
+  await expect(visual).toBeVisible();
+  await expect(visual).toContainText('一股变四股');
+  await expect(visual).toContainText('长期复权口径未经独立核验');
+  await visual.getByText('核对事件与行情来源').click();
+  await expect(visual.getByRole('link', { name: '查看行情接口 ↗' })).toHaveAttribute('href', 'https://query1.finance.yahoo.com/v8/finance/chart/AAPL');
+  await expect(visual.getByRole('link', { name: 'Apple 官方拆股公告 ↗' })).toHaveAttribute('href', 'https://www.apple.com/newsroom/2020/07/apple-reports-third-quarter-results/');
+  await expect(visual).toHaveScreenshot('stock-adjustment-dark.png');
+  await page.getByLabel('切换到浅色模式').click();
+  await expect(visual).toBeVisible();
+  await expect(visual).toHaveScreenshot('stock-adjustment-light.png');
+  expect(await visual.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await visual.evaluate(node => node.getBoundingClientRect().right <= window.innerWidth)).toBe(true);
+  await expect(visual).toHaveScreenshot('stock-adjustment-mobile.png');
+});
+
 test('industry disclosure figures explain every metric with its actual issuer units and original pages', async ({ page }) => {
   const recording = JSON.parse(await readFile('e2e/fixtures/industry-cases.json', 'utf8'));
   const expected = [
