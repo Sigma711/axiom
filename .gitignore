@@ -49,3 +49,7 @@ htmlcov/
 
 # Persisted live symbol directories
 /data/symbols/
+
+# Verified runtime copies of issuer source documents
+/data/industry-sources/
+/data/filing-sources/
