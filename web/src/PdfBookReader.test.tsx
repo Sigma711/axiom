@@ -51,9 +51,15 @@ describe('PDF book public behavior', () => {
   it('configures the bundled worker and opens only the requested same-origin URL', async () => {
     const pdf = documentFixture();
     const worker = { workerSrc: '' };
-    const getDocument = vi.fn(() => ({ promise: Promise.resolve(pdf) }));
+    const destroy = vi.fn(async () => undefined);
+    const getDocument = vi.fn(() => ({ promise: Promise.resolve(pdf), destroy }));
     const load = createPdfBookLoader(async () => ({ GlobalWorkerOptions: worker, getDocument }));
-    await expect(load('/api/book/pdf')).resolves.toBe(pdf);
+    const loaded = await load('/api/book/pdf');
+    expect(loaded.numPages).toBe(pdf.numPages);
+    expect(await loaded.getOutline()).toEqual(await pdf.getOutline());
+    await loaded.destroy();
+    expect(destroy).toHaveBeenCalledOnce();
+    expect(pdf.destroy).not.toHaveBeenCalled();
     expect(getDocument).toHaveBeenCalledWith({ url: '/api/book/pdf' });
     expect(worker.workerSrc).toMatch(/pdf\.worker\.min\.mjs/);
   });

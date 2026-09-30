@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { expect, test } from './v8-coverage';
 import type { Locator, Page } from '@playwright/test';
 
@@ -1975,9 +1977,17 @@ test('Moutai free float independently reconciles issuer holders, CSI methodology
   ];
   const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
   for (const document of documents) {
-    const response = await request.get(document.url, { timeout: 60_000 });
-    expect(response.ok()).toBe(true);
-    const bytes = await response.body();
+    let bytes: Buffer;
+    try {
+      const response = await request.get(document.url, { timeout: 60_000 });
+      expect(response.ok()).toBe(true);
+      bytes = await response.body();
+    } catch (error) {
+      if (!/ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|socket hang up/i.test(String(error))) throw error;
+      // CI runners can be refused by the official host. The pinned original
+      // still has to pass the byte count, SHA-256 and PDF fact checks below.
+      bytes = await readFile(resolve(process.cwd(), '..', 'data', 'verified-sources', `${document.sha}.pdf`));
+    }
     expect(bytes).toHaveLength(document.bytes);
     expect(createHash('sha256').update(bytes).digest('hex')).toBe(document.sha);
     const task = getDocument({ data: new Uint8Array(bytes), useSystemFonts: true });

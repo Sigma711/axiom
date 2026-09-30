@@ -22,14 +22,23 @@ export type PdfBookLoader = (url: string) => Promise<PdfBookDocument>;
 
 type PdfJsModule = {
   GlobalWorkerOptions: { workerSrc: string };
-  getDocument(options: { url: string }): { promise: Promise<unknown> };
+  getDocument(options: { url: string }): { promise: Promise<unknown>; destroy(): Promise<void> };
 };
 
 export function createPdfBookLoader(importPdf: () => Promise<PdfJsModule> = () => import('pdfjs-dist')): PdfBookLoader {
   return async url => {
     const pdfjs = await importPdf();
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
-  return await pdfjs.getDocument({ url }).promise as unknown as PdfBookDocument;
+    pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+    const task = pdfjs.getDocument({ url });
+    const pdf = await task.promise as Omit<PdfBookDocument, 'destroy'>;
+    return {
+      numPages: pdf.numPages,
+      getOutline: () => pdf.getOutline(),
+      getDestination: name => pdf.getDestination(name),
+      getPageIndex: reference => pdf.getPageIndex(reference),
+      getPage: pageNumber => pdf.getPage(pageNumber),
+      destroy: () => task.destroy(),
+    };
   };
 }
 

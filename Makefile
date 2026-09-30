@@ -42,6 +42,8 @@ run-debug: build-debug build-web
 serve: build
 	AXIOM_PORT=$(AXIOM_PORT) cargo run --release --locked
 serve-test:
+	mkdir -p target/e2e-data/a-share-float-sources
+	cp data/verified-sources/*.pdf target/e2e-data/a-share-float-sources/
 	AXIOM_PORT=18080 AXIOM_OFFLINE=0 AXIOM_DATA_DIR=target/e2e-data cargo run --locked
 dev:
 	cd web && $(NPM) run dev -- --host 127.0.0.1
