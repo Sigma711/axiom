@@ -26,8 +26,10 @@
 //! - Broker 是 seam:回测/模拟盘/实盘共用同一接口
 //! - 任何模块都可以被替换,只要保持接口不变
 
+pub mod a_share_float;
 pub mod broker;
 pub mod config;
+pub mod corporate_actions;
 pub mod data;
 pub mod engine;
 pub mod execution;

@@ -141,6 +141,8 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
                 vec!["src/book.rs::market_formula_variant_summary".to_string()]
             } else if c.id == "book_pitfall_timeframe" {
                 vec!["src/book.rs::market_timeframe_summary".to_string()]
+            } else if c.id == "book_pitfall_adjustment" {
+                vec!["src/api.rs::post_practice::book_adjustment".to_string()]
             } else {
                 vec![
                     format!("src/book_technical/market.rs::evaluate::{id}"),
@@ -161,6 +163,10 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
                 vec![format!("src/industry_case.rs::calculate::{}", c.id)]
             } else if crate::filing_case::is_supported(&c.id) {
                 vec![format!("src/filing_case.rs::metric::{}", c.id)]
+            } else if c.id == "book_free_float" {
+                vec!["src/a_share_float.rs::free_float_ratio".to_string()]
+            } else if c.id == "book_float_market_cap" {
+                vec!["src/a_share_float.rs::circulating_market_cap".to_string()]
             } else {
                 match c.id.as_str() {
                     "book_order_imbalance" => {

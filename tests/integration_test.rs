@@ -341,6 +341,8 @@ fn test_trade_pnl_calculation() {
         size,
         entry_commission: 0.05,
         exit_commission: 0.06,
+        entry_tax: 0.0,
+        exit_tax: 0.0,
     };
     let pnl = trade.pnl();
     assert!((pnl - ((exit - entry) * size - 0.11)).abs() < 1e-9);

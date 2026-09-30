@@ -102,8 +102,8 @@ book_ev_sales,EV/Sales,原书财务计算,2_company_disclosure,cn_equity|us_equi
 book_factor_score,因子分数,原书补充·技术实践,shared_market_result,crypto|cn_equity|us_equity,data,documented_input_or_market_snapshot,evidence_required,,,
 book_fcf,自由现金流,原书教学输入,2_company_disclosure,us_equity,data,server_fetched_verified_issuer_filing_pdf|embedded_checked_filing_facts,real_required,,,
 book_fcf_yield,自由现金流收益率,原书财务计算,2_company_disclosure,cn_equity|us_equity,data,point_in_time_filing|market_price,evidence_required,,,
-book_float_market_cap,流通市值,原书教学输入,1_stock_history_execution,cn_equity|us_equity,data,dated_share_register|market_price,evidence_required,,,
-book_free_float,自由流通比例,原书教学输入,1_stock_history_execution,cn_equity|us_equity,data,dated_share_register|market_price,evidence_required,,,
+book_float_market_cap,流通市值,发行人历史披露,1_stock_history_execution,issuer_disclosure,data,dated_unrestricted_shares|same_date_unadjusted_close|verified_issuer_pdf,real_required,2025-12-31 贵州茅台 600519 年报 https://static.cninfo.com.cn/finalpage/2026-04-17/1225114741.PDF 和腾讯未复权历史行情 https://web.ifzq.gtimg.cn/appstock/app/kline/kline?param=sh600519%2Cday%2C2025-12-31%2C2025-12-31%2C1,1252270215 股 × 1377.18 元 = 1724601494693.70 元; tests/a_share_float_api_test.rs 与 web/e2e/real.spec.ts 独立核对,真实浏览器直接核对三份原始 PDF 与同日行情; 深浅色及窄屏截图
+book_free_float,自由流通比例,发行人历史披露,1_stock_history_execution,issuer_disclosure,data,dated_unrestricted_shares|holder_relationship|official_index_methodology,real_required,2025-12-31 贵州茅台年报及一致行动关系公告 https://static.cninfo.com.cn/finalpage/2025-12-30/1224906220.PDF 与中证方法 https://oss-ch.csindex.com.cn/static/html/csindex/public/uploads/indices/detail/files/zh_CN/000300_Index_Methodology_cn.pdf,1252270215 - 681282935 - 27849688 = 543137592 股; 比例 543137592/1252270215; 透明复算不冒充中证发布数据,真实浏览器原文指纹及计算核对; 深浅色及窄屏截图
 book_funding,Funding rate: a guide to market sentiment,衍生品与链上,4_derivatives_chain_history,crypto,data,timestamped_derivatives_or_blockchain_observations,evidence_required,,,
 book_gann_angle,甘氏线与甘氏角度,原书补充·技术实践,shared_market_result,crypto|cn_equity|us_equity,data,documented_input_or_market_snapshot,evidence_required,,,
 book_gas_limit,Mean / Median transaction gas limit,衍生品与链上,4_derivatives_chain_history,crypto,data,timestamped_derivatives_or_blockchain_observations,evidence_required,,,
@@ -173,7 +173,7 @@ book_percent_above_ma,成分股站上 MA50/MA200 比例,原书补充·技术实�
 book_performance,Performance,原书补充·技术实践,shared_market_result,crypto|cn_equity|us_equity,data|backtest|compare,completed_ohlcv,real_required,,,
 book_period,K线周期,原书教学输入,shared_market_result,crypto|cn_equity|us_equity,data,completed_ohlcv_with_source_cadence,real_required,,,
 book_pitchfork,Auto Pitchfork,原书补充·技术实践,shared_market_result,crypto|cn_equity|us_equity,data,documented_input_or_market_snapshot,evidence_required,,,
-book_pitfall_adjustment,不复权价格会制造虚假跳空,原书补充·技术实践,1_stock_history_execution,crypto|cn_equity|us_equity,data,documented_input_or_market_snapshot,evidence_required,,,
+book_pitfall_adjustment,不复权价格会制造虚假跳空,原书补充·技术实践,1_stock_history_execution,us_equity,data,dated_corporate_actions|provider_quote|provider_adjusted_close,real_required,Apple 2020-08-31 拆股官方公告 https://www.apple.com/newsroom/2020/07/apple-reports-third-quarter-results/ 和 Yahoo 历史具名拆股事件,4:1 事件直接给出拆股价格乘数 1/4; 供应商报价口径未据此冒充原始成交价或已核验总回报,与 book_adjustment 共用真实浏览器原文和提供者核对; 本概念另测入口与无手填输入
 book_pitfall_formula_variant,数据供应商公式可能不同,原书补充·技术实践,shared_market_result,crypto|cn_equity|us_equity,data,server_fetched_completed_ohlcv_with_source_cadence,real_required,,,
 book_pitfall_open_candle,未收盘 K 线会变化,原书补充·技术实践,shared_market_result,crypto,data,server_fetched_binance_active_1h_snapshot|last_completed_binance_1h_bar,real_required,,,
 book_pitfall_order_imbalance,委比高不代表必涨,原书补充·技术实践,shared_market_result,crypto,data,server_fetched_binance_usdt_spot_depth_snapshot,real_required,,,

@@ -87,9 +87,12 @@ export function fmtNum(v: number | null | undefined, d = 2): string {
   if (v == null) return '—';
   return Number(v).toFixed(d);
 }
-export function fmtMoney(v: number | null | undefined): string {
+export function fmtMoney(v: number | null | undefined, source: SourceType = 'us_stock'): string {
   if (v == null) return '—';
-  return '$' + Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const amount = Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  if (source === 'a_share') return `¥${amount}`;
+  if (source === 'binance') return `${amount} USDT`;
+  return `$${amount}`;
 }
 export function fmtPctSigned(v: number, d = 2): string {
   return (v * 100 >= 0 ? '+' : '') + (v * 100).toFixed(d) + '%';

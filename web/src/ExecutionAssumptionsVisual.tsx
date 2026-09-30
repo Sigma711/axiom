@@ -39,7 +39,7 @@ export function ExecutionAssumptionsVisual({ assumptions = [], provenance, label
     <summary>{label} <span>查看模拟规则和数据来源</span></summary>
     {provenance && <div className="ax-execution-source">
       <p><strong>{providers[provenance.provider] || provenance.provider}</strong> · {bases[provenance.price_basis] || provenance.price_basis}</p>
-      <p>{provenance.corporate_actions === 'not_simulated' ? '分红、拆股等公司行动未另行记账；价格曲线不代表含分红再投资的总回报。' : provenance.corporate_actions === 'dated_split_event_observed' ? '已观察到有日期的拆股事件；持仓与现金尚未按公司行动记账，报价和调整收盘价也不代表已核验总回报。' : provenance.corporate_actions}</p>
+      <p>{provenance.corporate_actions === 'not_simulated' ? '分红、拆股等公司行动未另行记账；价格曲线不代表含分红再投资的总回报。' : provenance.corporate_actions === 'dated_split_event_observed' ? '已观察到有日期的拆股事件；持仓与现金尚未按公司行动记账，报价和调整收盘价也不代表已核验总回报。' : provenance.corporate_actions === 'split_coverage_verified_no_event_in_window' ? '已核对本次区间没有拆股事件；分红未另行记账，价格曲线不代表含分红再投资的总回报。' : provenance.corporate_actions === 'not_applicable' ? '现货市场不适用股票拆股。' : provenance.corporate_actions}</p>
       {/^https:\/\//.test(provenance.endpoint) && <a href={provenance.endpoint} target="_blank" rel="noopener noreferrer">行情接口来源 ↗</a>}
     </div>}
     {!!assumptions.length && <ul>{assumptions.map(item => <li key={item.id}>

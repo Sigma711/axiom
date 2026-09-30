@@ -517,6 +517,8 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
   line-height: 1.55;
 }
 .ax-block-snapshot { margin: 1rem 0; padding: 1rem; border: 1px solid var(--border); border-radius: 14px; background: var(--bg-card); color: var(--text); }
+.ax-no-fills { margin: .8rem 0; padding: .7rem .9rem; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; background: var(--bg-elev); color: var(--text-dim); font-size: .86rem; line-height: 1.5; }
+.ax-no-fills strong { color: var(--text); }
 .ax-block-source { margin: 0 0 .7rem; color: var(--text-dim); font-size: .84rem; line-height: 1.5; overflow-wrap: anywhere; }
 .ax-block-scroll { max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
 .ax-block-scroll svg { display: block; max-width: none; }
@@ -614,6 +616,12 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
 .ax-filing-case details { border-top: 1px solid var(--border); padding-top: .8rem; font-size: .8rem; line-height: 1.7; }
 .ax-filing-case summary { cursor: pointer; color: var(--accent); }
 .ax-filing-case details code { overflow-wrap: anywhere; }
+.ax-filing-sources { margin-top: 1rem; }
+.ax-filing-source-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: .6rem; margin: .75rem 0; }
+.ax-filing-source-grid > div { padding: .75rem; border: 1px solid var(--border); border-radius: 9px; background: var(--bg-elev); }
+.ax-filing-source-grid a { color: var(--accent); text-decoration-color: currentColor; text-underline-offset: .2em; font-weight: 600; }
+.ax-filing-source-grid p { margin: .2rem 0; color: var(--text-dim); }
+.ax-filing-source-grid details { margin-top: .3rem; padding-top: .3rem; }
 .ax-industry-case > header strong { color: var(--text); }
 .ax-industry-formula { padding: .9rem; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-elev); }
 .ax-industry-formula-flow { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; color: var(--text-dim); font-size: .82rem; }

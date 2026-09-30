@@ -429,6 +429,18 @@ test('backtest and comparison show the returned metrics', async ({ page }) => {
   await expect(page.locator('.ax-cmp-table')).toContainText('均线交叉');
 });
 
+test('backtest explains a flat no-fill result without implying the strategies are identical', async ({ page }) => {
+  await page.route('**/api/backtest', route => route.fulfill({ json: {
+    ...backtest,
+    equity_curve: bars.map(bar => ({ timestamp: bar.timestamp, cash: 10_000, position_value: 0, equity: 10_000 })),
+    metrics: { ...metrics, '交易笔数': 0, '最终净值': 10_000 },
+  } }));
+  await page.goto('/backtest');
+  await page.getByRole('button', { name: '运行回测' }).click();
+  await expect(page.getByText('当前设置没有成交')).toBeVisible();
+  await expect(page.getByText(/检查资金是否足够买入最小交易数量/)).toBeVisible();
+});
+
 test('Bitcoin block practices draw the observed chain and byte distribution in both themes', async ({ page }) => {
   const ids = ['book_block_height', 'book_block_size'];
   const hash = (index: number) => index.toString(16).padStart(64, '0');

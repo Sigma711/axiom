@@ -182,6 +182,8 @@ async fn backtest_rejects_invalid_configuration_instead_of_panicking_or_clamping
         json!({"slippage_rate":1.0}),
         json!({"max_position_pct":1.1}),
         json!({"stop_loss_pct":-0.1}),
+        json!({"take_profit_pct":-0.1}),
+        json!({"take_profit_pct":101.0}),
         json!({"limit":0}),
         json!({"params":{"fast":0,"slow":20}}),
         json!({"params":{"fast":2.5,"slow":20}}),
@@ -267,6 +269,80 @@ async fn backtest_discloses_execution_rules_and_client_bar_provenance() {
         result["market_provenance"]["corporate_actions"],
         "not_simulated"
     );
+}
+
+#[tokio::test]
+async fn public_backtest_market_strategy_parameter_matrix_reconciles_accounting() {
+    use chrono::{Duration, TimeZone, Utc};
+    let start = Utc.with_ymd_and_hms(2026, 1, 2, 0, 0, 0).unwrap();
+    let bars: Vec<_> = (0..100)
+        .map(|index| {
+            let close = 100.0 + index as f64 * 0.12 + (index as f64 * 0.47).sin() * 11.0;
+            let open = close - 0.35;
+            json!({"timestamp":(start + Duration::days(index)).to_rfc3339(),"open":open,"high":close.max(open)+1.5,"low":close.min(open)-1.5,"close":close,"volume":10000+index*10})
+        })
+        .collect();
+    for (source, symbol) in [
+        ("binance", "BTCUSDT"),
+        ("a_share", "600519"),
+        ("us_stock", "AAPL"),
+    ] {
+        let mut distinct_curves = std::collections::BTreeSet::new();
+        for (strategy, params) in [
+            ("buy_and_hold", json!({})),
+            ("sma_cross", json!({"fast":5,"slow":20})),
+            ("sma_cross", json!({"fast":15,"slow":40})),
+            ("rsi", json!({"period":14,"overbought":70,"oversold":30})),
+        ] {
+            let (status, result) = request(
+                "POST",
+                "/api/backtest",
+                json!({
+                    "strategy":strategy,"params":params,"source":source,"symbol":symbol,
+                    "bars":bars,"initial_capital":1_000_000,"commission_rate":0,
+                    "slippage_rate":0,"max_position_pct":0.95
+                }),
+            )
+            .await;
+            assert_eq!(
+                status,
+                StatusCode::OK,
+                "{source}/{symbol}/{strategy}: {result}"
+            );
+            let curve = result["equity_curve"].as_array().unwrap();
+            assert_eq!(curve.len(), bars.len());
+            let returned_bars = result["bars"].as_array().unwrap();
+            assert_eq!(returned_bars.len(), bars.len());
+            for (actual, supplied) in returned_bars.iter().zip(&bars) {
+                assert!(
+                    (actual["close"].as_f64().unwrap() - supplied["close"].as_f64().unwrap()).abs()
+                        < 1e-10
+                );
+            }
+            assert_eq!(
+                result["market_provenance"]["provider"],
+                "caller_provided_unverified"
+            );
+            for point in curve {
+                let cash = point["cash"].as_f64().unwrap();
+                let position_value = point["position_value"].as_f64().unwrap();
+                let equity = point["equity"].as_f64().unwrap();
+                assert!(cash.is_finite() && position_value.is_finite() && equity.is_finite());
+                assert!(cash >= -1e-7 && position_value >= -1e-7);
+                assert!((cash + position_value - equity).abs() < 1e-5);
+            }
+            if source == "a_share" {
+                for fill in result["fills"].as_array().unwrap() {
+                    assert_eq!(fill["size"].as_f64().unwrap() % 100.0, 0.0);
+                }
+            }
+            distinct_curves.insert(serde_json::to_string(curve).unwrap());
+        }
+        assert!(
+            distinct_curves.len() >= 2,
+            "{source}: strategy and parameter choices had identical equity paths"
+        );
+    }
 }
 
 #[tokio::test]

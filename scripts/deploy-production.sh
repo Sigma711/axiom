@@ -121,11 +121,23 @@ for concept, symbol, key, expected, fingerprint, size in industry_cases:
     assert math.isclose(result["values"][key], expected, rel_tol=1e-12, abs_tol=1e-12)
     print(symbol, "official historical disclosure", "verified", flush=True)
 
+for concept, expected in (("book_free_float", 543137592 / 1252270215), ("book_float_market_cap", 1252270215 * 1377.18)):
+    body = {"concept_id": concept, "module": "data", "source": "issuer_disclosure", "symbol": "600519", "inputs": {}}
+    req = urllib.request.Request(base + "/api/practice", data=json.dumps(body).encode(), headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=90) as response:
+        result = json.load(response)
+    assert result["provenance"] == "verified_independent_a_share_float_case"
+    assert math.isclose(result["values"][concept], expected, rel_tol=1e-12, abs_tol=1e-6)
+    assert result["float_case"]["price"]["trading_date"] == "2025-12-31"
+    assert result["float_case"]["price"]["basis"] == "unadjusted_daily_close"
+    assert all(source["verification"]["matched_sha256"] == source["sha256"] for source in result["float_case"]["sources"][:3])
+    print("Moutai fixed float case", concept, "verified", flush=True)
+
 markets = (("binance", "BTCUSDT", 200), ("a_share", "600519", 1000), ("us_stock", "AAPL", 1000))
+allowed = {"binance": {"binance_spot"}, "a_share": {"eastmoney", "tencent"}, "us_stock": {"yahoo", "nasdaq"}}
 for source, symbol, minimum in markets:
     snapshot = read_json("/api/data", {"source": source, "symbol": symbol, "limit": 5})
     provenance = snapshot["market_provenance"]
-    allowed = {"binance": {"binance_spot"}, "a_share": {"eastmoney", "tencent"}, "us_stock": {"yahoo", "nasdaq"}}
     bars = snapshot["bars"]
     if source == "binance" and provenance["provider"] == "local_csv_cache":
         # A warm cache is not connectivity evidence. Pull official candles on
@@ -157,6 +169,19 @@ else:
     assert len(bars) == 5, (source, bars)
     assert all(bar["low"] <= min(bar["open"], bar["close"]) <= max(bar["open"], bar["close"]) <= bar["high"] for bar in bars)
     print(source, symbol, bars[-1]["timestamp"], flush=True)
+
+for source, symbol, _ in markets:
+    body = {"strategy": "buy_and_hold", "source": source, "symbol": symbol, "limit": 120, "initial_capital": 100000}
+    request = urllib.request.Request(base + "/api/backtest", data=json.dumps(body).encode(), headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(request, timeout=90) as response:
+        result = json.load(response)
+        assert response.status == 200
+    assert len(result["equity_curve"]) == len(result["bars"]) == 120
+    provider = result["market_provenance"]["provider"]
+    assert provider in allowed[source] or (source == "binance" and provider == "local_csv_cache")
+    if source in ("a_share", "us_stock"):
+        assert result["market_provenance"]["stock_split_coverage"]["status"] == "verified_no_split_in_window"
+    print(source, symbol, "production backtest", "verified", flush=True)
 
 for source, symbol, minimum in markets:
     deadline = time.monotonic() + 120

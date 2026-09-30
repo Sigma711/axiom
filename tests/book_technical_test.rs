@@ -17,7 +17,10 @@ fn all_book_technical_cards_are_executable_and_have_real_examples() {
     let catalog = bt::catalog();
     assert!(catalog.len() >= 98);
     let bars = bars(750);
-    for c in catalog.into_iter().filter(|c| c.id != "book_net_volume") {
+    for c in catalog
+        .into_iter()
+        .filter(|c| !matches!(c.id.as_str(), "book_net_volume" | "book_pitfall_adjustment"))
+    {
         let mut daily_cdp_bars = Vec::new();
         if c.id == "book_cdp" {
             daily_cdp_bars = bars.clone();
@@ -86,8 +89,15 @@ fn arithmetic_reference_examples() {
     )
     .unwrap();
     assert_eq!(factor["values"]["factor_score"], 0.75);
-    let adjustment = bt::evaluate("book_pitfall_adjustment", &[], &json!({})).unwrap();
-    assert_eq!(adjustment["values"]["economic_return"], 0.0);
+    let adjustment = bt::catalog()
+        .into_iter()
+        .find(|concept| concept.id == "book_pitfall_adjustment")
+        .unwrap();
+    assert_eq!(adjustment.input_kind, "stock_action_case");
+    assert!(adjustment.inputs.is_empty());
+    assert!(bt::evaluate("book_pitfall_adjustment", &[], &json!({}))
+        .unwrap_err()
+        .contains("API"));
 }
 #[test]
 fn technical_series_do_not_rewrite_history_and_small_samples_do_not_panic() {

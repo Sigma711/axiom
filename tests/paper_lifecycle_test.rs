@@ -1,6 +1,9 @@
 use axiom::types::Bar;
 use axiom::{
-    data::{AsyncDataFeed, DataFeed, HttpFeed, SyntheticFeed},
+    data::{
+        AsyncDataFeed, DataFeed, HttpFeed, MarketProvenance, MarketSnapshot, StockSplitCoverage,
+        SyntheticFeed,
+    },
     paper::{run_market_paper_loop, run_paper_loop, PaperConfigP, PaperState},
     strategy::{BuyAndHoldStrategy, RandomStrategy},
     BacktestEngine, EngineConfig, RiskConfig,
@@ -18,6 +21,19 @@ fn bar(hour: i64, open: f64, close: f64) -> Bar {
         low: open.min(close) - 1.0,
         close,
         volume: 1.0,
+    }
+}
+
+fn stock_snapshot(coverage: StockSplitCoverage) -> MarketSnapshot {
+    MarketSnapshot {
+        bars: vec![bar(0, 100.0, 101.0), bar(1, 101.0, 102.0)],
+        provenance: MarketProvenance {
+            provider: "fixture".into(),
+            endpoint: "fixture://stock-bars".into(),
+            price_basis: "raw".into(),
+            corporate_actions: "not_simulated".into(),
+        },
+        stock_split_coverage: coverage,
     }
 }
 
@@ -388,4 +404,79 @@ async fn market_paper_loop_replays_completed_cached_binance_bars() {
     assert!(!state.read().await.snapshot().bars.is_empty());
     worker.abort();
     std::fs::remove_dir_all(cache).unwrap();
+}
+
+#[test]
+fn stock_paper_snapshot_stops_and_holds_when_split_coverage_is_unsafe() {
+    for coverage in [
+        StockSplitCoverage::CrossesWindow {
+            evidence: "fixture_split_event".into(),
+            event_dates: vec![bar(1, 101.0, 102.0).timestamp.date_naive()],
+        },
+        StockSplitCoverage::Unverified {
+            reason: "fixture has no event channel".into(),
+        },
+    ] {
+        let mut paper =
+            PaperState::new(PaperConfigP::default(), Box::new(BuyAndHoldStrategy::new()));
+        paper.reconfigure_market(
+            "us_stock".into(),
+            "AAPL".into(),
+            Box::new(BuyAndHoldStrategy::new()),
+        );
+        paper.set_running(true);
+
+        let error = paper
+            .process_market_snapshot(stock_snapshot(coverage))
+            .unwrap_err();
+        let snapshot = paper.snapshot();
+
+        assert!(matches!(
+            error.code,
+            "stock_split_crosses_window" | "stock_split_coverage_unverified"
+        ));
+        assert!(
+            !snapshot.is_running,
+            "unsafe feed must stop repeated polling"
+        );
+        assert!(
+            snapshot.bars.is_empty(),
+            "unsafe bars must not affect the account"
+        );
+        assert!(snapshot.current_bar.is_none());
+        assert!(snapshot.last_fill.is_none());
+        assert_eq!(snapshot.market_provenance.provider, "fixture");
+        assert!(snapshot.log.iter().any(|entry| {
+            entry.level == "ERROR"
+                && entry.message.contains(error.code)
+                && entry.message.contains("模拟盘已停止并保留当前账户")
+        }));
+    }
+}
+
+#[test]
+fn verified_stock_paper_snapshot_processes_bars_and_records_coverage() {
+    let mut paper = PaperState::new(PaperConfigP::default(), Box::new(BuyAndHoldStrategy::new()));
+    paper.reconfigure_market(
+        "a_share".into(),
+        "600519".into(),
+        Box::new(BuyAndHoldStrategy::new()),
+    );
+    paper.set_running(true);
+
+    paper
+        .process_market_snapshot(stock_snapshot(
+            StockSplitCoverage::VerifiedNoSplitInWindow {
+                evidence: "fixture_raw_vs_qfq".into(),
+            },
+        ))
+        .unwrap();
+    let snapshot = paper.snapshot();
+
+    assert!(snapshot.is_running);
+    assert_eq!(snapshot.bars.len(), 2);
+    assert_eq!(
+        snapshot.market_provenance.corporate_actions,
+        "split_coverage_verified_no_event_in_window"
+    );
 }

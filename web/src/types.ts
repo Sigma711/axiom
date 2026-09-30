@@ -138,7 +138,7 @@ export interface PracticeResult {
   status: 'computed' | 'partial' | 'undefined' | 'insufficient_data';
   reason: string | null;
   input_kind: PracticeConcept['input_kind'];
-  provenance: 'provided_market_bars' | 'provided_result_context' | 'editable_teaching_inputs' | 'server_fetched_provisional_snapshot' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_spot_order_book' | 'server_fetched_completed_stock_daily_bars' | 'server_fetched_binance_recent_trades' | 'server_fetched_bitcoin_block_snapshot' | 'server_fetched_bitcoin_transaction_sample' | 'server_fetched_bitcoin_transaction_first_page' | 'verified_issuer_filing_case' | 'verified_original_issuer_disclosure' | 'server_fetched_stock_corporate_action';
+  provenance: 'provided_market_bars' | 'provided_result_context' | 'editable_teaching_inputs' | 'server_fetched_provisional_snapshot' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_spot_order_book' | 'server_fetched_completed_stock_daily_bars' | 'server_fetched_binance_recent_trades' | 'server_fetched_bitcoin_block_snapshot' | 'server_fetched_bitcoin_transaction_sample' | 'server_fetched_bitcoin_transaction_first_page' | 'verified_issuer_filing_case' | 'verified_original_issuer_disclosure' | 'verified_independent_a_share_float_case' | 'server_fetched_stock_corporate_action';
   adjustment_evidence?: {
     provider: string; endpoint: string; fetched_at: string; scope: string; issuer_confirmation_url?: string; issuer_confirmation?: string;
     event: { kind: 'split'; effective_at: string; effective_trading_date: string; numerator: number; denominator: number; split_ratio: string };
@@ -183,6 +183,13 @@ export interface PracticeResult {
     calculation: { formula: string; result_key: string; operands: string[]; symbol_mapping: Record<string, string> };
     field_provenance: Record<string, { kind: 'reported' | 'derived'; pdf_page?: number; note: string }>;
     definitions: { case_boundary: string; metric: string };
+  };
+  float_case?: {
+    case_id: string; issuer: { name: string; ticker: string }; as_of: string; share_register_date: string; published: string;
+    definition: { provider: string; rule: string; threshold: string; calculation_scope: string };
+    non_free_float_holders: Array<{ name: string; shares: number; classification: string; relationship: string }>;
+    price: { provider: string; endpoint: string; trading_date: string; close: number; currency: string; basis: string; request_adjustment: string };
+    sources: Array<{ kind: string; official_url: string; pdf_pages?: number[]; sha256?: string; bytes?: number; trading_date?: string; basis?: string; verification?: { status: string; requested_url: string; matched_sha256: string; matched_bytes: number } }>;
   };
   values: Record<string, number | null>;
   units?: Record<string, string>;

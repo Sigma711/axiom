@@ -6,7 +6,11 @@
 //!   - 模拟盘的"实时" = 每 N 秒拉一次最新 K 线收盘价
 
 use crate::broker::{Broker, BrokerConfig, SimulatedBroker};
-use crate::data::{fetch_public_market_snapshot, AsyncDataFeed, HttpFeed, MarketProvenance};
+use crate::corporate_actions::{SourceBackedStockSplit, StockSplitSchedule};
+use crate::data::{
+    fetch_public_market_snapshot, guard_stock_backtest_window, AsyncDataFeed, HttpFeed,
+    MarketProvenance, MarketSnapshot, StockSplitGuardError,
+};
 use crate::execution::{ExecutionAssumption, ExecutionProfile};
 use crate::portfolio::{Portfolio, PortfolioConfig};
 use crate::risk::{RiskConfig, RiskManager};
@@ -65,6 +69,7 @@ pub struct PaperSnapshot {
     pub log: Vec<PaperLogEntry>,
     pub execution_assumptions: Vec<ExecutionAssumption>,
     pub market_provenance: MarketProvenance,
+    pub stock_splits: Vec<SourceBackedStockSplit>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -90,6 +95,7 @@ pub struct PaperState {
     generation: u64,
     source: String,
     execution_profile: ExecutionProfile,
+    stock_splits: StockSplitSchedule,
     market_provenance: MarketProvenance,
     pub equity_curve: Vec<EquityPoint>,
     bars: Vec<Bar>,
@@ -153,11 +159,17 @@ impl PaperState {
                 "binance".into()
             },
             execution_profile,
+            stock_splits: StockSplitSchedule::empty(),
             market_provenance: unknown_market_provenance(),
             equity_curve: Vec::new(),
             bars: Vec::new(),
             log: Vec::new(),
         }
+    }
+
+    pub fn with_stock_splits(mut self, stock_splits: StockSplitSchedule) -> Self {
+        self.stock_splits = stock_splits;
+        self
     }
 
     pub fn set_running(&mut self, running: bool) {
@@ -200,6 +212,42 @@ impl PaperState {
             return Ok(());
         }
         crate::practice::validate_bars(&[bar]).map_err(anyhow::Error::msg)?;
+        let previous_bar = self.current_bar;
+        let due_splits: Vec<_> = self
+            .stock_splits
+            .due_between(
+                &self.config.symbol,
+                previous_bar.map(|previous| previous.timestamp),
+                bar.timestamp,
+            )
+            .into_iter()
+            .cloned()
+            .collect();
+        let split_due = !due_splits.is_empty();
+        for split in due_splits {
+            if let Some(target_size) = self
+                .pending_signal
+                .as_mut()
+                .and_then(|signal| signal.target_size.as_mut())
+            {
+                *target_size *= split.ratio();
+            }
+            if !self.portfolio.is_flat() {
+                anyhow::ensure!(
+                    self.portfolio.apply_stock_split(split.ratio()),
+                    "validated stock split could not be applied to the paper position"
+                );
+                self.log(
+                    PaperLogLevel::Info,
+                    format!(
+                        "公司行动: {} {} 拆股 {}",
+                        split.symbol(),
+                        split.effective_trading_date(),
+                        split.split_ratio()
+                    ),
+                );
+            }
+        }
         self.current_bar = Some(bar);
         self.bars.push(bar);
         if self.bars.len() > 1_000 {
@@ -229,7 +277,17 @@ impl PaperState {
         };
         if let Some(signal) = execution_signal {
             if signal.side != crate::types::Side::Hold {
-                if let Some(order) = self.portfolio.on_signal_with_target(
+                if let Some(reason) = self.execution_profile.daily_bar_execution_block(
+                    if split_due {
+                        None
+                    } else {
+                        previous_bar.as_ref()
+                    },
+                    &bar,
+                    signal.side,
+                ) {
+                    self.log(PaperLogLevel::Warn, format!("市场执行拒绝: {reason}"));
+                } else if let Some(order) = self.portfolio.on_signal_with_target(
                     signal.side,
                     bar.open,
                     bar.timestamp,
@@ -248,8 +306,8 @@ impl PaperState {
                             self.log(
                                 PaperLogLevel::Fill,
                                 format!(
-                                    "成交: {} {} @ {:.2} (手续费 {:.2})",
-                                    fill.side, fill.size, fill.price, fill.commission
+                                    "成交: {} {} @ {:.2} (手续费 {:.2}, 税费 {:.2})",
+                                    fill.side, fill.size, fill.price, fill.commission, fill.tax
                                 ),
                             );
                         }
@@ -285,6 +343,43 @@ impl PaperState {
         Ok(())
     }
 
+    /// Apply a source-backed market batch only after its stock split coverage
+    /// has been verified. Rejected stock batches stop polling while preserving
+    /// the account exactly as it was, so an operator can inspect or reconfigure it.
+    pub fn process_market_snapshot(
+        &mut self,
+        mut snapshot: MarketSnapshot,
+    ) -> Result<(), StockSplitGuardError> {
+        let coverage = match guard_stock_backtest_window(
+            &self.source,
+            &snapshot.stock_split_coverage,
+            &snapshot.bars,
+        ) {
+            Ok(coverage) => coverage,
+            Err(error) => {
+                self.market_provenance = snapshot.provenance;
+                self.log(
+                    PaperLogLevel::Error,
+                    format!("行情安全校验失败，模拟盘已停止并保留当前账户: {error}"),
+                );
+                self.set_running(false);
+                return Err(error);
+            }
+        };
+        if matches!(self.source.as_str(), "a_share" | "us_stock") {
+            snapshot.provenance.corporate_actions =
+                "split_coverage_verified_no_event_in_window".into();
+        }
+        snapshot.stock_split_coverage = coverage;
+        self.market_provenance = snapshot.provenance;
+        for bar in snapshot.bars {
+            if let Err(error) = self.process_bar(bar) {
+                self.log(PaperLogLevel::Error, format!("处理出错: {error}"));
+            }
+        }
+        Ok(())
+    }
+
     pub fn snapshot(&self) -> PaperSnapshot {
         let pos = self.portfolio.position();
         let price = self
@@ -313,6 +408,7 @@ impl PaperState {
             log: self.log.iter().rev().take(100).cloned().collect(),
             execution_assumptions: self.execution_profile.assumptions(),
             market_provenance: self.market_provenance.clone(),
+            stock_splits: self.stock_splits.events().to_vec(),
         }
     }
 
@@ -415,12 +511,7 @@ pub async fn run_market_paper_loop(feed: Arc<HttpFeed>, state: Arc<RwLock<PaperS
                 if !paper.is_running || paper.generation != generation {
                     continue;
                 }
-                paper.market_provenance = snapshot.provenance;
-                for bar in snapshot.bars {
-                    if let Err(error) = paper.process_bar(bar) {
-                        paper.log(PaperLogLevel::Error, format!("处理出错: {error}"));
-                    }
-                }
+                let _ = paper.process_market_snapshot(snapshot);
             }
             Ok(_) => {}
             Err(error) => {

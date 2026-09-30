@@ -54,6 +54,27 @@ test('Apple split practice independently matches the issuer announcement and liv
   await visual.screenshot({ path: test.info().outputPath('stock-adjustment-real-mobile.png') });
 });
 
+test('unadjusted-price pitfall opens the same source-backed Apple split lesson', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/learn');
+  await page.getByRole('textbox', { name: '搜索 概念 / 公式 / 关键词' }).fill('book_pitfall_adjustment');
+  const card = page.locator('.ax-kb-card[data-concept-id="book_pitfall_adjustment"]');
+  await expect(card).toHaveCount(1);
+  await expect(card).not.toContainText('可编辑教学输入');
+  await card.getByRole('button', { name: '在数据探索中实践' }).click();
+  await expect(page).toHaveURL(/\/data\?concept=book_pitfall_adjustment&source=us_stock$/);
+  const panel = page.getByLabel('概念实践');
+  await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+  const responsePromise = page.waitForResponse(response => response.url().includes('/api/practice') && response.request().method() === 'POST');
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  const response = await responsePromise;
+  expect(response.ok(), await response.text()).toBe(true);
+  const result = await response.json();
+  expect(result).toMatchObject({ concept_id: 'book_pitfall_adjustment', provenance: 'server_fetched_stock_corporate_action', source: 'us_stock', symbol: 'AAPL', values: { new_shares_per_old_share: 4, split_only_price_multiplier: .25 } });
+  await expect(panel.getByRole('figure', { name: '苹果公司历史拆股示意' })).toContainText('不是收益');
+  await expect(panel).toContainText('供应商');
+});
+
 async function assertExecutionDisclosure(page: Page, payload: any) {
   const disclosure = page.getByLabel('成交与价格口径', { exact: true });
   await expect(disclosure).toBeVisible();
@@ -65,7 +86,11 @@ async function assertExecutionDisclosure(page: Page, payload: any) {
     if (rule.source_url) await expect(item.getByRole('link')).toHaveAttribute('href', rule.source_url);
   }
   if (payload.market_provenance) {
-    await expect(disclosure).toContainText('价格曲线不代表含分红再投资的总回报');
+    if (payload.market_provenance.corporate_actions === 'not_applicable') {
+      await expect(disclosure).toContainText('现货市场不适用股票拆股');
+    } else {
+      await expect(disclosure).toContainText('不代表含分红再投资的总回报');
+    }
     if (payload.market_provenance.endpoint.startsWith('https://')) {
       await expect(disclosure.getByRole('link', { name: '行情接口来源 ↗' })).toHaveAttribute('href', payload.market_provenance.endpoint);
     }
@@ -571,6 +596,68 @@ test('real market selections stay aligned across backtest comparison and paper',
     await expect(page.locator('.ax-paper-stats')).not.toContainText(/\u4ea4\u6613\u5bf9\s+—/);
     await expect(page.locator('.ax-paper-stats')).not.toContainText(/\u6570\u636e\u6e90\s+—/);
     await assertExecutionDisclosure(page, payload);
+  }
+});
+
+test('backtest strategy charts show the returned equity path for each live market', async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+  await page.goto('/backtest');
+  const markets = [
+    { source: 'a_share', label: 'A 股 · 公开行情', symbol: '600519' },
+    { source: 'us_stock', label: '美股 · 公开行情', symbol: 'AAPL' },
+    { source: 'binance', label: '加密货币 · Binance', symbol: 'BTCUSDT' },
+  ];
+  for (const market of markets) {
+    await page.getByRole('button', { name: '数据源', exact: true }).click();
+    await page.getByRole('option', { name: market.label }).click();
+    await expect(page.getByRole('button', { name: '交易对', exact: true })).toContainText(market.symbol);
+    // 600519's 100-share minimum costs much more than the default 10,000.
+    // Give each market enough cash to test strategy behaviour rather than
+    // correctly rendering two flat, no-fill equity curves.
+    if (market.source === 'a_share') await page.getByRole('spinbutton', { name: '资金' }).fill('1000000');
+    const paths: string[] = [];
+    const curves: number[][] = [];
+    for (const strategy of ['买入持有 (基准)', '双均线交叉']) {
+      await page.getByRole('button', { name: '策略', exact: true }).click();
+      await page.getByRole('option', { name: strategy, exact: true }).click();
+      const [response] = await Promise.all([
+        page.waitForResponse(result => result.url().includes('/api/backtest') && result.request().method() === 'POST', { timeout: 45_000 }),
+        page.getByRole('button', { name: '运行回测' }).click(),
+      ]);
+      expect(response.ok(), await response.text()).toBe(true);
+      const result = await response.json();
+      expect(result.source).toBe(market.source);
+      expect(result.config.symbol).toBe(market.symbol);
+      const curve = result.equity_curve.map((point: { equity: number }) => point.equity);
+      expect(curve.length).toBeGreaterThan(40);
+      expect(curve.every((equity: number) => Number.isFinite(equity) && equity > 0)).toBe(true);
+      const chart = page.locator('.ax-chart').first();
+      const line = chart.locator('g.scatterlayer path.js-line').first();
+      await expect(chart.locator('svg.main-svg').first()).toBeVisible({ timeout: 20_000 });
+      const expectedUnit = market.source === 'a_share' ? '元' : market.source === 'binance' ? 'USDT' : 'USD';
+      await expect(chart.locator('.ytitle')).toContainText(`净值 (${expectedUnit})`);
+      const netValue = page.locator('.ax-metric').filter({ has: page.locator('.ax-metric-label').getByText('净值', { exact: true }) }).locator('.ax-metric-value');
+      await expect(netValue).toContainText(market.source === 'a_share' ? '¥' : market.source === 'binance' ? 'USDT' : '$');
+      await expect(line).toHaveAttribute('d', /^M/);
+      if (market.source !== 'binance') {
+        const ticks = await chart.locator('.xtick text').allTextContents();
+        expect(ticks.some(tick => /20\d{2}/.test(tick))).toBe(true);
+        expect(ticks.every(tick => !tick.includes('00:00'))).toBe(true);
+      }
+      const path = await line.getAttribute('d');
+      expect(path?.length).toBeGreaterThan(20);
+      const bounds = await chart.boundingBox();
+      expect(bounds).not.toBeNull();
+      expect(bounds!.width).toBeGreaterThan(300);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(1441);
+      await testInfo.attach(`${market.source}-${result.config.strategy}-equity.png`, {
+        body: await chart.screenshot(), contentType: 'image/png',
+      });
+      paths.push(path!);
+      curves.push(curve);
+    }
+    expect(curves[0]).not.toEqual(curves[1]);
+    expect(paths[0]).not.toEqual(paths[1]);
   }
 });
 
@@ -1878,4 +1965,72 @@ test('Moutai share structure independently verifies annual-report page 47 and pu
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await visual.evaluate(node => node.getBoundingClientRect().right <= window.innerWidth)).toBe(true);
   await captureHistoricalCard(page, visual, 'moutai-shares-real-mobile.png');
+});
+
+test('Moutai free float independently reconciles issuer holders, CSI methodology and same-day price', async ({ page, request }) => {
+  test.setTimeout(180_000);
+  const documents = [
+    { url: 'https://static.cninfo.com.cn/finalpage/2025-12-30/1224906220.PDF', bytes: 92857, sha: 'ae056c65f53fcacd0b2cffd3562af0f2696d32593e25543ba279b59b07e57ee6', pages: [1, 2, 3], facts: ['681,282,935', '27,849,688', '709,132,623'] },
+    { url: 'https://oss-ch.csindex.com.cn/static/html/csindex/public/uploads/indices/detail/files/zh_CN/000300_Index_Methodology_cn.pdf', bytes: 1184619, sha: 'de6491e03e5d57ecf1aca104b1412543643a59e387a5343c9bd21ecbbdeba5b6', pages: [3, 4, 5, 6], facts: ['自由流通量', '5%'] },
+  ];
+  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  for (const document of documents) {
+    const response = await request.get(document.url, { timeout: 60_000 });
+    expect(response.ok()).toBe(true);
+    const bytes = await response.body();
+    expect(bytes).toHaveLength(document.bytes);
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe(document.sha);
+    const task = getDocument({ data: new Uint8Array(bytes), useSystemFonts: true });
+    const pdf = await task.promise;
+    const texts = await Promise.all(document.pages.map(async pageNumber => (await (await pdf.getPage(pageNumber)).getTextContent()).items.map(item => 'str' in item ? item.str : '').join('').replace(/\s/g, '')));
+    for (const fact of document.facts) expect(texts.join('')).toContain(fact);
+    await task.destroy();
+  }
+
+  const priceUrl = 'https://web.ifzq.gtimg.cn/appstock/app/kline/kline?param=sh600519,day,2025-12-31,2025-12-31,1';
+  const priceResponse = await request.get(priceUrl, { timeout: 30_000 });
+  expect(priceResponse.ok()).toBe(true);
+  const price = (await priceResponse.json()).data.sh600519;
+  expect(price.day).toHaveLength(1);
+  const [date, , close] = price.day[0];
+  expect(date).toBe('2025-12-31');
+  expect(Number(close)).toBe(1377.18);
+
+  const unrestricted = 1_252_270_215;
+  const independentlyDerivedFree = unrestricted - 681_282_935 - 27_849_688;
+  const independentlyDerivedCap = unrestricted * Number(close);
+  expect(independentlyDerivedFree).toBe(543_137_592);
+  expect(independentlyDerivedCap).toBeCloseTo(1_724_601_494_693.70, 2);
+  for (const [conceptId, expected] of [['book_free_float', independentlyDerivedFree / unrestricted], ['book_float_market_cap', independentlyDerivedCap]] as const) {
+    const response = await request.post('/api/practice', { data: { concept_id: conceptId, module: 'data', source: 'issuer_disclosure', symbol: '600519', inputs: {} } });
+    expect(response.ok(), await response.text()).toBe(true);
+    const result = await response.json();
+    expect(result.provenance).toBe('verified_independent_a_share_float_case');
+    if (conceptId === 'book_float_market_cap') expect(Math.abs(result.values[conceptId] - expected)).toBeLessThan(0.01);
+    else expect(result.values[conceptId]).toBeCloseTo(expected, 10);
+    expect(result.values.free_float_shares).toBe(independentlyDerivedFree);
+    expect(result.values.unrestricted_shares).toBe(unrestricted);
+    expect(result.float_case.price).toMatchObject({ trading_date: date, close: Number(close), basis: 'unadjusted_daily_close' });
+    expect(result.float_case.sources.slice(0, 3).map((source: { sha256: string }) => source.sha256)).toEqual(['474905deeaf0f875fc0a1b097a626c0c7852c427faadc5d7fc7816cbf45ea288', ...documents.map(document => document.sha)]);
+  }
+
+  await page.goto('/learn');
+  await page.getByRole('textbox', { name: '搜索 概念 / 公式 / 关键词' }).fill('book_free_float');
+  const card = page.locator('.ax-kb-card[data-concept-id="book_free_float"]');
+  await card.getByRole('button', { name: '在数据探索中实践' }).click();
+  await expect(page).toHaveURL(/\/data\?concept=book_free_float&source=issuer_disclosure$/);
+  const panel = page.getByLabel('概念实践');
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  const visual = panel.getByRole('region', { name: /A股自由流通口径案例/ });
+  await expect(visual).toContainText('543,137,592');
+  await expect(visual).toContainText('43.3722%');
+  await expect(visual).toContainText('1,724,601,494,693.70');
+  await visual.locator('.ax-filing-sources > summary').click();
+  await expect(visual.getByRole('link', { name: '发行人一致行动关系公告 ↗' })).toHaveAttribute('href', documents[0].url);
+  await visual.locator('.ax-filing-sources > summary').click();
+  await captureHistoricalCard(page, visual, 'moutai-float-real-dark.png');
+  await page.getByLabel('切换到浅色模式').click();
+  await captureHistoricalCard(page, visual, 'moutai-float-real-light.png');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await captureHistoricalCard(page, visual, 'moutai-float-real-mobile.png');
 });

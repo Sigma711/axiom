@@ -1408,7 +1408,8 @@ impl HttpFeed {
                     "local_csv_cache",
                     "local historical CSV cache",
                     "cache_price_basis_unverified",
-                ));
+                )
+                .with_stock_split_coverage(StockSplitCoverage::NotApplicable));
             }
         }
 
@@ -1449,7 +1450,8 @@ impl HttpFeed {
             } else {
                 "configured_feed_unverified"
             },
-        ))
+        )
+        .with_stock_split_coverage(StockSplitCoverage::NotApplicable))
     }
 }
 
@@ -1688,6 +1690,76 @@ fn parse_yahoo_bars(raw: &serde_json::Value) -> Result<Vec<Bar>> {
     parse_yahoo_bars_at(raw, Utc::now())
 }
 
+fn yahoo_stock_split_coverage(raw: &serde_json::Value, bars: &[Bar]) -> StockSplitCoverage {
+    let Some(first) = bars.first().map(|bar| bar.timestamp.date_naive()) else {
+        return StockSplitCoverage::Unverified {
+            reason: "Yahoo returned no bars for split-window verification".into(),
+        };
+    };
+    let last = bars
+        .last()
+        .expect("a first bar implies a last bar")
+        .timestamp
+        .date_naive();
+    let result = match raw.pointer("/chart/result/0") {
+        Some(result) => result,
+        None => {
+            return StockSplitCoverage::Unverified {
+                reason: "Yahoo response has no result for split-window verification".into(),
+            };
+        }
+    };
+    let Some(splits) = result.pointer("/events/splits") else {
+        // Yahoo omits the events object when a requested event set is empty.
+        return StockSplitCoverage::VerifiedNoSplitInWindow {
+            evidence: "yahoo_events_splits_requested_and_absent".into(),
+        };
+    };
+    let Some(splits) = splits.as_object() else {
+        return StockSplitCoverage::Unverified {
+            reason: "Yahoo split events are not an object".into(),
+        };
+    };
+    let mut event_dates = Vec::new();
+    for split in splits.values() {
+        let valid_ratio = split["numerator"]
+            .as_f64()
+            .is_some_and(|value| value.is_finite() && value > 0.0)
+            && split["denominator"]
+                .as_f64()
+                .is_some_and(|value| value.is_finite() && value > 0.0);
+        let Some(event_date) = split["date"]
+            .as_i64()
+            .and_then(|timestamp| DateTime::from_timestamp(timestamp, 0))
+            .map(|timestamp| timestamp.date_naive())
+        else {
+            return StockSplitCoverage::Unverified {
+                reason: "Yahoo split event has no valid date".into(),
+            };
+        };
+        if !valid_ratio {
+            return StockSplitCoverage::Unverified {
+                reason: "Yahoo split event has no valid ratio".into(),
+            };
+        }
+        if (first..=last).contains(&event_date) {
+            event_dates.push(event_date);
+        }
+    }
+    event_dates.sort_unstable();
+    event_dates.dedup();
+    if event_dates.is_empty() {
+        StockSplitCoverage::VerifiedNoSplitInWindow {
+            evidence: "yahoo_events_splits_requested_no_event_in_returned_window".into(),
+        }
+    } else {
+        StockSplitCoverage::CrossesWindow {
+            evidence: "yahoo_chart_split_events".into(),
+            event_dates,
+        }
+    }
+}
+
 fn parse_yahoo_bars_at(raw: &serde_json::Value, now: DateTime<Utc>) -> Result<Vec<Bar>> {
     let result = raw
         .pointer("/chart/result/0")
@@ -1790,10 +1862,19 @@ fn json_number(value: &serde_json::Value) -> Option<f64> {
 }
 
 fn parse_tencent_a_share_bars(raw: &serde_json::Value, market_symbol: &str) -> Result<Vec<Bar>> {
+    parse_tencent_a_share_bars_with_key(raw, market_symbol, "day")
+        .context("Tencent A-share response has no unadjusted completed daily rows")
+}
+
+fn parse_tencent_a_share_bars_with_key(
+    raw: &serde_json::Value,
+    market_symbol: &str,
+    key: &str,
+) -> Result<Vec<Bar>> {
     let rows = raw
-        .pointer(&format!("/data/{market_symbol}/day"))
+        .pointer(&format!("/data/{market_symbol}/{key}"))
         .and_then(serde_json::Value::as_array)
-        .context("Tencent A-share response has no unadjusted completed daily rows")?;
+        .with_context(|| format!("Tencent A-share response has no {key} completed daily rows"))?;
     let bars: Vec<Bar> = rows
         .iter()
         .filter_map(|row| {
@@ -1818,6 +1899,7 @@ async fn fetch_a_share_tencent_at(
     symbol: &str,
     since: DateTime<Utc>,
     limit: usize,
+    adjustment: Option<&str>,
 ) -> Result<Vec<Bar>> {
     let exchange = match symbol.as_bytes().first() {
         Some(b'6') | Some(b'9') if !symbol.starts_with("92") => "sh",
@@ -1825,13 +1907,14 @@ async fn fetch_a_share_tencent_at(
         _ => "sz",
     };
     let market_symbol = format!("{exchange}{symbol}");
+    let suffix = adjustment.unwrap_or("");
     let raw: serde_json::Value = client
         .get(endpoint)
         .header(
             reqwest::header::USER_AGENT,
             "AXIOM educational market reader/1.0",
         )
-        .query(&[("param", format!("{market_symbol},day,,,{limit},"))])
+        .query(&[("param", format!("{market_symbol},day,,,{limit},{suffix}"))])
         .timeout(std::time::Duration::from_secs(15))
         .send()
         .await
@@ -1841,11 +1924,12 @@ async fn fetch_a_share_tencent_at(
         .json()
         .await
         .context("invalid Tencent A-share market JSON")?;
-    Ok(latest_daily_bars(
-        parse_tencent_a_share_bars(&raw, &market_symbol)?,
-        since,
-        limit,
-    ))
+    let bars = if adjustment == Some("qfq") {
+        parse_tencent_a_share_bars_with_key(&raw, &market_symbol, "qfqday")?
+    } else {
+        parse_tencent_a_share_bars(&raw, &market_symbol)?
+    };
+    Ok(latest_daily_bars(bars, since, limit))
 }
 
 fn latest_daily_bars(mut bars: Vec<Bar>, since: DateTime<Utc>, limit: usize) -> Vec<Bar> {
@@ -1931,7 +2015,12 @@ async fn fetch_a_share_snapshot_at(
                 "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61".to_owned(),
             ),
         ]);
-    let (primary, tencent) = tokio::join!(
+    // Keep one completed predecessor outside the requested window. A qfq
+    // scale change on the first selected bar is otherwise indistinguishable
+    // from a constant transform and could be falsely reported as no split.
+    let evidence_since = since - Duration::days(14);
+    let evidence_limit = limit.saturating_add(1).min(5000);
+    let (primary, tencent_evidence, tencent_qfq) = tokio::join!(
         async {
             let raw: serde_json::Value = request
                 .timeout(std::time::Duration::from_secs(15))
@@ -1961,14 +2050,145 @@ async fn fetch_a_share_snapshot_at(
             ))
         },
         async {
-            fetch_a_share_tencent_at(client, tencent_endpoint, symbol, since, limit)
-                .await
-                .map(|bars| {
-                    MarketSnapshot::new(bars, "tencent", tencent_endpoint, "unadjusted_requested")
-                })
-        }
+            fetch_a_share_tencent_at(
+                client,
+                tencent_endpoint,
+                symbol,
+                evidence_since,
+                evidence_limit,
+                None,
+            )
+            .await
+            .map(|bars| {
+                MarketSnapshot::new(bars, "tencent", tencent_endpoint, "unadjusted_requested")
+            })
+        },
+        fetch_a_share_tencent_at(
+            client,
+            tencent_endpoint,
+            symbol,
+            evidence_since,
+            evidence_limit,
+            Some("qfq"),
+        )
     );
-    select_a_share_daily_bars(primary, tencent, Utc::now())
+    let tencent_raw = tencent_evidence
+        .as_ref()
+        .ok()
+        .map(|snapshot| snapshot.bars.clone());
+    let tencent = tencent_evidence.map(|mut snapshot| {
+        snapshot.bars = latest_daily_bars(snapshot.bars, since, limit);
+        snapshot
+    });
+    let mut selected = select_a_share_daily_bars(primary, tencent, Utc::now())?;
+    selected.stock_split_coverage = match (tencent_raw.as_deref(), tencent_qfq.as_deref()) {
+        (Some(raw), Ok(adjusted)) => a_share_stock_split_coverage(&selected.bars, raw, adjusted),
+        (_, Err(error)) => StockSplitCoverage::Unverified {
+            reason: format!("Tencent qfq split cross-check failed: {error}"),
+        },
+        (None, _) => StockSplitCoverage::Unverified {
+            reason: "Tencent raw series was unavailable for split cross-check".into(),
+        },
+    };
+    Ok(selected)
+}
+
+fn a_share_stock_split_coverage(
+    selected: &[Bar],
+    raw: &[Bar],
+    adjusted: &[Bar],
+) -> StockSplitCoverage {
+    let (Some(selected_first), Some(selected_last)) = (selected.first(), selected.last()) else {
+        return StockSplitCoverage::Unverified {
+            reason: "A-share split cross-check received no selected bars".into(),
+        };
+    };
+    if raw.first().map(|bar| bar.timestamp) > Some(selected_first.timestamp)
+        || raw.last().map(|bar| bar.timestamp) < Some(selected_last.timestamp)
+        || raw.len() != adjusted.len()
+        || raw
+            .iter()
+            .zip(adjusted)
+            .any(|(left, right)| left.timestamp != right.timestamp)
+    {
+        return StockSplitCoverage::Unverified {
+            reason: "Tencent raw/qfq dates do not cover the selected A-share window".into(),
+        };
+    }
+
+    for selected_bar in selected {
+        let Some(raw_bar) = raw
+            .iter()
+            .find(|candidate| candidate.timestamp == selected_bar.timestamp)
+        else {
+            return StockSplitCoverage::Unverified {
+                reason: "Tencent raw series is missing a selected A-share date".into(),
+            };
+        };
+        let same_unadjusted_prices = [
+            (selected_bar.open, raw_bar.open),
+            (selected_bar.high, raw_bar.high),
+            (selected_bar.low, raw_bar.low),
+            (selected_bar.close, raw_bar.close),
+        ]
+        .into_iter()
+        .all(|(selected, raw)| (selected - raw).abs() <= 0.021);
+        if !same_unadjusted_prices {
+            return StockSplitCoverage::Unverified {
+                reason: "selected A-share OHLC differs from Tencent unadjusted cross-check".into(),
+            };
+        }
+    }
+
+    let mut scales = Vec::new();
+    for (raw_bar, adjusted_bar) in raw.iter().zip(adjusted) {
+        let raw_range = raw_bar.high - raw_bar.low;
+        let adjusted_range = adjusted_bar.high - adjusted_bar.low;
+        // Ignore narrow rows where provider mill precision could dominate the
+        // range ratio. A verified window needs several informative rows.
+        if raw_range < 1.0 || adjusted_range <= 0.0 {
+            continue;
+        }
+        let scale = adjusted_range / raw_range;
+        if !scale.is_finite() || scale <= 0.0 {
+            return StockSplitCoverage::Unverified {
+                reason: "Tencent raw/qfq price transform is invalid".into(),
+            };
+        }
+        scales.push((raw_bar.timestamp.date_naive(), scale));
+    }
+    if scales.len() < 3 {
+        return StockSplitCoverage::Unverified {
+            reason: "Tencent raw/qfq series has too few informative rows".into(),
+        };
+    }
+    if !scales
+        .iter()
+        .any(|(date, _)| *date < selected_first.timestamp.date_naive())
+    {
+        return StockSplitCoverage::Unverified {
+            reason: "Tencent raw/qfq series lacks a pre-window scale observation".into(),
+        };
+    }
+    let mut event_dates = Vec::new();
+    for pair in scales.windows(2) {
+        let relative_change = (pair[1].1 / pair[0].1 - 1.0).abs();
+        if relative_change > 0.005 {
+            event_dates.push(pair[1].0);
+        }
+    }
+    event_dates.sort_unstable();
+    event_dates.dedup();
+    if event_dates.is_empty() {
+        StockSplitCoverage::VerifiedNoSplitInWindow {
+            evidence: "tencent_raw_qfq_ohlc_range_scale_constant".into(),
+        }
+    } else {
+        StockSplitCoverage::CrossesWindow {
+            evidence: "tencent_raw_qfq_ohlc_range_scale_change".into(),
+            event_dates,
+        }
+    }
 }
 
 fn select_a_share_daily_bars<T: AsRef<[Bar]>>(
@@ -2209,16 +2429,20 @@ async fn fetch_us_stock_snapshot_at(
         if bars.len() > limit {
             bars = bars.split_off(bars.len() - limit);
         }
-        Ok::<Vec<Bar>, anyhow::Error>(bars)
+        Ok::<(Vec<Bar>, StockSplitCoverage), anyhow::Error>((
+            bars.clone(),
+            yahoo_stock_split_coverage(&raw, &bars),
+        ))
     }
     .await;
     match primary {
-        Ok(bars) if !bars.is_empty() => Ok(MarketSnapshot::new(
+        Ok((bars, coverage)) if !bars.is_empty() => Ok(MarketSnapshot::new(
             bars,
             "yahoo",
             yahoo_endpoint,
             "provider_adjustment_unverified",
-        )),
+        )
+        .with_stock_split_coverage(coverage)),
         Ok(_) | Err(_) => {
             fetch_us_stock_nasdaq_at(client, nasdaq_endpoint, symbol, since, limit).await
         }
@@ -2235,10 +2459,92 @@ pub struct MarketProvenance {
     pub corporate_actions: String,
 }
 
+/// Evidence that the returned stock-price window can be simulated without
+/// applying an unverified share-ratio corporate action.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum StockSplitCoverage {
+    NotApplicable,
+    VerifiedNoSplitInWindow {
+        evidence: String,
+    },
+    CrossesWindow {
+        evidence: String,
+        event_dates: Vec<NaiveDate>,
+    },
+    Unverified {
+        reason: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StockSplitGuardError {
+    pub code: &'static str,
+    pub detail: String,
+}
+
+impl std::fmt::Display for StockSplitGuardError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}: {}", self.code, self.detail)
+    }
+}
+
+/// Require affirmative split coverage before simulating a live stock window.
+/// Event dates outside the final, completed-bar window do not block execution.
+pub fn guard_stock_backtest_window(
+    source: &str,
+    coverage: &StockSplitCoverage,
+    bars: &[Bar],
+) -> std::result::Result<StockSplitCoverage, StockSplitGuardError> {
+    if !matches!(source, "a_share" | "us_stock") {
+        return Ok(coverage.clone());
+    }
+    let first = bars.first().map(|bar| bar.timestamp.date_naive());
+    let last = bars.last().map(|bar| bar.timestamp.date_naive());
+    match coverage {
+        StockSplitCoverage::VerifiedNoSplitInWindow { .. } => Ok(coverage.clone()),
+        StockSplitCoverage::CrossesWindow {
+            evidence,
+            event_dates,
+        } => {
+            let in_window: Vec<_> = event_dates
+                .iter()
+                .copied()
+                .filter(|date| {
+                    first
+                        .zip(last)
+                        .is_some_and(|(first, last)| (first..=last).contains(date))
+                })
+                .collect();
+            if in_window.is_empty() {
+                Ok(StockSplitCoverage::VerifiedNoSplitInWindow {
+                    evidence: format!("{evidence}_outside_completed_window"),
+                })
+            } else {
+                Err(StockSplitGuardError {
+                    code: "stock_split_crosses_window",
+                    detail: format!(
+                        "该时段发生拆股，当前回测暂不支持自动处理；来源证据日期 {in_window:?}"
+                    ),
+                })
+            }
+        }
+        StockSplitCoverage::Unverified { reason } => Err(StockSplitGuardError {
+            code: "stock_split_coverage_unverified",
+            detail: format!("当前行情缺少可核验的拆股覆盖，不能安全运行股票回测；{reason}"),
+        }),
+        StockSplitCoverage::NotApplicable => Err(StockSplitGuardError {
+            code: "stock_split_coverage_unverified",
+            detail: "股票来源错误地标记拆股核验为不适用，不能安全运行回测".into(),
+        }),
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct MarketSnapshot {
     pub bars: Vec<Bar>,
     pub provenance: MarketProvenance,
+    pub stock_split_coverage: StockSplitCoverage,
 }
 
 impl AsRef<[Bar]> for MarketSnapshot {
@@ -2257,7 +2563,15 @@ impl MarketSnapshot {
                 price_basis: price_basis.into(),
                 corporate_actions: "not_simulated".into(),
             },
+            stock_split_coverage: StockSplitCoverage::Unverified {
+                reason: "provider did not supply split-event coverage".into(),
+            },
         }
+    }
+
+    fn with_stock_split_coverage(mut self, coverage: StockSplitCoverage) -> Self {
+        self.stock_split_coverage = coverage;
+        self
     }
 }
 
@@ -2904,15 +3218,188 @@ mod public_market_source_tests {
         let (base, server) = provider_fixture_server().await;
         let client = reqwest::Client::new();
         let since = Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
-        let sh = fetch_a_share_tencent_at(&client, &format!("{base}/tencent"), "600519", since, 1)
-            .await
-            .unwrap();
-        let bj = fetch_a_share_tencent_at(&client, &format!("{base}/tencent"), "920001", since, 1)
-            .await
-            .unwrap();
+        let sh = fetch_a_share_tencent_at(
+            &client,
+            &format!("{base}/tencent"),
+            "600519",
+            since,
+            1,
+            None,
+        )
+        .await
+        .unwrap();
+        let bj = fetch_a_share_tencent_at(
+            &client,
+            &format!("{base}/tencent"),
+            "920001",
+            since,
+            1,
+            None,
+        )
+        .await
+        .unwrap();
         assert_eq!(sh[0].close, 11.0);
         assert_eq!(bj[0].close, 11.0);
         server.abort();
+    }
+
+    fn split_test_bar(day: u32, low: f64, high: f64) -> Bar {
+        Bar {
+            timestamp: Utc.with_ymd_and_hms(2024, 1, day, 0, 0, 0).unwrap(),
+            open: low + 1.0,
+            high,
+            low,
+            close: high - 1.0,
+            volume: 1_000.0,
+        }
+    }
+
+    #[test]
+    fn yahoo_split_events_guard_only_the_returned_bar_window() {
+        let bars = vec![
+            split_test_bar(2, 99.0, 103.0),
+            split_test_bar(3, 100.0, 104.0),
+        ];
+        let no_events = serde_json::json!({"chart":{"result":[{}]}});
+        assert!(matches!(
+            yahoo_stock_split_coverage(&no_events, &bars),
+            StockSplitCoverage::VerifiedNoSplitInWindow { .. }
+        ));
+
+        let inside = Utc
+            .with_ymd_and_hms(2024, 1, 3, 13, 30, 0)
+            .unwrap()
+            .timestamp();
+        let split = serde_json::json!({"chart":{"result":[{"events":{"splits":{"event":{
+            "date":inside,"numerator":2.0,"denominator":1.0,"splitRatio":"2:1"
+        }}}}]}});
+        let coverage = yahoo_stock_split_coverage(&split, &bars);
+        assert!(matches!(coverage, StockSplitCoverage::CrossesWindow { .. }));
+        assert_eq!(
+            guard_stock_backtest_window("us_stock", &coverage, &bars)
+                .unwrap_err()
+                .code,
+            "stock_split_crosses_window"
+        );
+
+        let outside = Utc
+            .with_ymd_and_hms(2023, 12, 1, 13, 30, 0)
+            .unwrap()
+            .timestamp();
+        let split = serde_json::json!({"chart":{"result":[{"events":{"splits":{"event":{
+            "date":outside,"numerator":2.0,"denominator":1.0,"splitRatio":"2:1"
+        }}}}]}});
+        assert!(matches!(
+            yahoo_stock_split_coverage(&split, &bars),
+            StockSplitCoverage::VerifiedNoSplitInWindow { .. }
+        ));
+    }
+
+    #[test]
+    fn malformed_yahoo_split_event_fails_closed() {
+        let bars = vec![split_test_bar(2, 99.0, 103.0)];
+        let malformed = serde_json::json!({"chart":{"result":[{"events":{"splits":{"event":{
+            "date":"not-a-timestamp","numerator":2.0,"denominator":1.0
+        }}}}]}});
+        let coverage = yahoo_stock_split_coverage(&malformed, &bars);
+        assert!(matches!(coverage, StockSplitCoverage::Unverified { .. }));
+        assert_eq!(
+            guard_stock_backtest_window("us_stock", &coverage, &bars)
+                .unwrap_err()
+                .code,
+            "stock_split_coverage_unverified"
+        );
+    }
+
+    #[test]
+    fn a_share_raw_qfq_scale_distinguishes_cash_offsets_from_share_actions() {
+        let raw = vec![
+            split_test_bar(1, 98.0, 102.0),
+            split_test_bar(2, 99.0, 103.0),
+            split_test_bar(3, 101.0, 105.0),
+            split_test_bar(4, 102.0, 106.0),
+        ];
+        let cash_adjusted: Vec<_> = raw
+            .iter()
+            .map(|bar| Bar {
+                open: bar.open - 20.0,
+                high: bar.high - 20.0,
+                low: bar.low - 20.0,
+                close: bar.close - 20.0,
+                ..*bar
+            })
+            .collect();
+        assert!(matches!(
+            a_share_stock_split_coverage(&raw[1..], &raw, &cash_adjusted),
+            StockSplitCoverage::VerifiedNoSplitInWindow { .. }
+        ));
+
+        let mut split_adjusted = cash_adjusted;
+        for bar in &mut split_adjusted[1..] {
+            bar.open *= 0.5;
+            bar.high *= 0.5;
+            bar.low *= 0.5;
+            bar.close *= 0.5;
+        }
+        let first_bar_split = a_share_stock_split_coverage(&raw[1..], &raw, &split_adjusted);
+        assert!(matches!(
+            &first_bar_split,
+            StockSplitCoverage::CrossesWindow { event_dates, .. }
+                if event_dates == &[raw[1].timestamp.date_naive()]
+        ));
+        assert_eq!(
+            guard_stock_backtest_window("a_share", &first_bar_split, &raw[1..])
+                .unwrap_err()
+                .code,
+            "stock_split_crosses_window"
+        );
+        assert!(matches!(
+            a_share_stock_split_coverage(&raw, &raw[..2], &split_adjusted[..2]),
+            StockSplitCoverage::Unverified { .. }
+        ));
+        let mut divergent_selected = raw.clone();
+        divergent_selected[1].close += 0.03;
+        assert!(matches!(
+            a_share_stock_split_coverage(&divergent_selected[1..], &raw, &raw),
+            StockSplitCoverage::Unverified { .. }
+        ));
+        assert!(matches!(
+            a_share_stock_split_coverage(&raw, &raw, &raw),
+            StockSplitCoverage::Unverified { .. }
+        ));
+    }
+
+    #[test]
+    fn stock_guard_rejects_not_applicable_stock_coverage_but_ignores_crypto() {
+        let bars = vec![split_test_bar(2, 99.0, 103.0)];
+        assert!(
+            guard_stock_backtest_window("binance", &StockSplitCoverage::NotApplicable, &bars)
+                .is_ok()
+        );
+        assert!(
+            guard_stock_backtest_window("a_share", &StockSplitCoverage::NotApplicable, &bars)
+                .is_err()
+        );
+        assert!(guard_stock_backtest_window(
+            "a_share",
+            &StockSplitCoverage::VerifiedNoSplitInWindow {
+                evidence: "fixture".into()
+            },
+            &bars
+        )
+        .is_ok());
+        assert!(matches!(
+            guard_stock_backtest_window(
+                "us_stock",
+                &StockSplitCoverage::CrossesWindow {
+                    evidence: "fixture".into(),
+                    event_dates: vec![NaiveDate::from_ymd_opt(2023, 1, 1).unwrap()]
+                },
+                &bars
+            )
+            .unwrap(),
+            StockSplitCoverage::VerifiedNoSplitInWindow { .. }
+        ));
     }
 }
 

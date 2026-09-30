@@ -121,6 +121,7 @@ fn portfolio_signals_and_fills_cover_flat_small_and_unmatched_paths() {
         size: 0.0,
         price: 100.0,
         commission: 0.0,
+        tax: 0.0,
     });
     assert!(portfolio.open_trade().is_none());
     portfolio.on_fill(&Fill {
@@ -131,6 +132,7 @@ fn portfolio_signals_and_fills_cover_flat_small_and_unmatched_paths() {
         size: 1.0,
         price: 100.0,
         commission: 0.0,
+        tax: 0.0,
     });
     assert!(portfolio.closed_trades().is_empty());
 }

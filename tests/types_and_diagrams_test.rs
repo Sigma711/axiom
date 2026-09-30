@@ -28,6 +28,7 @@ fn domain_types_preserve_accounting_and_trade_direction() {
         size: 2.0,
         price: 10.0,
         commission: 1.0,
+        tax: 0.0,
     };
     assert_relative_eq!(buy.value(), 20.0);
     assert_relative_eq!(buy.cash_impact(), 21.0);
@@ -69,6 +70,8 @@ fn domain_types_preserve_accounting_and_trade_direction() {
         size: 2.0,
         entry_commission: 1.0,
         exit_commission: 1.0,
+        entry_tax: 0.0,
+        exit_tax: 0.0,
     };
     assert!(trade.is_closed());
     assert_relative_eq!(trade.total_commission(), 2.0);

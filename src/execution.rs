@@ -1,10 +1,11 @@
 //! Centralized market-execution constraints shared by backtest and paper trading.
 //!
-//! Static profiles cover only rules that can be selected from the requested
-//! market and security board. Exchange symbol filters, halts, price limits,
-//! taxes and liquidity require data that the current OHLCV feed does not carry.
+//! Static profiles cover rules selected from the requested market and security
+//! board. Dynamic symbol filters, reference-data exceptions, order-book
+//! liquidity and intraday halt state remain outside daily OHLCV.
 
-use chrono::{DateTime, Duration, NaiveDate, Utc};
+use crate::types::{Bar, Side};
+use chrono::{DateTime, Duration, NaiveDate, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 
 const EPSILON: f64 = 1e-9;
@@ -13,6 +14,7 @@ const EPSILON: f64 = 1e-9;
 #[serde(rename_all = "snake_case")]
 pub enum ChinaBoard {
     MainOrGrowth,
+    Growth,
     Star,
     Bse,
 }
@@ -60,6 +62,9 @@ impl ExecutionProfile {
             "real" | "binance" => ExecutionMarket::CryptoSpot,
             "us_stock" => ExecutionMarket::UsEquity,
             "a_share" if symbol.starts_with("688") => ExecutionMarket::ChinaA(ChinaBoard::Star),
+            "a_share" if symbol.starts_with("300") || symbol.starts_with("301") => {
+                ExecutionMarket::ChinaA(ChinaBoard::Growth)
+            }
             "a_share"
                 if symbol.starts_with("920")
                     || symbol.starts_with('4')
@@ -68,11 +73,9 @@ impl ExecutionProfile {
                 ExecutionMarket::ChinaA(ChinaBoard::Bse)
             }
             "a_share"
-                if [
-                    "000", "001", "002", "003", "300", "301", "600", "601", "603", "605",
-                ]
-                .iter()
-                .any(|prefix| symbol.starts_with(prefix)) =>
+                if ["000", "001", "002", "003", "600", "601", "603", "605"]
+                    .iter()
+                    .any(|prefix| symbol.starts_with(prefix)) =>
             {
                 ExecutionMarket::ChinaA(ChinaBoard::MainOrGrowth)
             }
@@ -95,11 +98,13 @@ impl ExecutionProfile {
             ExecutionMarket::ChinaA(ChinaBoard::MainOrGrowth) => {
                 (requested / 100.0).floor() * 100.0
             }
+            ExecutionMarket::ChinaA(ChinaBoard::Growth) => (requested / 100.0).floor() * 100.0,
             ExecutionMarket::ChinaA(ChinaBoard::Star) => requested.floor().max(0.0),
             ExecutionMarket::ChinaA(ChinaBoard::Bse) => requested.floor().max(0.0),
         };
         let minimum = match self.market {
             ExecutionMarket::ChinaA(ChinaBoard::MainOrGrowth)
+            | ExecutionMarket::ChinaA(ChinaBoard::Growth)
             | ExecutionMarket::ChinaA(ChinaBoard::Bse) => 100.0,
             ExecutionMarket::ChinaA(ChinaBoard::Star) => 200.0,
             ExecutionMarket::UsEquity => 1.0,
@@ -133,7 +138,8 @@ impl ExecutionProfile {
             ExecutionMarket::UsEquity
             | ExecutionMarket::ChinaA(ChinaBoard::Star)
             | ExecutionMarket::ChinaA(ChinaBoard::Bse) => is_integer(quantity),
-            ExecutionMarket::ChinaA(ChinaBoard::MainOrGrowth) => {
+            ExecutionMarket::ChinaA(ChinaBoard::MainOrGrowth)
+            | ExecutionMarket::ChinaA(ChinaBoard::Growth) => {
                 is_integer(quantity)
                     && (is_multiple(quantity, 100.0)
                         || (quantity - sellable_position).abs() < EPSILON)
@@ -149,6 +155,76 @@ impl ExecutionProfile {
         timestamp
             .checked_add_signed(Duration::hours(8))
             .map(|local| local.date_naive())
+    }
+
+    /// Returns a conservative execution rejection supported by the two daily
+    /// OHLCV rows. It does not infer an exchange halt from a missing row, and
+    /// it does not claim that every observed limit-price trade was fillable.
+    pub fn daily_bar_execution_block(
+        &self,
+        previous: Option<&Bar>,
+        current: &Bar,
+        side: Side,
+    ) -> Option<&'static str> {
+        if current.volume <= EPSILON {
+            return Some("日线 OHLCV 报告无成交量，不模拟成交");
+        }
+        let previous = previous?;
+        if current.timestamp - previous.timestamp < Duration::hours(12) {
+            return None;
+        }
+        let limit = match self.market {
+            ExecutionMarket::ChinaA(ChinaBoard::MainOrGrowth) => 0.10,
+            ExecutionMarket::ChinaA(ChinaBoard::Growth) => {
+                let trade_date = Self::shanghai_trade_date(current.timestamp)?;
+                if trade_date < NaiveDate::from_ymd_opt(2020, 8, 24)? {
+                    0.10
+                } else {
+                    0.20
+                }
+            }
+            ExecutionMarket::ChinaA(ChinaBoard::Star) => 0.20,
+            ExecutionMarket::ChinaA(ChinaBoard::Bse) => 0.30,
+            _ => return None,
+        };
+        let expected = match side {
+            Side::Buy => round_price(previous.close * (1.0 + limit)),
+            Side::Sell => round_price(previous.close * (1.0 - limit)),
+            Side::Hold => return None,
+        };
+        let one_price = [current.open, current.high, current.low, current.close]
+            .into_iter()
+            .all(|price| (price - expected).abs() <= 0.005 + EPSILON);
+        if !one_price {
+            return None;
+        }
+        match side {
+            Side::Buy => Some("一字涨停日线按保守队列假设拒绝买入"),
+            Side::Sell => Some("一字跌停日线按保守队列假设拒绝卖出"),
+            Side::Hold => None,
+        }
+    }
+
+    /// Known A-share transfer stamp-tax schedule. Dates before the verified
+    /// single-sided regime deliberately return `None` instead of inventing a
+    /// historical rate.
+    pub fn transaction_tax_rate(&self, side: Side, timestamp: DateTime<Utc>) -> Option<f64> {
+        if !matches!(self.market, ExecutionMarket::ChinaA(_)) || side == Side::Buy {
+            return Some(0.0);
+        }
+        if side != Side::Sell {
+            return Some(0.0);
+        }
+        Self::shanghai_trade_date(timestamp)?;
+        let half_rate = Utc.with_ymd_and_hms(2023, 8, 27, 16, 0, 0).single()?;
+        let single_sided = Utc.with_ymd_and_hms(2008, 9, 18, 16, 0, 0).single()?;
+        if timestamp >= half_rate {
+            Some(0.0005)
+        } else if timestamp >= single_sided {
+            Some(0.001)
+        } else {
+            None
+        }
     }
 
     pub fn assumptions(&self) -> Vec<ExecutionAssumption> {
@@ -178,7 +254,8 @@ impl ExecutionProfile {
                 assumption(
                     "china_a_board_quantity_rule",
                     match board {
-                        ChinaBoard::MainOrGrowth => "主板/创业板买入按100股整数倍，整数余股可一次卖出。",
+                        ChinaBoard::MainOrGrowth => "主板买入按100股整数倍，整数余股可一次卖出。",
+                        ChinaBoard::Growth => "创业板买入按100股整数倍，整数余股可一次卖出。",
                         ChinaBoard::Star => "科创板普通股票买入最低200股，超过200股后可逐股递增。",
                         ChinaBoard::Bse => "北交所买入最低100股，超过100股后可逐股递增。",
                     },
@@ -190,6 +267,27 @@ impl ExecutionProfile {
                     }),
                 ),
                 assumption(
+                    "china_a_stamp_tax_2008",
+                    "A股卖出印花税自2008-09-19起按成交额的0.1%计算。",
+                    true,
+                    Some("2008-09-19之前的卖单因缺少已验证税率而拒绝。"),
+                    Some("https://www.mof.gov.cn/zhengwuxinxi/caizhengxinwen/200809/t20080919_76432.htm"),
+                ),
+                assumption(
+                    "china_a_stamp_tax_2023",
+                    "A股卖出印花税自2023-08-28起减半为0.05%。",
+                    true,
+                    Some("未模拟券商最低佣金与其他动态费用。"),
+                    Some("https://shanxi.chinatax.gov.cn/web/detail/sx-11400-545-1780448"),
+                ),
+                assumption(
+                    "china_a_daily_ohlcv_execution_guards",
+                    "日线无成交量时拒绝买卖；普通股一字涨停拒绝买入、一字跌停拒绝卖出。",
+                    true,
+                    Some("这是基于OHLCV的保守队列假设；无法识别ST、新股前五日、退市整理、临时停牌或实际排队可成交量。"),
+                    Some("https://www.sse.com.cn/lawandrules/sselawsrules2025/stocks/exchange/c/c_20260424_10816482.shtml"),
+                ),
+                assumption(
                     "china_a_t_plus_one_sellable_inventory",
                     "按上海时区交易日期记录买入批次，当日新增普通股票不可卖出，早先库存仍可卖。",
                     true,
@@ -198,6 +296,15 @@ impl ExecutionProfile {
                 ),
             ],
         };
+        if matches!(self.market, ExecutionMarket::ChinaA(ChinaBoard::Growth)) {
+            assumptions.push(assumption(
+                "china_growth_2020_limit_change",
+                "创业板普通股一字涨跌停判断：2020-08-24 前按 10%，此后按 20%。",
+                true,
+                Some("新股上市前五日、风险警示和退市整理等例外仍需独立证券状态资料。"),
+                Some("https://www.szse.cn/aboutus/trends/news/t20200821_580924.html"),
+            ));
+        }
         assumptions.extend([
             assumption(
                 "pending_signal_executes_next_open",
@@ -220,23 +327,31 @@ impl ExecutionProfile {
                 Some("费率是教学配置，不代表真实券商账单。"),
                 None,
             ),
-            assumption(
-                "taxes_not_simulated",
-                "印花税、监管费及其他市场税费未模拟。",
-                false,
-                Some("真实净收益可能更低。"),
-                None,
-            ),
-            assumption(
-                "price_limits_and_halts_not_simulated",
-                "涨跌停、停牌、订单簿流动性及部分成交未模拟。",
-                false,
-                Some("K线开盘价不保证真实订单可成交。"),
-                None,
-            ),
         ]);
+        if !matches!(self.market, ExecutionMarket::ChinaA(_)) {
+            assumptions.extend([
+                assumption(
+                    "taxes_not_simulated",
+                    "市场税费与动态监管费未模拟。",
+                    false,
+                    Some("真实净收益可能更低。"),
+                    None,
+                ),
+                assumption(
+                    "price_limits_and_halts_not_simulated",
+                    "除日线报告零成交量时拒绝成交外，停牌、订单簿流动性及部分成交未模拟。",
+                    false,
+                    Some("K线开盘价不保证真实订单可成交。"),
+                    None,
+                ),
+            ]);
+        }
         assumptions
     }
+}
+
+fn round_price(price: f64) -> f64 {
+    (price * 100.0).round() / 100.0
 }
 
 fn is_integer(value: f64) -> bool {

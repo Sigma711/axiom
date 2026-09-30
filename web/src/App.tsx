@@ -14,6 +14,7 @@ import { UtxoSampleVisual } from './UtxoSampleVisual';
 import { AddressSetVisual } from './AddressSetVisual';
 import { FinancialCaseVisual } from './FinancialCaseVisual';
 import { IndustryCaseVisual } from './IndustryCaseVisual';
+import { FloatCaseVisual } from './FloatCaseVisual';
 import { StockAdjustmentVisual } from './StockAdjustmentVisual';
 import { industryCaseRequest } from './industryCase';
 import { ExecutionAssumptionsVisual, type ExecutionAssumption, type MarketProvenance } from './ExecutionAssumptionsVisual';
@@ -130,8 +131,13 @@ function renderPlot(chart: HTMLDivElement, traces: any[], layout: any, config: a
   };
 }
 
-function dateAxis(grid: string) {
-  return { type: 'date', gridcolor: grid, zerolinecolor: grid, tickformat: '%m-%d<br>%H:%M', hoverformat: '%Y-%m-%d %H:%M', tickangle: 0, nticks: 5, automargin: true };
+function dateAxis(grid: string, source: SourceType) {
+  const daily = source !== 'binance';
+  return { type: 'date', gridcolor: grid, zerolinecolor: grid, tickformat: daily ? '%Y<br>%m-%d' : '%m-%d<br>%H:%M', hoverformat: daily ? '%Y-%m-%d' : '%Y-%m-%d %H:%M', tickangle: 0, nticks: 5, automargin: true };
+}
+
+function equityAxisTitle(source: SourceType) {
+  return source === 'a_share' ? '净值 (元)' : source === 'binance' ? '净值 (USDT)' : '净值 (USD)';
 }
 
 
@@ -556,11 +562,11 @@ function CandlePatternVisual({ concept }: { concept: KnowledgeEntry }) {
   const inputs = practiceConcept?.inputs || concept.inputs || [];
   const isCandlePattern = ['k_pattern_hammer', 'k_pattern_doji', 'k_pattern_engulfing', 'k_pattern_star'].includes(concept.id);
   return <Section label="可计算示例" highlight>
-    <p className="ax-practice-note">{result.industry_case ? '基于固定发行人的历史披露原文计算；不是当前所选股票、实时行情或跨公司推荐。' : result.adjustment_evidence ? '基于 Apple 历史拆股事件演示股数与拆股价格因子；供应商价格复权口径未单独核验。' : result.filing_case ? '基于已验证的 Apple FY2025 与 FY2024 历史财务公告计算；不是当前所选股票的财务数据。' : result.address_sample ? '基于 Bitcoin 主网一个已确认区块交易首页的脚本地址集合；它只描述可解出的脚本地址，不识别人物或付款关系。' : result.utxo_sample ? '基于 Bitcoin 主网已确认区块交易首页的输入引用与输出计算；它是局部样本，不能推导当前全网 UTXO 总量。' : result.transaction_sample ? '基于 Bitcoin 主网一个已确认区块的交易首页计算；它是链上样本，不是所选交易所的现货行情。' : result.block_snapshot ? '基于 Bitcoin 主网区块浏览器最近区块计算；它是链上样本，不是所选交易所的现货行情。' : result.recent_trades ? '基于 Binance 最近逐笔成交计算；窗口时长随成交速度变化，不代表全天。' : result.pair ? `基于 ${result.pair.first_symbol} 与 ${result.pair.second_symbol} 同时刻的真实已收盘小时线计算；不补缺，也不把样本内关系当作交易建议。` : result.provenance === 'provided_market_bars' ? '基于已收盘的真实市场行情计算，用来观察数值变化，不代表交易建议。' : '基于可编辑教学输入计算，不代表当前币种行情。'}</p>
-    {isCandlePattern ? <CandlePatternVisual concept={concept} /> : (result.industry_case ? <IndustryCaseVisual result={result} name={concept.name} /> : result.adjustment_evidence ? <StockAdjustmentVisual result={result} /> : result.filing_case ? <FinancialCaseVisual result={result} name={concept.name} /> : result.address_sample ? <AddressSetVisual result={result} /> : result.utxo_sample ? <UtxoSampleVisual result={result} /> : result.transaction_sample ? <TransactionSampleVisual result={result} /> : result.block_snapshot && BLOCK_TIMING_PRACTICES.has(concept.id) ? <BlockTimingVisual result={result} /> : result.block_snapshot ? <BlockSnapshotVisual result={result} /> : result.recent_trades ? <RecentTradesVisual result={result} /> : result.chart ? <BookChartVisual chart={result.chart} name={concept.name} /> : series && values.length > 1 ? <KnowledgeSeriesVisual name={concept.name} result={result} /> : <ScalarKnowledgeDiagram concept={concept} inputs={inputs} scalar={scalar} unit={scalar ? result.units?.[scalar[0]] : undefined} />)}
+    <p className="ax-practice-note">{result.float_case ? '基于固定日期的发行人股本、股东关系、中证方法与同日行情交叉核对；无限售条件流通股不等于自由流通量。' : result.industry_case ? '基于固定发行人的历史披露原文计算；不是当前所选股票、实时行情或跨公司推荐。' : result.adjustment_evidence ? '基于 Apple 历史拆股事件演示股数与拆股价格因子；供应商价格复权口径未单独核验。' : result.filing_case ? '基于已验证的 Apple FY2025 与 FY2024 历史财务公告计算；不是当前所选股票的财务数据。' : result.address_sample ? '基于 Bitcoin 主网一个已确认区块交易首页的脚本地址集合；它只描述可解出的脚本地址，不识别人物或付款关系。' : result.utxo_sample ? '基于 Bitcoin 主网已确认区块交易首页的输入引用与输出计算；它是局部样本，不能推导当前全网 UTXO 总量。' : result.transaction_sample ? '基于 Bitcoin 主网一个已确认区块的交易首页计算；它是链上样本，不是所选交易所的现货行情。' : result.block_snapshot ? '基于 Bitcoin 主网区块浏览器最近区块计算；它是链上样本，不是所选交易所的现货行情。' : result.recent_trades ? '基于 Binance 最近逐笔成交计算；窗口时长随成交速度变化，不代表全天。' : result.pair ? `基于 ${result.pair.first_symbol} 与 ${result.pair.second_symbol} 同时刻的真实已收盘小时线计算；不补缺，也不把样本内关系当作交易建议。` : result.provenance === 'provided_market_bars' ? '基于已收盘的真实市场行情计算，用来观察数值变化，不代表交易建议。' : '基于可编辑教学输入计算，不代表当前币种行情。'}</p>
+    {isCandlePattern ? <CandlePatternVisual concept={concept} /> : (result.float_case ? <FloatCaseVisual result={result} name={concept.name} /> : result.industry_case ? <IndustryCaseVisual result={result} name={concept.name} /> : result.adjustment_evidence ? <StockAdjustmentVisual result={result} /> : result.filing_case ? <FinancialCaseVisual result={result} name={concept.name} /> : result.address_sample ? <AddressSetVisual result={result} /> : result.utxo_sample ? <UtxoSampleVisual result={result} /> : result.transaction_sample ? <TransactionSampleVisual result={result} /> : result.block_snapshot && BLOCK_TIMING_PRACTICES.has(concept.id) ? <BlockTimingVisual result={result} /> : result.block_snapshot ? <BlockSnapshotVisual result={result} /> : result.recent_trades ? <RecentTradesVisual result={result} /> : result.chart ? <BookChartVisual chart={result.chart} name={concept.name} /> : series && values.length > 1 ? <KnowledgeSeriesVisual name={concept.name} result={result} /> : <ScalarKnowledgeDiagram concept={concept} inputs={inputs} scalar={scalar} unit={scalar ? result.units?.[scalar[0]] : undefined} />)}
     <ExecutionAssumptionsVisual assumptions={result.execution_assumptions} provenance={result.market_provenance} />
-    {!result.industry_case && !result.recent_trades && !result.block_snapshot && !result.transaction_sample && <p className="ax-practice-reading">{resultSentence(concept.name, result.values, result.units, Boolean(series && values.length > 1))}</p>}
-    {!result.industry_case && !result.recent_trades && !result.block_snapshot && !result.transaction_sample && result.notes.slice(0, 1).map(note => <p className="ax-practice-note" key={note}>{note}</p>)}
+    {!result.float_case && !result.industry_case && !result.recent_trades && !result.block_snapshot && !result.transaction_sample && <p className="ax-practice-reading">{resultSentence(concept.name, result.values, result.units, Boolean(series && values.length > 1))}</p>}
+    {!result.float_case && !result.industry_case && !result.recent_trades && !result.block_snapshot && !result.transaction_sample && result.notes.slice(0, 1).map(note => <p className="ax-practice-note" key={note}>{note}</p>)}
   </Section>;
 }
 
@@ -666,14 +672,14 @@ function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}
         </>}
       </>}
       {result && <div className="ax-practice-result">
-        {result.industry_case ? <IndustryCaseVisual result={result} name={concept?.name || '行业历史案例'} /> : result.adjustment_evidence ? <StockAdjustmentVisual result={result} /> : result.filing_case ? <FinancialCaseVisual result={result} name={concept?.name || '财务案例'} /> : result.address_sample ? <AddressSetVisual result={result} /> : result.utxo_sample ? <UtxoSampleVisual result={result} /> : result.transaction_sample ? <TransactionSampleVisual result={result} /> : result.block_snapshot && BLOCK_TIMING_PRACTICES.has(conceptId) ? <BlockTimingVisual result={result} /> : result.block_snapshot ? <BlockSnapshotVisual result={result} /> : FLOW_PRACTICES.has(conceptId) ? <AggressorFlowVisual result={result} /> : DEPTH_PRACTICES.has(conceptId) ? <SpotDepthVisual result={result} /> : result.recent_trades ? <RecentTradesVisual result={result} /> : conceptId === 'book_pitfall_open_candle' ? <OpenCandleVisual result={result} /> : conceptId === 'book_52w_range' ? <YearRangeVisual result={result} /> : result.chart ? <BookChartVisual chart={result.chart} name={concept?.name || '当前图形'} /> : result.series.length > 0 ? <KnowledgeSeriesVisual name={concept?.name || '当前序列'} result={result} /> : null}
+        {result.float_case ? <FloatCaseVisual result={result} name={concept?.name || 'A股自由流通案例'} /> : result.industry_case ? <IndustryCaseVisual result={result} name={concept?.name || '行业历史案例'} /> : result.adjustment_evidence ? <StockAdjustmentVisual result={result} /> : result.filing_case ? <FinancialCaseVisual result={result} name={concept?.name || '财务案例'} /> : result.address_sample ? <AddressSetVisual result={result} /> : result.utxo_sample ? <UtxoSampleVisual result={result} /> : result.transaction_sample ? <TransactionSampleVisual result={result} /> : result.block_snapshot && BLOCK_TIMING_PRACTICES.has(conceptId) ? <BlockTimingVisual result={result} /> : result.block_snapshot ? <BlockSnapshotVisual result={result} /> : FLOW_PRACTICES.has(conceptId) ? <AggressorFlowVisual result={result} /> : DEPTH_PRACTICES.has(conceptId) ? <SpotDepthVisual result={result} /> : result.recent_trades ? <RecentTradesVisual result={result} /> : conceptId === 'book_pitfall_open_candle' ? <OpenCandleVisual result={result} /> : conceptId === 'book_52w_range' ? <YearRangeVisual result={result} /> : result.chart ? <BookChartVisual chart={result.chart} name={concept?.name || '当前图形'} /> : result.series.length > 0 ? <KnowledgeSeriesVisual name={concept?.name || '当前序列'} result={result} /> : null}
         <ExecutionAssumptionsVisual assumptions={result.execution_assumptions} provenance={result.market_provenance} />
         {result.pair && <p className="ax-practice-provenance">{result.pair.first_symbol} 与 {result.pair.second_symbol} · {result.pair.interval} 已收盘行情 · 同时刻 {result.pair.matched_count} 根 · 两侧各剔除 {result.pair.dropped_first}/{result.pair.dropped_second} 根 · {result.pair.start} 至 {result.pair.end}。{conceptId === 'book_cointegration_diagnostic' ? '这里是样本内诊断，不单凭该统计量认定协整。' : conceptId === 'book_pair_spread' ? '对冲比率为教学设定，不是自动寻优所得。' : '比值只比较同一计价资产的两只标的。'}</p>}
-        <p className={result.status === 'computed' || result.status === 'partial' ? 'positive' : 'negative'}>{result.status === 'computed' ? '已计算' : result.status === 'partial' ? '已计算样本 · 全网总量无定义' : '无法计算'} · {result.industry_case ? '固定发行人历史披露案例' : result.adjustment_evidence ? 'Apple 历史拆股事件 · 供应商数据' : result.filing_case ? 'Apple 官方历史业绩公告 · 未经审计' : result.address_sample ? 'Bitcoin 主网已确认区块首页的脚本地址样本' : result.utxo_sample ? 'Bitcoin 主网已确认区块首页的输入引用与输出样本' : result.transaction_sample ? 'Bitcoin 主网已确认区块的交易首页样本' : result.block_snapshot ? 'Bitcoin 主网最近区块' : result.recent_trades ? 'Binance 现货最近逐笔成交 · 窗口随市场活跃度变化' : result.year_range ? '所选股票的已收盘日线 · 截至末根日线的 52 周窗口' : PAIR_PRACTICES.has(conceptId) ? '两只 Binance USDT 现货的同时刻已收盘小时线' : FLOW_PRACTICES.has(conceptId) ? 'Binance 现货已收盘 K 线的主动成交分类' : DEPTH_PRACTICES.has(conceptId) ? 'Binance 现货订单簿快照 · 更新编号不代表历史时间戳' : conceptId === 'book_pitfall_open_candle' ? 'Binance 当前 1 小时 K 线 · 临时价尚未收盘' : result.bar_origin === 'server_fetched_completed_binance_usdt_spot_bars' ? 'Binance 已收盘现货 K 线及计价资产成交额' : result.bar_origin === 'server_fetched_completed_source_bars' ? '所选标的的已收盘行情 · 观察时间见图表' : result.provenance === 'provided_market_bars' ? '使用当前模块行情上下文' : result.provenance === 'provided_result_context' ? '使用当前模块真实结果' : '使用可编辑教学输入'}</p>
+        <p className={result.status === 'computed' || result.status === 'partial' ? 'positive' : 'negative'}>{result.status === 'computed' ? '已计算' : result.status === 'partial' ? '已计算样本 · 全网总量无定义' : '无法计算'} · {result.float_case ? '固定发行人历史披露与指数方法复算案例' : result.industry_case ? '固定发行人历史披露案例' : result.adjustment_evidence ? 'Apple 历史拆股事件 · 供应商数据' : result.filing_case ? 'Apple 官方历史业绩公告 · 未经审计' : result.address_sample ? 'Bitcoin 主网已确认区块首页的脚本地址样本' : result.utxo_sample ? 'Bitcoin 主网已确认区块首页的输入引用与输出样本' : result.transaction_sample ? 'Bitcoin 主网已确认区块的交易首页样本' : result.block_snapshot ? 'Bitcoin 主网最近区块' : result.recent_trades ? 'Binance 现货最近逐笔成交 · 窗口随市场活跃度变化' : result.year_range ? '所选股票的已收盘日线 · 截至末根日线的 52 周窗口' : PAIR_PRACTICES.has(conceptId) ? '两只 Binance USDT 现货的同时刻已收盘小时线' : FLOW_PRACTICES.has(conceptId) ? 'Binance 现货已收盘 K 线的主动成交分类' : DEPTH_PRACTICES.has(conceptId) ? 'Binance 现货订单簿快照 · 更新编号不代表历史时间戳' : conceptId === 'book_pitfall_open_candle' ? 'Binance 当前 1 小时 K 线 · 临时价尚未收盘' : result.bar_origin === 'server_fetched_completed_binance_usdt_spot_bars' ? 'Binance 已收盘现货 K 线及计价资产成交额' : result.bar_origin === 'server_fetched_completed_source_bars' ? '所选标的的已收盘行情 · 观察时间见图表' : result.provenance === 'provided_market_bars' ? '使用当前模块行情上下文' : result.provenance === 'provided_result_context' ? '使用当前模块真实结果' : '使用可编辑教学输入'}</p>
         {result.reason && <p>{result.reason}</p>}
-        {!FLOW_PRACTICES.has(conceptId) && !DEPTH_PRACTICES.has(conceptId) && !result.year_range && !result.recent_trades && !result.block_snapshot && !result.transaction_sample && !result.utxo_sample && !result.address_sample && !result.filing_case && !result.industry_case && Object.keys(result.values).length > 0 && <dl>{Object.entries(result.values).map(([key, value]) => <div key={key}><dt>{chineseField(key, key === conceptId ? concept?.name : undefined)}{result.units?.[key] && !key.endsWith('_timestamp') && key !== 'is_current_candle_closed' ? `（${practiceUnit(result.units[key], result)}）` : ''}</dt><dd>{practiceValue(key, value)}</dd></div>)}</dl>}
-        {!FLOW_PRACTICES.has(conceptId) && !DEPTH_PRACTICES.has(conceptId) && !result.year_range && !result.recent_trades && !result.block_snapshot && !result.transaction_sample && !result.utxo_sample && !result.address_sample && !result.filing_case && !result.industry_case && <p className="ax-practice-reading">{conceptId === 'book_trade_volume' ? `最新一根已收盘 K 线实际成交 ${practiceValue('base_volume', result.values.base_volume)} ${result.asset_units?.base_asset || '基本单位'}，成交额 ${practiceValue('quote_volume', result.values.quote_volume)} ${result.asset_units?.quote_asset || '计价资产'}；这根 1 小时 K 线内的成交均价为 ${practiceValue('vwap', result.values.vwap)} ${result.asset_units?.quote_asset || '计价资产'}/${result.asset_units?.base_asset || '基本单位'}。成交额取自交易所汇总字段，不拿收盘价乘成交数量代替。` : conceptId === 'book_pitfall_open_candle' ? `上一根 1 小时 K 线已收于 ${practiceValue('last_completed_close', result.values.last_completed_close)}；当前 K 线从 ${practiceValue('current_candle_open', result.values.current_candle_open)} 开始，在交易所快照时的临时价为 ${practiceValue('provisional_close', result.values.provisional_close)}。预计 ${practiceValue('expected_close_timestamp', result.values.expected_close_timestamp)} 收盘前，它仍会变化；此值不能当作最终收盘价参与策略判断。` : conceptId === 'book_pitfall_repainting' ? `在 ${result.bars?.length ?? 0} 根已收盘 K 线里确认了 ${fmtNum(result.values.confirmed_pivot_count ?? 0, 0)} 个局部高低点。空心点标在枢轴发生的 K 线上，只供事后回看；实心点标在两根右侧 K 线收盘后的确认位置，才是当时可知的信息。` : conceptId === 'book_pitfall_timeframe' ? `同一根已收盘 K 线为截止，近 5 根变化 ${result.values.short_horizon_return == null ? '—' : `${fmtNum(result.values.short_horizon_return * 100, 2)}%`}，近 20 根变化 ${result.values.long_horizon_return == null ? '—' : `${fmtNum(result.values.long_horizon_return * 100, 2)}%`}。图上的两点是各自的起算价；窗口来自同一行情，不能当作相互独立的确认。` : conceptId === 'book_pitfall_formula_variant' ? `同一段已收盘行情按 MACD(12, 26, 9) 只计算一次柱体：x2 曲线恒为 x1 的两倍。最新 x1 ${result.values.latest_histogram_x1 == null ? '—' : fmtNum(result.values.latest_histogram_x1, 6)}，x2 ${result.values.latest_histogram_x2 == null ? '—' : fmtNum(result.values.latest_histogram_x2, 6)}，两种约定之差 ${result.values.latest_histogram_difference == null ? '—' : fmtNum(result.values.latest_histogram_difference, 6)}；这不是两家供应商的独立实测输出。` : resultSentence(concept?.name || '该概念', result.values, result.units, !result.chart && result.series.length > 0, result.provenance)}</p>}
-        {!result.year_range && !result.recent_trades && !result.block_snapshot && !result.transaction_sample && !result.utxo_sample && !result.address_sample && !result.filing_case && !result.industry_case && result.notes.map((note, index) => <p className="ax-practice-note" key={index}>{note}</p>)}
+        {!FLOW_PRACTICES.has(conceptId) && !DEPTH_PRACTICES.has(conceptId) && !result.year_range && !result.recent_trades && !result.block_snapshot && !result.transaction_sample && !result.utxo_sample && !result.address_sample && !result.filing_case && !result.industry_case && !result.float_case && Object.keys(result.values).length > 0 && <dl>{Object.entries(result.values).map(([key, value]) => <div key={key}><dt>{chineseField(key, key === conceptId ? concept?.name : undefined)}{result.units?.[key] && !key.endsWith('_timestamp') && key !== 'is_current_candle_closed' ? `（${practiceUnit(result.units[key], result)}）` : ''}</dt><dd>{practiceValue(key, value)}</dd></div>)}</dl>}
+        {!FLOW_PRACTICES.has(conceptId) && !DEPTH_PRACTICES.has(conceptId) && !result.year_range && !result.recent_trades && !result.block_snapshot && !result.transaction_sample && !result.utxo_sample && !result.address_sample && !result.filing_case && !result.industry_case && !result.float_case && <p className="ax-practice-reading">{conceptId === 'book_trade_volume' ? `最新一根已收盘 K 线实际成交 ${practiceValue('base_volume', result.values.base_volume)} ${result.asset_units?.base_asset || '基本单位'}，成交额 ${practiceValue('quote_volume', result.values.quote_volume)} ${result.asset_units?.quote_asset || '计价资产'}；这根 1 小时 K 线内的成交均价为 ${practiceValue('vwap', result.values.vwap)} ${result.asset_units?.quote_asset || '计价资产'}/${result.asset_units?.base_asset || '基本单位'}。成交额取自交易所汇总字段，不拿收盘价乘成交数量代替。` : conceptId === 'book_pitfall_open_candle' ? `上一根 1 小时 K 线已收于 ${practiceValue('last_completed_close', result.values.last_completed_close)}；当前 K 线从 ${practiceValue('current_candle_open', result.values.current_candle_open)} 开始，在交易所快照时的临时价为 ${practiceValue('provisional_close', result.values.provisional_close)}。预计 ${practiceValue('expected_close_timestamp', result.values.expected_close_timestamp)} 收盘前，它仍会变化；此值不能当作最终收盘价参与策略判断。` : conceptId === 'book_pitfall_repainting' ? `在 ${result.bars?.length ?? 0} 根已收盘 K 线里确认了 ${fmtNum(result.values.confirmed_pivot_count ?? 0, 0)} 个局部高低点。空心点标在枢轴发生的 K 线上，只供事后回看；实心点标在两根右侧 K 线收盘后的确认位置，才是当时可知的信息。` : conceptId === 'book_pitfall_timeframe' ? `同一根已收盘 K 线为截止，近 5 根变化 ${result.values.short_horizon_return == null ? '—' : `${fmtNum(result.values.short_horizon_return * 100, 2)}%`}，近 20 根变化 ${result.values.long_horizon_return == null ? '—' : `${fmtNum(result.values.long_horizon_return * 100, 2)}%`}。图上的两点是各自的起算价；窗口来自同一行情，不能当作相互独立的确认。` : conceptId === 'book_pitfall_formula_variant' ? `同一段已收盘行情按 MACD(12, 26, 9) 只计算一次柱体：x2 曲线恒为 x1 的两倍。最新 x1 ${result.values.latest_histogram_x1 == null ? '—' : fmtNum(result.values.latest_histogram_x1, 6)}，x2 ${result.values.latest_histogram_x2 == null ? '—' : fmtNum(result.values.latest_histogram_x2, 6)}，两种约定之差 ${result.values.latest_histogram_difference == null ? '—' : fmtNum(result.values.latest_histogram_difference, 6)}；这不是两家供应商的独立实测输出。` : resultSentence(concept?.name || '该概念', result.values, result.units, !result.chart && result.series.length > 0, result.provenance)}</p>}
+        {!result.year_range && !result.recent_trades && !result.block_snapshot && !result.transaction_sample && !result.utxo_sample && !result.address_sample && !result.filing_case && !result.industry_case && !result.float_case && result.notes.map((note, index) => <p className="ax-practice-note" key={index}>{note}</p>)}
       </div>}
     </aside>
   );
@@ -943,7 +949,7 @@ function DataExplore({ targetConcept, targetSource, theme }: { targetConcept?: s
       paper_bgcolor: colors.paper, plot_bgcolor: colors.plot,
       font: { color: colors.text, family: 'system-ui', size: 11 },
       margin: { t: 30, b: 90, l: 55, r: 30 },
-      xaxis: { ...dateAxis(colors.grid), anchor: 'free', position: 0, rangeslider: { visible: false } },
+      xaxis: { ...dateAxis(colors.grid, source), anchor: 'free', position: 0, rangeslider: { visible: false } },
       yaxis: { gridcolor: colors.grid, title: '价格', domain: [subPanels.length * 0.17, 1], fixedrange: false },
       legend: { orientation: 'h', y: -0.13 },
       hovermode: 'x unified',
@@ -1109,8 +1115,8 @@ function Backtest({ targetConcept, targetSource, theme }: { targetConcept?: stri
       paper_bgcolor: colors.paper, plot_bgcolor: colors.plot,
       font: { color: colors.text, family: 'system-ui', size: 11 },
       margin: { t: 30, b: 40, l: 60, r: 20 },
-      xaxis: dateAxis(colors.grid),
-      yaxis: { gridcolor: colors.grid, zerolinecolor: colors.grid, title: '净值 ($)' },
+      xaxis: dateAxis(colors.grid, source),
+      yaxis: { gridcolor: colors.grid, zerolinecolor: colors.grid, title: equityAxisTitle(source) },
       hoverlabel: { bgcolor: colors.paper, bordercolor: colors.grid, font: { color: colors.text } },
     }, { responsive: true, displayModeBar: false });
   }, [result, theme]);
@@ -1179,11 +1185,12 @@ function Backtest({ targetConcept, targetSource, theme }: { targetConcept?: stri
               return (
                 <div className="ax-metric" key={f.key}>
                   <div className="ax-metric-label">{f.label}</div>
-                  <div className={'ax-metric-value ' + cls}>{f.fmt(v)}</div>
+                <div className={'ax-metric-value ' + cls}>{f.key === '最终净值' ? fmtMoney(v, source) : f.fmt(v)}</div>
                 </div>
               );
             })}
           </div>
+          {result.fills.length === 0 && <p className="ax-no-fills"><strong>当前设置没有成交</strong>。检查资金是否足够买入最小交易数量、策略是否发出信号，以及所选区间是否允许成交。</p>}
           {typeof result.metrics['指标说明'] === 'object' && result.metrics['指标说明'] !== null && <details className="ax-trades ax-metric-notes">
             <summary>指标说明</summary>
             <p>显示“—”表示该指标在当前样本中无定义，不等于零。</p>
@@ -1204,7 +1211,7 @@ function Backtest({ targetConcept, targetSource, theme }: { targetConcept?: stri
                       <td>{fmtNum(t.size, 4)}</td>
                       <td>{t.exit_time ? new Date(t.exit_time).toLocaleString() : '—'}</td>
                       <td>{t.exit_price ? fmtNum(t.exit_price) : '—'}</td>
-                      <td className={t.pnl >= 0 ? 'positive' : 'negative'}>{fmtMoney(t.pnl)}</td>
+                      <td className={t.pnl >= 0 ? 'positive' : 'negative'}>{fmtMoney(t.pnl, source)}</td>
                       <td className={t.pnl_pct >= 0 ? 'positive' : 'negative'}>{fmtPct(t.pnl_pct)}</td>
                     </tr>
                   ))}
@@ -1299,8 +1306,8 @@ function PaperTrading({ targetConcept, targetSource, theme }: { targetConcept?: 
       paper_bgcolor: colors.paper, plot_bgcolor: colors.plot,
       font: { color: colors.text, family: 'system-ui', size: 11 },
       margin: { t: 30, b: 40, l: 60, r: 20 },
-      xaxis: dateAxis(colors.grid),
-      yaxis: { gridcolor: colors.grid, zerolinecolor: colors.grid, title: '净值 ($)' },
+      xaxis: dateAxis(colors.grid, snapshot.source || source),
+      yaxis: { gridcolor: colors.grid, zerolinecolor: colors.grid, title: equityAxisTitle(snapshot.source || source) },
       hoverlabel: { bgcolor: colors.paper, bordercolor: colors.grid, font: { color: colors.text } },
     }, { responsive: true, displayModeBar: false });
   }, [snapshot, theme]);
@@ -1348,9 +1355,9 @@ function PaperTrading({ targetConcept, targetSource, theme }: { targetConcept?: 
       <p className="ax-practice-note">先选择市场、标的和策略，再应用或启动。切换市场会在停止状态下重置模拟账户，避免把不同币种或币种与股票的价格、持仓和盈亏混在一起。</p>
       {error && <div className="ax-error">{error}</div>}
       <div className="ax-paper-stats">
-        <div className="ax-stat"><div className="ax-stat-label">现金</div><div className="ax-stat-value">{fmtMoney(snapshot.cash)}</div></div>
-        <div className="ax-stat"><div className="ax-stat-label">持仓价值</div><div className="ax-stat-value">{fmtMoney(snapshot.position_value)}</div></div>
-        <div className="ax-stat"><div className="ax-stat-label">总净值</div><div className="ax-stat-value">{fmtMoney(snapshot.equity)}</div></div>
+        <div className="ax-stat"><div className="ax-stat-label">现金</div><div className="ax-stat-value">{fmtMoney(snapshot.cash, snapshot.source || source)}</div></div>
+        <div className="ax-stat"><div className="ax-stat-label">持仓价值</div><div className="ax-stat-value">{fmtMoney(snapshot.position_value, snapshot.source || source)}</div></div>
+        <div className="ax-stat"><div className="ax-stat-label">总净值</div><div className="ax-stat-value">{fmtMoney(snapshot.equity, snapshot.source || source)}</div></div>
         <div className="ax-stat"><div className="ax-stat-label">持仓数量</div><div className="ax-stat-value">{fmtNum(snapshot.position_size, 4)}</div></div>
         <div className="ax-stat"><div className="ax-stat-label">成交笔数</div><div className="ax-stat-value">{snapshot.trades_count}</div></div>
         <div className="ax-stat"><div className="ax-stat-label">交易对</div><div className="ax-stat-value">{snapshot.symbol || '—'}</div></div>
@@ -1508,8 +1515,8 @@ function CompareStrategies({ targetConcept, targetSource, theme }: { targetConce
       paper_bgcolor: themeColors.paper, plot_bgcolor: themeColors.plot,
       font: { color: themeColors.text, family: 'system-ui', size: 11 },
       margin: { t: 30, b: 40, l: 60, r: 20 },
-      xaxis: dateAxis(themeColors.grid),
-      yaxis: { gridcolor: themeColors.grid, zerolinecolor: themeColors.grid, title: '净值 ($)' },
+      xaxis: dateAxis(themeColors.grid, source),
+      yaxis: { gridcolor: themeColors.grid, zerolinecolor: themeColors.grid, title: equityAxisTitle(source) },
       legend: { orientation: 'h', y: -0.15 },
       hoverlabel: { bgcolor: themeColors.paper, bordercolor: themeColors.grid, font: { color: themeColors.text } },
     }, { responsive: true, displayModeBar: false });

@@ -96,6 +96,9 @@ pub struct Fill {
     pub size: f64,
     pub price: f64,
     pub commission: f64,
+    /// Market transaction tax, kept separate from broker commission.
+    #[serde(default)]
+    pub tax: f64,
 }
 
 impl Fill {
@@ -107,8 +110,8 @@ impl Fill {
     /// 对现金的影响 (正数=消耗现金, 负数=收到现金)
     pub fn cash_impact(&self) -> f64 {
         match self.side {
-            Side::Buy => self.value() + self.commission,
-            Side::Sell => -(self.value() - self.commission),
+            Side::Buy => self.value() + self.commission + self.tax,
+            Side::Sell => -(self.value() - self.commission - self.tax),
             Side::Hold => 0.0,
         }
     }
@@ -153,6 +156,10 @@ pub struct Trade {
     pub size: f64,
     pub entry_commission: f64,
     pub exit_commission: f64,
+    #[serde(default)]
+    pub entry_tax: f64,
+    #[serde(default)]
+    pub exit_tax: f64,
 }
 
 impl Trade {
@@ -161,6 +168,12 @@ impl Trade {
     }
     pub fn total_commission(&self) -> f64 {
         self.entry_commission + self.exit_commission
+    }
+    pub fn total_tax(&self) -> f64 {
+        self.entry_tax + self.exit_tax
+    }
+    pub fn total_costs(&self) -> f64 {
+        self.total_commission() + self.total_tax()
     }
     pub fn pnl(&self) -> f64 {
         match (self.is_closed(), self.exit_price) {
@@ -171,7 +184,7 @@ impl Trade {
                 } else {
                     gross
                 };
-                gross - self.total_commission()
+                gross - self.total_costs()
             }
             _ => 0.0,
         }

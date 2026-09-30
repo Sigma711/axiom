@@ -143,6 +143,29 @@ async fn aapl_adjustment_practice_uses_dated_split_evidence_without_calling_quot
     assert!(body.to_string().contains("provider_quote"));
     assert!(!body.to_string().contains("raw_price"));
 
+    let (alias_status, alias) = request(
+        &app,
+        "/api/practice",
+        json!({"concept_id":"book_pitfall_adjustment","module":"data","symbol":"AAPL","source":"us_stock","inputs":{}}),
+    )
+    .await;
+    assert_eq!(alias_status, StatusCode::OK, "{alias}");
+    assert_eq!(alias["concept_id"], "book_pitfall_adjustment");
+    assert_eq!(alias["values"], body["values"]);
+    assert_eq!(
+        alias["adjustment_evidence"]["event"],
+        body["adjustment_evidence"]["event"]
+    );
+    assert_eq!(
+        alias["adjustment_evidence"]["observations"],
+        body["adjustment_evidence"]["observations"]
+    );
+    assert_eq!(
+        alias["adjustment_evidence"]["endpoint"],
+        body["adjustment_evidence"]["endpoint"]
+    );
+    assert_eq!(alias["provenance"], body["provenance"]);
+
     server.abort();
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -205,6 +228,8 @@ async fn aapl_adjustment_practice_rejects_fallback_symbols_and_editable_inputs()
         json!({"concept_id":"book_adjustment","module":"data","symbol":"MSFT","source":"us_stock","inputs":{}}),
         json!({"concept_id":"book_adjustment","module":"data","symbol":"AAPL","source":"a_share","inputs":{}}),
         json!({"concept_id":"book_adjustment","module":"data","symbol":"AAPL","source":"us_stock","inputs":{"adjustment_factor":4.0}}),
+        json!({"concept_id":"book_pitfall_adjustment","module":"data","symbol":"MSFT","source":"us_stock","inputs":{}}),
+        json!({"concept_id":"book_pitfall_adjustment","module":"data","symbol":"AAPL","source":"us_stock","inputs":{"raw_price":500}}),
     ] {
         let (status, response) = request(&app, "/api/practice", body).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{response}");
@@ -994,6 +1019,7 @@ async fn book_financial_practices_require_equity_evidence_and_reject_crypto() {
         "book_dcf",
         "book_share_counts",
         "book_adjustment",
+        "book_pitfall_adjustment",
     ] {
         let concept = document["concepts"]
             .as_array()
@@ -1003,7 +1029,7 @@ async fn book_financial_practices_require_equity_evidence_and_reject_crypto() {
             .unwrap();
         let filing_case = id == "book_current_ratio";
         let industry_case = matches!(id, "book_bank_nim" | "book_share_counts");
-        let stock_action_case = id == "book_adjustment";
+        let stock_action_case = matches!(id, "book_adjustment" | "book_pitfall_adjustment");
         assert_eq!(
             concept["plan"]["markets"],
             if filing_case {

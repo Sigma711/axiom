@@ -166,6 +166,8 @@ impl Portfolio {
             || fill.price <= 0.0
             || !fill.commission.is_finite()
             || fill.commission < 0.0
+            || !fill.tax.is_finite()
+            || fill.tax < 0.0
             || fill.symbol != self.config.symbol
         {
             return;
@@ -181,6 +183,7 @@ impl Portfolio {
                         (open.entry_price * open.size + fill.price * fill.size) / combined_size;
                     open.size = combined_size;
                     open.entry_commission += fill.commission;
+                    open.entry_tax += fill.tax;
                 }
                 None => {
                     self.open_trade = Some(Trade {
@@ -193,6 +196,8 @@ impl Portfolio {
                         size: fill.size,
                         entry_commission: fill.commission,
                         exit_commission: 0.0,
+                        entry_tax: fill.tax,
+                        exit_tax: 0.0,
                     });
                 }
                 Some(_) => {}
@@ -213,6 +218,12 @@ impl Portfolio {
                     open.entry_commission * closed_size / open.size
                 };
                 let allocated_exit_commission = fill.commission * closed_size / fill.size;
+                let allocated_entry_tax = if fully_closed {
+                    open.entry_tax
+                } else {
+                    open.entry_tax * closed_size / open.size
+                };
+                let allocated_exit_tax = fill.tax * closed_size / fill.size;
                 self.closed_trades.push(Trade {
                     symbol: fill.symbol.clone(),
                     side: Side::Buy,
@@ -223,10 +234,13 @@ impl Portfolio {
                     size: closed_size,
                     entry_commission: allocated_entry_commission,
                     exit_commission: allocated_exit_commission,
+                    entry_tax: allocated_entry_tax,
+                    exit_tax: allocated_exit_tax,
                 });
                 if !fully_closed {
                     open.size -= closed_size;
                     open.entry_commission -= allocated_entry_commission;
+                    open.entry_tax -= allocated_entry_tax;
                     self.open_trade = Some(open);
                 }
             }
@@ -240,6 +254,17 @@ impl Portfolio {
 
     pub fn open_trade(&self) -> Option<&Trade> {
         self.open_trade.as_ref()
+    }
+
+    pub fn apply_stock_split(&mut self, ratio: f64) -> bool {
+        if !self.broker.apply_stock_split(&self.config.symbol, ratio) {
+            return false;
+        }
+        if let Some(open) = self.open_trade.as_mut() {
+            open.size *= ratio;
+            open.entry_price /= ratio;
+        }
+        true
     }
 
     fn calc_buy_size(&self, price: f64, strength: f64) -> f64 {

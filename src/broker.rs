@@ -51,6 +51,9 @@ pub trait Broker: Send + Sync {
     fn set_market_price(&mut self, symbol: &str, price: f64);
     fn get_market_price(&self, symbol: &str) -> Option<f64>;
     fn trade_log(&self) -> Vec<(DateTime<Utc>, String, f64)>;
+    fn apply_stock_split(&mut self, _symbol: &str, _ratio: f64) -> bool {
+        false
+    }
 }
 
 /// 模拟券商 —— 跑回测和模拟盘都用这个
@@ -169,7 +172,14 @@ impl SimulatedBroker {
     }
 
     /// 把成交应用到账户上(更新现金和持仓)
-    fn apply_fill(&mut self, symbol: &str, side: Side, size: f64, price: f64, commission: f64) {
+    fn apply_fill(
+        &mut self,
+        symbol: &str,
+        side: Side,
+        size: f64,
+        price: f64,
+        transaction_cost: f64,
+    ) {
         let pos = self
             .positions
             .entry(symbol.to_string())
@@ -182,16 +192,16 @@ impl SimulatedBroker {
             Side::Sell => -size,
             Side::Hold => return,
         };
-        self.cash -= delta * price + commission;
+        self.cash -= delta * price + transaction_cost;
         let old_size = pos.size;
         let new_size = old_size + delta;
         if old_size == 0.0 || old_size.signum() == delta.signum() {
-            let execution_basis = price + delta.signum() * commission / size;
+            let execution_basis = price + delta.signum() * transaction_cost / size;
             pos.avg_entry_price =
                 (old_size.abs() * pos.avg_entry_price + size * execution_basis) / new_size.abs();
         } else {
             let closing_size = old_size.abs().min(size);
-            let closing_fee = commission * closing_size / size;
+            let closing_fee = transaction_cost * closing_size / size;
             pos.realized_pnl +=
                 (price - pos.avg_entry_price) * closing_size * old_size.signum() - closing_fee;
             if new_size.abs() < 1e-9 {
@@ -199,7 +209,7 @@ impl SimulatedBroker {
             } else if new_size.signum() != old_size.signum() {
                 // Only the opening portion contributes to the new cost basis.
                 pos.avg_entry_price =
-                    price + new_size.signum() * (commission - closing_fee) / new_size.abs();
+                    price + new_size.signum() * (transaction_cost - closing_fee) / new_size.abs();
             }
         }
         pos.size = if new_size.abs() < 1e-9 { 0.0 } else { new_size };
@@ -231,6 +241,7 @@ impl Broker for SimulatedBroker {
                 size: 0.0,
                 price: 0.0,
                 commission: 0.0,
+                tax: 0.0,
             };
         }
         if order.side == Side::Hold {
@@ -242,6 +253,7 @@ impl Broker for SimulatedBroker {
                 size: 0.0,
                 price: 0.0,
                 commission: 0.0,
+                tax: 0.0,
             };
         }
         let position_before = self.get_position(&order.symbol).size.max(0.0);
@@ -274,6 +286,7 @@ impl Broker for SimulatedBroker {
                 size: 0.0,
                 price: 0.0,
                 commission: 0.0,
+                tax: 0.0,
             };
         }
         let fill_price = match self.resolve_fill_price(&order) {
@@ -287,6 +300,7 @@ impl Broker for SimulatedBroker {
                     size: 0.0,
                     price: 0.0,
                     commission: 0.0,
+                    tax: 0.0,
                 };
             }
         };
@@ -305,6 +319,7 @@ impl Broker for SimulatedBroker {
                         size: 0.0,
                         price: fill_price,
                         commission: 0.0,
+                        tax: 0.0,
                     };
                 }
             }
@@ -326,6 +341,7 @@ impl Broker for SimulatedBroker {
                         size: 0.0,
                         price: fill_price,
                         commission: 0.0,
+                        tax: 0.0,
                     };
                 }
             }
@@ -333,12 +349,32 @@ impl Broker for SimulatedBroker {
         }
 
         let commission = fill_price * order.size * self.config.commission_rate;
+        let Some(tax_rate) = self
+            .execution_profile
+            .transaction_tax_rate(order.side, order.timestamp)
+        else {
+            self.log(
+                order.timestamp,
+                format!("税率历史范围不支持,订单 {} 失败", order.id),
+            );
+            return Fill {
+                order_id: order.id,
+                timestamp: order.timestamp,
+                symbol: order.symbol,
+                side: order.side,
+                size: 0.0,
+                price: fill_price,
+                commission: 0.0,
+                tax: 0.0,
+            };
+        };
+        let tax = fill_price * order.size * tax_rate;
         self.apply_fill(
             &order.symbol,
             order.side,
             order.size,
             fill_price,
-            commission,
+            commission + tax,
         );
         match order.side {
             Side::Buy if self.execution_profile.uses_t_plus_one() => {
@@ -368,6 +404,7 @@ impl Broker for SimulatedBroker {
             size: order.size,
             price: fill_price,
             commission,
+            tax,
         }
     }
 
@@ -418,6 +455,23 @@ impl Broker for SimulatedBroker {
 
     fn trade_log(&self) -> Vec<(DateTime<Utc>, String, f64)> {
         self.trade_log.clone()
+    }
+
+    fn apply_stock_split(&mut self, symbol: &str, ratio: f64) -> bool {
+        if !ratio.is_finite() || ratio <= 0.0 {
+            return false;
+        }
+        let Some(position) = self.positions.get_mut(symbol) else {
+            return false;
+        };
+        position.size *= ratio;
+        position.avg_entry_price /= ratio;
+        if let Some(lots) = self.acquired_lots.get_mut(symbol) {
+            for lot in lots {
+                lot.quantity *= ratio;
+            }
+        }
+        true
     }
 }
 

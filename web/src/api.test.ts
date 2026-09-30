@@ -112,6 +112,9 @@ describe('API display helpers', () => {
     expect(fmtNum(1.234, 1)).toBe('1.2');
     expect(fmtMoney(null)).toBe('—');
     expect(fmtMoney(1234.5)).toMatch(/^\$1,234\.5?$/);
+    expect(fmtMoney(1234.5, 'a_share')).toBe('¥1,234.5');
+    expect(fmtMoney(1234.5, 'us_stock')).toBe('$1,234.5');
+    expect(fmtMoney(1234.5, 'binance')).toBe('1,234.5 USDT');
     expect(fmtPctSigned(0.125, 1)).toBe('+12.5%');
     expect(fmtPctSigned(-0.125, 1)).toBe('-12.5%');
   });

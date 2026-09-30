@@ -15,6 +15,7 @@ pub struct AppState {
     pub feed: Arc<HttpFeed>,
     pub filing_source: crate::filing_case::FilingSourceConfig,
     pub industry_sources: crate::industry_case::IndustrySourceRegistry,
+    pub a_share_float_sources: crate::a_share_float::AShareFloatSourceRegistry,
 }
 
 impl AppState {
@@ -44,6 +45,7 @@ impl AppState {
             feed,
             filing_source: crate::filing_case::FilingSourceConfig::default(),
             industry_sources: crate::industry_case::IndustrySourceRegistry::default(),
+            a_share_float_sources: crate::a_share_float::AShareFloatSourceRegistry::default(),
         }
     }
 
@@ -58,6 +60,14 @@ impl AppState {
         sources: crate::industry_case::IndustrySourceRegistry,
     ) -> Self {
         self.industry_sources = sources;
+        self
+    }
+
+    pub fn with_a_share_float_sources(
+        mut self,
+        sources: crate::a_share_float::AShareFloatSourceRegistry,
+    ) -> Self {
+        self.a_share_float_sources = sources;
         self
     }
 }

@@ -40,16 +40,17 @@ pub fn catalog() -> Vec<PracticeConcept> {
         .map(|s| {
             let depth_snapshot = s["id"] == "book_pitfall_order_imbalance";
             let recent_trades = s["id"] == "book_net_volume";
+            let adjustment_case = s["id"] == "book_pitfall_adjustment";
             PracticeConcept {
             id: s["id"].as_str().unwrap().into(),
             name: s["name"].as_str().unwrap().into(),
             category: "原书补充·技术实践".into(),
-            input_kind: if depth_snapshot || recent_trades || is_pair_practice(s["id"].as_str().unwrap()) { "market_bars" } else { s["input_kind"].as_str().unwrap() }.into(),
+            input_kind: if adjustment_case { "stock_action_case" } else if depth_snapshot || recent_trades || is_pair_practice(s["id"].as_str().unwrap()) { "market_bars" } else { s["input_kind"].as_str().unwrap() }.into(),
             inputs: if is_pair_practice(s["id"].as_str().unwrap()) {
                 if s["id"] == "book_pair_spread" {
                     vec![PracticeInput { key: "hedge_ratio".into(), label: "对冲比例（B单位/A单位）".into(), default: json!(1.0) }, PracticeInput { key: "period".into(), label: "Z-Score小时窗口".into(), default: json!(20) }]
                 } else { Vec::new() }
-            } else if depth_snapshot || recent_trades { Vec::new() } else { s["defaults"]
+            } else if adjustment_case || depth_snapshot || recent_trades { Vec::new() } else { s["defaults"]
                 .as_object()
                 .unwrap()
                 .iter()
@@ -59,7 +60,7 @@ pub fn catalog() -> Vec<PracticeConcept> {
                     default: v.clone(),
                 })
                 .collect() },
-            notes: if recent_trades { "服务器取得最近Binance现货逐笔成交，以前笔价格分类上涨、下跌与等价量；首笔仅作锚点，不冒称资金净流入或完整交易日。" } else if depth_snapshot { "仅使用服务器从 Binance USDT 现货深度端点取得的单次盘口快照；不接受手填挂单、撤单或客户端深度。" } else { s["summary"].as_str().unwrap() }.into(),
+            notes: if adjustment_case { "复用已核验的 Apple 2020-08-31 4:1 拆股案例，比较未复权价格跳空与持股数量变化；不接受手填价格或拆股比例。" } else if recent_trades { "服务器取得最近Binance现货逐笔成交，以前笔价格分类上涨、下跌与等价量；首笔仅作锚点，不冒称资金净流入或完整交易日。" } else if depth_snapshot { "仅使用服务器从 Binance USDT 现货深度端点取得的单次盘口快照；不接受手填挂单、撤单或客户端深度。" } else { s["summary"].as_str().unwrap() }.into(),
         }})
         .collect()
 }
@@ -69,31 +70,32 @@ pub fn entries() -> Vec<KnowledgeEntry> {
         .map(|s| {
             let text = |key: &str| s[key].as_str().unwrap_or("").to_string();
             let depth_snapshot = s["id"] == "book_pitfall_order_imbalance";
+            let adjustment_case = s["id"] == "book_pitfall_adjustment";
             let market_bars = s["input_kind"] == "market_bars" || depth_snapshot || is_pair_practice(s["id"].as_str().unwrap());
             let formula_variant = s["id"] == "book_pitfall_formula_variant";
             let open_candle = s["id"] == "book_pitfall_open_candle";
             KnowledgeEntry {
                 id: text("id"),
-                summary: text("summary"),
-                example: text("example"),
+                summary: if adjustment_case { "Apple 2020-08-31 4:1 拆股使每股计价机械下降；必须同时考虑每股旧股对应的新股数，不能把未复权跳空当成经济损失。".into() } else { text("summary") },
+                example: if adjustment_case { "复用与“复权价格”相同的 Apple 官方公告和供应商历史响应；4:1 事件对应每 1 股旧股变为 4 股、拆股价格乘数 1/4。".into() } else { text("example") },
                 related: vec![],
-                code_url: if depth_snapshot { "https://github.com/Sigma711/axiom/blob/main/src/book.rs#market_binance_depth_summary" } else if open_candle { "https://github.com/Sigma711/axiom/blob/main/src/book.rs#market_open_candle_summary" } else if formula_variant { "https://github.com/Sigma711/axiom/blob/main/src/book.rs#market_formula_variant_summary" } else { "https://github.com/Sigma711/axiom/blob/main/src/book_technical.rs#symbol-evaluate" }.into(),
-                code_ref: if depth_snapshot { "src/book.rs::market_binance_depth_summary" } else if open_candle { "src/book.rs::market_open_candle_summary" } else if formula_variant { "src/book.rs::market_formula_variant_summary" } else { "src/book_technical.rs::evaluate" }.into(),
-                category: "原书补充·技术实践".into(),
+                code_url: if adjustment_case { "https://github.com/Sigma711/axiom/blob/main/src/api.rs" } else if depth_snapshot { "https://github.com/Sigma711/axiom/blob/main/src/book.rs#market_binance_depth_summary" } else if open_candle { "https://github.com/Sigma711/axiom/blob/main/src/book.rs#market_open_candle_summary" } else if formula_variant { "https://github.com/Sigma711/axiom/blob/main/src/book.rs#market_formula_variant_summary" } else { "https://github.com/Sigma711/axiom/blob/main/src/book_technical.rs#symbol-evaluate" }.into(),
+                code_ref: if adjustment_case { "src/api.rs::post_practice::book_adjustment" } else if depth_snapshot { "src/book.rs::market_binance_depth_summary" } else if open_candle { "src/book.rs::market_open_candle_summary" } else if formula_variant { "src/book.rs::market_formula_variant_summary" } else { "src/book_technical.rs::evaluate" }.into(),
+                category: if adjustment_case { "公司行动" } else { "原书补充·技术实践" }.into(),
                 name: text("name"),
-                formula: if text("formula").is_empty() {
+                formula: if adjustment_case { "拆股价格乘数=旧股数/新股数；经济价值比较同时乘以每股旧股对应的新股数。".into() } else if text("formula").is_empty() {
                     text("summary")
                 } else {
                     text("formula")
                 },
-                meaning: text("summary"),
-                signals: if market_bars {
+                meaning: if adjustment_case { "Apple 2020-08-31 4:1 拆股改变每股价格和持股数量；未复权图上的机械跳空不等于持有人经济价值同幅下降。".into() } else { text("summary") },
+                signals: if adjustment_case { "用固定历史事件理解公司行动对价格序列的影响，不构成交易建议。".into() } else if market_bars {
                     "在适用模块用已收盘、可追溯的市场序列观察；不适用的模块不展示此实践，结果不自动等于交易指令。".into()
                 } else {
                     "用可编辑教学输入理解公式；真实练习须按适用模块和数据口径提供证据，结果不自动等于交易指令。".into()
                 },
-                pitfalls: if depth_snapshot { "可见挂单能在下一刻撤销、改价或成交；当前委托不平衡不预测未来价格，也不是 A 股内外盘、资金净流入或主动成交订单流。深度响应仅有 updateId，没有历史快照时间。".into() } else if market_bars { "行情必须标明来源、周期及收盘状态；当前未收盘价只作带 as-of 与预计收盘时刻的快照，不能当最终收盘或交易信号。".into() } else { "独立输入为可编辑教学数据；市场序列只在确认时点可用。专有指标仅核验用户导入信号，不声称复制未公开算法。".into() },
-                implementation: if depth_snapshot { format!("src/book.rs::market_binance_depth_summary; Binance USDT spot depth snapshot; 来源 {}", s["source_ids"]) } else if open_candle { format!("src/book.rs::market_open_candle_summary; Binance 1h exchange-time snapshot; 来源 {}", s["source_ids"]) } else if formula_variant { format!("src/book.rs::market_formula_variant_summary; MACD 12/26/9; 来源 {}", s["source_ids"]) } else { format!("src/book_technical.rs::evaluate; 来源 {}", s["source_ids"]) },
+                pitfalls: if adjustment_case { "不能用报价与调整收盘价的比值反推拆股比例；供应商复权和分红口径可能改变该比值。".into() } else if depth_snapshot { "可见挂单能在下一刻撤销、改价或成交；当前委托不平衡不预测未来价格，也不是 A 股内外盘、资金净流入或主动成交订单流。深度响应仅有 updateId，没有历史快照时间。".into() } else if market_bars { "行情必须标明来源、周期及收盘状态；当前未收盘价只作带 as-of 与预计收盘时刻的快照，不能当最终收盘或交易信号。".into() } else { "独立输入为可编辑教学数据；市场序列只在确认时点可用。专有指标仅核验用户导入信号，不声称复制未公开算法。".into() },
+                implementation: if adjustment_case { "src/api.rs::post_practice::book_adjustment".into() } else if depth_snapshot { format!("src/book.rs::market_binance_depth_summary; Binance USDT spot depth snapshot; 来源 {}", s["source_ids"]) } else if open_candle { format!("src/book.rs::market_open_candle_summary; Binance 1h exchange-time snapshot; 来源 {}", s["source_ids"]) } else if formula_variant { format!("src/book.rs::market_formula_variant_summary; MACD 12/26/9; 来源 {}", s["source_ids"]) } else { format!("src/book_technical.rs::evaluate; 来源 {}", s["source_ids"]) },
                 diagram: None,
             }
         })
@@ -140,6 +142,9 @@ fn evaluate_inner(
         .ok_or_else(|| format!("未知技术概念: {id}"))?;
     if id == "book_net_volume" {
         return Err("Net Volume必须由API使用服务器取得的逐笔成交计算".into());
+    }
+    if id == "book_pitfall_adjustment" {
+        return Err("复权跳空实践必须由API复用已核验的Apple历史拆股案例".into());
     }
     let mut v = s["defaults"].clone();
     let provided = inputs.as_object().ok_or("inputs必须为对象")?;

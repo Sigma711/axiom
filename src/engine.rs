@@ -10,6 +10,7 @@
 //!   7. 快照净值
 
 use crate::broker::{BrokerConfig, SimulatedBroker};
+use crate::corporate_actions::StockSplitSchedule;
 use crate::execution::ExecutionProfile;
 use crate::metrics::compute_metrics;
 use crate::portfolio::{Portfolio, PortfolioConfig};
@@ -52,6 +53,7 @@ pub struct BacktestEngine {
     pub config: EngineConfig,
     pub risk_config: RiskConfig,
     execution_profile: ExecutionProfile,
+    stock_splits: StockSplitSchedule,
 }
 
 impl BacktestEngine {
@@ -60,11 +62,17 @@ impl BacktestEngine {
             config,
             risk_config,
             execution_profile: ExecutionProfile::default(),
+            stock_splits: StockSplitSchedule::empty(),
         }
     }
 
     pub fn with_execution_profile(mut self, execution_profile: ExecutionProfile) -> Self {
         self.execution_profile = execution_profile;
+        self
+    }
+
+    pub fn with_stock_splits(mut self, stock_splits: StockSplitSchedule) -> Self {
+        self.stock_splits = stock_splits;
         self
     }
 
@@ -100,7 +108,28 @@ impl BacktestEngine {
         let total = bars.len();
 
         let mut pending_signal: Option<Signal> = None;
+        let mut previous_bar: Option<&Bar> = None;
         for bar in bars {
+            let due_splits = self.stock_splits.due_between(
+                &self.config.symbol,
+                previous_bar.map(|previous| previous.timestamp),
+                bar.timestamp,
+            );
+            let split_due = !due_splits.is_empty();
+            for split in due_splits {
+                if let Some(target_size) = pending_signal
+                    .as_mut()
+                    .and_then(|signal| signal.target_size.as_mut())
+                {
+                    *target_size *= split.ratio();
+                }
+                if !portfolio.is_flat() {
+                    assert!(
+                        portfolio.apply_stock_split(split.ratio()),
+                        "validated stock split must apply to an open simulated position"
+                    );
+                }
+            }
             // A signal is known only after its source candle closes. Execute
             // the previous signal at this candle's open, never at that close.
             portfolio
@@ -121,19 +150,27 @@ impl BacktestEngine {
                 };
             if let Some(signal) = execution_signal {
                 if signal.side != Side::Hold {
-                    if let Some(order) = portfolio.on_signal_with_target(
+                    let execution_block = self.execution_profile.daily_bar_execution_block(
+                        if split_due { None } else { previous_bar },
+                        bar,
                         signal.side,
-                        bar.open,
-                        bar.timestamp,
-                        signal.strength,
-                        signal.target_size,
-                    ) {
-                        let (allowed, _) = risk.allow_order(&order, &portfolio, &*portfolio.broker);
-                        if allowed {
-                            let fill = portfolio.broker.place_order(order);
-                            if fill.size > 0.0 {
-                                fills.push(fill.clone());
-                                portfolio.on_fill(&fill);
+                    );
+                    if execution_block.is_none() {
+                        if let Some(order) = portfolio.on_signal_with_target(
+                            signal.side,
+                            bar.open,
+                            bar.timestamp,
+                            signal.strength,
+                            signal.target_size,
+                        ) {
+                            let (allowed, _) =
+                                risk.allow_order(&order, &portfolio, &*portfolio.broker);
+                            if allowed {
+                                let fill = portfolio.broker.place_order(order);
+                                if fill.size > 0.0 {
+                                    fills.push(fill.clone());
+                                    portfolio.on_fill(&fill);
+                                }
                             }
                         }
                     }
@@ -158,6 +195,7 @@ impl BacktestEngine {
                 position_value: pos.market_value(bar.close),
                 equity: portfolio.equity(),
             });
+            previous_bar = Some(bar);
         }
 
         BacktestResult {
@@ -171,6 +209,19 @@ impl BacktestEngine {
                 "n_bars": total,
                 "execution_profile": self.execution_profile,
                 "execution_assumptions": self.execution_profile.assumptions(),
+                "corporate_actions": if self.stock_splits.events().is_empty() {
+                    serde_json::json!({
+                        "mode": "none",
+                        "price_basis": "not_applicable",
+                        "stock_splits": [],
+                    })
+                } else {
+                    serde_json::json!({
+                        "mode": "explicit_source_backed_splits",
+                        "price_basis": "caller_verified_raw",
+                        "stock_splits": self.stock_splits.events(),
+                    })
+                },
             }),
             equity_curve,
             trades: portfolio.closed_trades().to_vec(),

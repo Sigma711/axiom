@@ -15,7 +15,8 @@
 use crate::api_validation::{self as validate, ApiError};
 use crate::app_state::AppState;
 use crate::data::{
-    fetch_public_market_snapshot, DataFeed, MarketProvenance, MarketSnapshot, SyntheticFeed,
+    fetch_public_market_snapshot, guard_stock_backtest_window, DataFeed, MarketProvenance,
+    MarketSnapshot, StockSplitCoverage, SyntheticFeed,
 };
 use crate::engine::{BacktestEngine, EngineConfig};
 use crate::metrics::compute_metrics;
@@ -98,6 +99,7 @@ async fn market_snapshot(
                     price_basis: "simulated_ohlcv".into(),
                     corporate_actions: "not_applicable".into(),
                 },
+                stock_split_coverage: StockSplitCoverage::NotApplicable,
             })
     } else {
         fetch_public_market_snapshot(&state.feed, source, symbol, since, requested).await
@@ -523,25 +525,42 @@ async fn post_backtest(
     let source = req.source.unwrap_or_else(|| "binance".to_string());
 
     validate::market(&symbol, &source, limit, 5000)?;
-    let (bars, market_provenance) = if let Some(bars) = req.bars {
-        validate::bars(&bars)?;
-        (
-            bars,
-            MarketProvenance {
-                provider: "caller_provided_unverified".into(),
-                endpoint: "request_body".into(),
-                price_basis: "caller_provided_unverified".into(),
-                corporate_actions: "not_simulated".into(),
-            },
-        )
-    } else {
-        let snapshot = market_snapshot(&state, &symbol, &source, limit).await?;
-        (snapshot.bars, snapshot.provenance)
-    };
+    let (bars, market_provenance, stock_split_coverage, live_provider_snapshot) =
+        if let Some(bars) = req.bars {
+            validate::bars(&bars)?;
+            (
+                bars,
+                MarketProvenance {
+                    provider: "caller_provided_unverified".into(),
+                    endpoint: "request_body".into(),
+                    price_basis: "caller_provided_unverified".into(),
+                    corporate_actions: "not_simulated".into(),
+                },
+                StockSplitCoverage::Unverified {
+                    reason: "caller-provided stock bars have no source-verified split coverage"
+                        .into(),
+                },
+                false,
+            )
+        } else {
+            let snapshot = market_snapshot(&state, &symbol, &source, limit).await?;
+            (
+                snapshot.bars,
+                snapshot.provenance,
+                snapshot.stock_split_coverage,
+                true,
+            )
+        };
 
     if bars.is_empty() {
         return Err((StatusCode::BAD_REQUEST, "没有获取到任何 K 线".into()));
     }
+    let stock_split_coverage = if live_provider_snapshot {
+        guard_stock_backtest_window(&source, &stock_split_coverage, &bars)
+            .map_err(|error| (StatusCode::UNPROCESSABLE_ENTITY, error.to_string()))?
+    } else {
+        stock_split_coverage
+    };
 
     // 3. 配置引擎
     let engine_cfg = EngineConfig {
@@ -572,7 +591,13 @@ async fn post_backtest(
         BacktestEngine::new(engine_cfg.clone(), risk_cfg).with_execution_profile(execution_profile);
     let mut result = engine.run(strategy.as_mut(), &bars);
     result.metrics = compute_metrics(&result);
-    result.config["market_provenance"] = json!(market_provenance.clone());
+    let mut market_provenance_json = json!(market_provenance.clone());
+    market_provenance_json["stock_split_coverage"] = json!(stock_split_coverage);
+    if live_provider_snapshot && matches!(source.as_str(), "a_share" | "us_stock") {
+        market_provenance_json["corporate_actions"] =
+            json!("split_coverage_verified_no_event_in_window");
+    }
+    result.config["market_provenance"] = market_provenance_json.clone();
 
     // 5. 序列化成前端友好格式
     let equity_curve: Vec<Value> = result
@@ -648,7 +673,7 @@ async fn post_backtest(
         "source": source,
         "market_data_as_of": market_data_as_of,
         "execution_assumptions": result.config["execution_assumptions"],
-        "market_provenance": market_provenance,
+        "market_provenance": market_provenance_json,
         "config": result.config,
         "metrics": result.metrics,
         "equity_curve": equity_curve,
@@ -757,6 +782,21 @@ fn make_strategy(
         _ => anyhow::bail!("未知策略: {}", name),
     };
     Ok(create_strategy(kind))
+}
+
+#[cfg(test)]
+mod strategy_validation_tests {
+    use super::make_strategy;
+
+    #[test]
+    fn unknown_strategy_names_fail_instead_of_selecting_a_default() {
+        let result = make_strategy("not-a-strategy", None);
+        assert!(result.is_err());
+        assert_eq!(
+            result.err().unwrap().to_string(),
+            "未知策略: not-a-strategy"
+        );
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -1488,7 +1528,7 @@ pub fn locate_symbol_for_test(reference: &str) -> Option<usize> {
 }
 
 fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
-    if concept.id == "book_adjustment" {
+    if concept.id == "book_adjustment" || concept.id == "book_pitfall_adjustment" {
         return json!({
             "markets":["us_equity"],
             "modules":["data"],
@@ -1497,6 +1537,17 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
             "fixed_source":"us_stock",
             "fixed_symbol":"AAPL",
             "goal":"观察 Yahoo 历史响应中明确给出的 Apple 2020-08-31 4:1 拆股事件、同期供应商报价与供应商调整收盘价。只由事件比例计算拆股价格乘数；不把供应商报价称为原始成交价，也不把 adjusted close 称为已核验总回报。"
+        });
+    }
+    if crate::a_share_float::is_supported(&concept.id) {
+        return json!({
+            "markets":["issuer_disclosure"],
+            "modules":["data"],
+            "required_datasets":["verified_issuer_annual_report","verified_concert_party_announcement","verified_official_index_methodology","same_date_unadjusted_daily_close"],
+            "source_policy":"real_required",
+            "fixed_source":"issuer_disclosure",
+            "fixed_symbol":"600519",
+            "goal":"固定核对贵州茅台2025-12-31股本与股东关系，并按中证自由流通量定义透明复算；同日流通市值使用2025-12-31未复权收盘价。明确区分无限售条件流通股份、自由流通量与指数分级靠档调整股本。"
         });
     }
     if crate::industry_case::is_supported(&concept.id) {
@@ -1796,7 +1847,7 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
 
 fn industry_case_symbol(id: &str) -> &'static str {
     match id {
-        "book_share_counts" => "600519",
+        "book_share_counts" | "book_float_market_cap" | "book_free_float" => "600519",
         "bank_nim"
         | "book_bank_nim"
         | "book_bank_cost_income"
@@ -2298,7 +2349,7 @@ async fn post_practice(
             "practice module is not applicable to this concept",
         ));
     }
-    if concept.id == "book_adjustment" {
+    if concept.id == "book_adjustment" || concept.id == "book_pitfall_adjustment" {
         if source != "us_stock"
             || symbol != "AAPL"
             || req.limit.is_some()
@@ -2310,7 +2361,7 @@ async fn post_practice(
                 .is_some_and(serde_json::Map::is_empty)
         {
             return Err(validate::bad(
-                "book_adjustment is fixed to AAPL/us_stock with module=data, empty inputs, and no bars, limit, or second symbol",
+                "stock adjustment case is fixed to AAPL/us_stock with module=data, empty inputs, and no bars, limit, or second symbol",
             ));
         }
         if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
@@ -2337,7 +2388,7 @@ async fn post_practice(
             corporate_actions: "dated_split_event_observed".into(),
         };
         return Ok(Json(json!({
-            "concept_id":"book_adjustment",
+            "concept_id":concept.id,
             "status":"computed",
             "reason":Value::Null,
             "input_kind":"stock_action_case",
@@ -2369,6 +2420,33 @@ async fn post_practice(
                 "这是固定 AAPL 历史案例，不代表任意股票、当前行情或完整公司行动账务。"
             ]
         })));
+    }
+    if crate::a_share_float::is_supported(&concept.id) {
+        if source != "issuer_disclosure"
+            || symbol != "600519"
+            || req.limit.is_some()
+            || req.second_symbol.is_some()
+            || req.bars.is_some()
+            || !req
+                .inputs
+                .as_object()
+                .is_some_and(serde_json::Map::is_empty)
+        {
+            return Err(validate::bad("A-share float case is fixed to 600519/issuer_disclosure with module=data, empty inputs, and no bars, limit, or second symbol"));
+        }
+        let mut result = crate::a_share_float::evaluate(
+            &concept.id,
+            &state.data_cache_dir,
+            &state.a_share_float_sources,
+        )
+        .await
+        .map_err(|error| (StatusCode::BAD_GATEWAY, error))?;
+        result["module"] = json!("data");
+        result["symbol"] = json!("600519");
+        result["source"] = json!("issuer_disclosure");
+        result["context"] = json!("historical_industry_disclosure");
+        result["bar_origin"] = json!("server_verified_issuer_filing_pdf");
+        return Ok(Json(result));
     }
     if crate::industry_case::is_supported(&concept.id) {
         let expected_symbol = industry_case_symbol(&concept.id);

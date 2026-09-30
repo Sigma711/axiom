@@ -48,4 +48,10 @@ describe('ExecutionAssumptionsVisual', () => {
     expect(html).toContain('持仓与现金尚未按公司行动记账');
     expect(html).not.toContain('>dated_split_event_observed<');
   });
+  it('explains a verified split-free window in plain language', () => {
+    const html = renderToStaticMarkup(<ExecutionAssumptionsVisual provenance={{ provider: 'tencent', endpoint: 'https://web.ifzq.gtimg.cn/kline', price_basis: 'unadjusted_requested', corporate_actions: 'split_coverage_verified_no_event_in_window' }} />);
+    expect(html).toContain('已核对本次区间没有拆股事件');
+    expect(html).toContain('不代表含分红再投资的总回报');
+    expect(html).not.toContain('>split_coverage_verified_no_event_in_window<');
+  });
 });
