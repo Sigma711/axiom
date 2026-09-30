@@ -489,7 +489,7 @@ const EXTRA: &[(&str, &str, &str)] = &[
     (
         "book_share_counts",
         "股本结构",
-        "自由流通比例=自由流通股/总股本",
+        "限售股份余额=总股本−无限售条件流通股份",
     ),
     ("book_float_market_cap", "流通市值", "流通股×价格"),
     ("book_52w_range", "52周区间", "最近已收盘日线为截止，前364自然日开区间内：最高=最大high，最低=最小low；距高点=close/high−1；区间位置=(close−low)/(high−low)"),
@@ -550,10 +550,7 @@ const EXTRA: &[(&str, &str, &str)] = &[
 fn extra_inputs(id: &str) -> Option<Vec<(&'static str, &'static str, f64)>> {
     Some(match id {
         "book_trade_volume" => vec![],
-        "book_share_counts" => vec![
-            ("free_float_shares", "自由流通股（股）", 6e8),
-            ("total_shares", "总股本（股）", 1e9),
-        ],
+        "book_share_counts" => vec![],
         "book_float_market_cap" => vec![
             ("price", "股价（元/股）", 20.),
             ("total_shares", "总股本（股）", 1e9),
@@ -1972,7 +1969,9 @@ pub fn evaluate(id: &str, bars: &[Bar], inputs: &Value) -> Result<Value, String>
         "book_trade_volume" => {
             return Err("成交量与成交额必须由 API 使用 Binance 已收盘现货K线计算".into())
         }
-        "book_share_counts" => ratio(n("free_float_shares")?, n("total_shares")?)?,
+        "book_share_counts" => {
+            return Err("股本结构必须由 API 核验贵州茅台2025年年度报告原文后计算".into())
+        }
         "book_float_market_cap" => n("price")? * n("float_shares")?,
         "book_52w_range" => {
             return Err("52周区间必须由 API 使用服务器取得的股票已收盘日线计算".into())

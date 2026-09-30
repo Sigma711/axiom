@@ -239,6 +239,30 @@
         ],
         "source_policy": "real_required"
       }
+    },
+    {
+      "category": "发行人历史披露",
+      "id": "book_share_counts",
+      "input_kind": "industry_case",
+      "inputs": [],
+      "name": "股本结构",
+      "notes": "固定贵州茅台2025年末股本结构；未提供自由流通股。",
+      "plan": {
+        "fixed_source": "issuer_disclosure",
+        "fixed_symbol": "600519",
+        "goal": "服务器取得固定发行人历史披露 PDF，严格核对完整字节数与 SHA-256 后，按逐字段页码和实体口径计算行业指标。它不是当前行情、全市场行业数据库或任意股票查询。",
+        "markets": [
+          "issuer_disclosure"
+        ],
+        "modules": [
+          "data"
+        ],
+        "required_datasets": [
+          "server_verified_issuer_filing_pdf",
+          "embedded_page_cited_industry_facts"
+        ],
+        "source_policy": "real_required"
+      }
     }
   ],
   "results": {
@@ -1336,6 +1360,144 @@
       },
       "values": {
         "occupied_area_ratio": 0.9894401725386482
+      }
+    },
+    "book_share_counts": {
+      "bar_origin": "server_verified_issuer_filing_pdf",
+      "bars": [],
+      "concept_id": "book_share_counts",
+      "context": "historical_industry_disclosure",
+      "industry_case": {
+        "case_id": "moutai_fy2025_share_structure",
+        "published": "2026-04-17",
+        "url": "https://static.cninfo.com.cn/finalpage/2026-04-17/1225114741.PDF",
+        "sha256": "474905deeaf0f875fc0a1b097a626c0c7852c427faadc5d7fc7816cbf45ea288",
+        "bytes": 1082847,
+        "source_kind": "issuer_annual_report_via_cninfo",
+        "issuer": {
+          "name": "贵州茅台酒股份有限公司",
+          "ticker": "600519",
+          "alternate_tickers": [
+            "600519.SS"
+          ],
+          "reporting_entity": "贵州茅台酒股份有限公司",
+          "metric_entity": "贵州茅台酒股份有限公司"
+        },
+        "period": {
+          "label": "截至2025-12-31（期初与注销数量用于勾稽）",
+          "start": "2025-12-31",
+          "end": "2025-12-31"
+        },
+        "pdf_pages": [
+          47
+        ],
+        "audited": false,
+        "audit_boundary": "股份变动表位于年度报告第47页；不声称该表获得独立审计保证",
+        "status": "年报股份变动表；不声称该表获得独立审计保证",
+        "verification": {
+          "status": "verified_immutable_cache",
+          "verified_at": "2026-09-30T00:00:00Z",
+          "requested_url": "https://static.cninfo.com.cn/finalpage/2026-04-17/1225114741.PDF",
+          "matched_sha256": "474905deeaf0f875fc0a1b097a626c0c7852c427faadc5d7fc7816cbf45ea288",
+          "matched_bytes": 1082847
+        }
+      },
+      "industry_facts": {
+        "currency": "not_applicable",
+        "scale": "shares",
+        "reported_facts": [
+          {
+            "key": "opening_total_shares",
+            "label": "2025年期初股份总数",
+            "value": 1256197800,
+            "unit": "shares",
+            "pdf_page": 47
+          },
+          {
+            "key": "cancelled_shares",
+            "label": "年内回购注销股份（减少数量）",
+            "value": 3927585,
+            "unit": "shares",
+            "pdf_page": 47
+          },
+          {
+            "key": "closing_total_shares",
+            "label": "2025年末股份总数",
+            "value": 1252270215,
+            "unit": "shares",
+            "pdf_page": 47
+          },
+          {
+            "key": "unrestricted_shares",
+            "label": "2025年末无限售条件流通股份",
+            "value": 1252270215,
+            "unit": "shares",
+            "pdf_page": 47
+          }
+        ],
+        "calculation": {
+          "formula": "限售股份余额=期末总股本−期末无限售条件流通股份；期初总股本−注销股份=期末总股本",
+          "result_key": "restricted_shares_residual",
+          "operands": [
+            "opening_total_shares",
+            "cancelled_shares",
+            "closing_total_shares",
+            "unrestricted_shares"
+          ],
+          "symbol_mapping": {
+            "restricted_shares_residual": "closing_total_shares - unrestricted_shares",
+            "closing_total_shares": "opening_total_shares - cancelled_shares"
+          }
+        },
+        "field_provenance": {
+          "opening_total_shares": {
+            "kind": "reported",
+            "pdf_page": 47,
+            "note": "原文披露"
+          },
+          "cancelled_shares": {
+            "kind": "reported",
+            "pdf_page": 47,
+            "note": "原文披露"
+          },
+          "closing_total_shares": {
+            "kind": "reported",
+            "pdf_page": 47,
+            "note": "原文披露"
+          },
+          "unrestricted_shares": {
+            "kind": "reported",
+            "pdf_page": 47,
+            "note": "原文披露"
+          },
+          "restricted_shares_residual": {
+            "kind": "derived",
+            "note": "期末总股本−期末无限售条件流通股份"
+          }
+        },
+        "definitions": {
+          "case_boundary": "Fixed issuer",
+          "metric": "年报第47页引用2025-08-30公告临2025-032；公告日期不冒充注销生效日。报告发布于2026-04-17。无限售条件流通股份不等于自由流通股，本案例未提供自由流通股数或市值。"
+        }
+      },
+      "input_kind": "industry_case",
+      "inputs": {},
+      "module": "data",
+      "notes": [
+        "这是固定发行人与固定报告期的历史披露案例。",
+        "年报第47页引用2025-08-30公告临2025-032；公告日期不冒充注销生效日。报告发布于2026-04-17。无限售条件流通股份不等于自由流通股，本案例未提供自由流通股数或市值。"
+      ],
+      "provenance": "verified_original_issuer_disclosure",
+      "reason": null,
+      "series": [],
+      "source": "issuer_disclosure",
+      "status": "computed",
+      "symbol": "600519",
+      "units": {
+        "restricted_shares_residual": "shares"
+      },
+      "values": {
+        "restricted_shares_residual": 0
       }
     }
   }

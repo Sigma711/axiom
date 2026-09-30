@@ -6,6 +6,12 @@ describe('ExecutionAssumptionsVisual', () => {
   it('keeps missing execution metadata unknown rather than claiming exchange-compliant execution', () => {
     expect(renderToStaticMarkup(<ExecutionAssumptionsVisual />)).toBe('');
   });
+  it('gives an independent pattern snapshot a distinct accessible source label', () => {
+    const html = renderToStaticMarkup(<ExecutionAssumptionsVisual label="形态来源与价格口径" provenance={{ provider: 'local_csv_cache', endpoint: 'historical CSV cache', price_basis: 'cache_price_basis_unverified', corporate_actions: 'not_simulated' }} />);
+    expect(html).toContain('aria-label="形态来源与价格口径"');
+    expect(html).toContain('<summary>形态来源与价格口径');
+    expect(html).not.toContain('aria-label="成交与价格口径"');
+  });
   it('separates enforced inventory rules from omitted trading constraints and cites the original rules', () => {
     const html = renderToStaticMarkup(<ExecutionAssumptionsVisual assumptions={[
       { id: 't_plus_one', description_zh: '当日新增普通股票不可卖出。', simulated: true, limitation_zh: '早先库存仍可卖。', source_url: 'https://www.sse.com.cn/rules' },

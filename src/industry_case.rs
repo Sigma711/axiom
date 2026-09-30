@@ -27,7 +27,12 @@ pub const EBAY_URL: &str =
 pub const EBAY_SHA256: &str = "10530b8314c4dc49f9737b938f28ead7a70212885c35919fb361d145401f37fb";
 pub const EBAY_BYTES: usize = 1_004_020;
 
+pub const MOUTAI_URL: &str = "https://static.cninfo.com.cn/finalpage/2026-04-17/1225114741.PDF";
+pub const MOUTAI_SHA256: &str = "474905deeaf0f875fc0a1b097a626c0c7852c427faadc5d7fc7816cbf45ea288";
+pub const MOUTAI_BYTES: usize = 1_082_847;
+
 pub const SUPPORTED_IDS: &[&str] = &[
+    "book_share_counts",
     "bank_nim",
     "book_bank_nim",
     "book_bank_cost_income",
@@ -55,11 +60,17 @@ pub struct IndustrySourceRegistry {
     pub shopify: IndustrySourceConfig,
     pub realty_income: IndustrySourceConfig,
     pub ebay: IndustrySourceConfig,
+    pub moutai: IndustrySourceConfig,
 }
 
 impl Default for IndustrySourceRegistry {
     fn default() -> Self {
         Self {
+            moutai: IndustrySourceConfig {
+                url: MOUTAI_URL.into(),
+                sha256: MOUTAI_SHA256.into(),
+                bytes: MOUTAI_BYTES,
+            },
             ping_an: IndustrySourceConfig {
                 url: PING_AN_URL.into(),
                 sha256: PING_AN_SHA256.into(),
@@ -119,6 +130,7 @@ struct IndustryCases {
     shopify: IndustryCase,
     realty_income: IndustryCase,
     ebay: IndustryCase,
+    moutai: IndustryCase,
 }
 
 #[derive(Clone, Copy)]
@@ -140,6 +152,7 @@ enum CaseKey {
     Shopify,
     RealtyIncome,
     Ebay,
+    Moutai,
 }
 
 pub fn is_supported(id: &str) -> bool {
@@ -149,6 +162,9 @@ pub fn is_supported(id: &str) -> bool {
 pub fn configure_concept(concept: &mut crate::practice::PracticeConcept) {
     if is_supported(&concept.id) {
         concept.input_kind = "industry_case".into();
+        if concept.id == "book_share_counts" {
+            concept.category = "发行人历史披露".into();
+        }
         concept.inputs.clear();
         concept.notes = "固定发行人历史披露案例：用已公布的经营数据理解指标，数值可回到原文对应页核对；不代表当前所选股票。".into();
     }
@@ -157,6 +173,14 @@ pub fn configure_concept(concept: &mut crate::practice::PracticeConcept) {
 pub fn configure_knowledge(entry: &mut crate::knowledge::KnowledgeEntry) {
     if let Some(definition) = definition(&entry.id) {
         entry.formula = definition.formula.into();
+        if entry.id == "book_share_counts" {
+            entry.category = "发行人历史披露".into();
+            entry.summary =
+                "贵州茅台2025年末股本结构：逐项核对总股本、无限售条件流通股份与年内注销数量。"
+                    .into();
+            entry.example = "1,256,197,800−3,927,585=1,252,270,215股；期末总股本减无限售条件流通股份的余额为0股。".into();
+            entry.pitfalls = "无限售条件流通股份不等于自由流通股；报告发布于2026-04-17，不代表2025年末当时已知信息。".into();
+        }
         entry.signals = "练习使用一个已验证的发行人历史披露来核对原书公式；结果只描述指定实体和报告期，不是当前行情、任意股票查询或独立买卖信号。跨公司比较前必须统一币种、单位、期间、业务定义与审计边界。".into();
     }
 }
@@ -165,6 +189,17 @@ fn definition(id: &str) -> Option<MetricDefinition> {
     let outside_audit = "Management discussion facts on PDF pages 57-58 are outside EY's audit opinion covering the financial statements";
     let shopify_unaudited = "Issuer earnings release metric; no audit assurance is asserted for MRR, GMV or non-GAAP free cash flow";
     Some(match id {
+        "book_share_counts" => MetricDefinition {
+            case: CaseKey::Moutai,
+            metric_entity: "贵州茅台酒股份有限公司",
+            formula: "限售股份余额=期末总股本−期末无限售条件流通股份；期初总股本−注销股份=期末总股本",
+            inputs: &["opening_total_shares", "cancelled_shares", "closing_total_shares", "unrestricted_shares"],
+            audited: false,
+            audit_boundary: "股份变动表位于年度报告第47页，不是财务报表审计意见覆盖的股本附注；本案例不声称该表获得独立审计保证",
+            value_key: "restricted_shares_residual",
+            value_unit: "shares",
+            note: "截至2025-12-31的固定股本结构：总股本与无限售条件流通股份均为1,252,270,215股，限售余额由两者相减得到0股。年报第47页引用2025-08-30公告临2025-032，披露注销3,927,585股；公告日期不冒充注销生效日。报告于2026-04-17发布，不代表2025年末当时已知信息。无限售条件流通股份不等于自由流通股，本案例未提供自由流通股数或市值。",
+        },
         "bank_nim" | "book_bank_nim" => MetricDefinition {
             case: CaseKey::PingAn,
             metric_entity: "Ping An Bank",
@@ -284,6 +319,10 @@ fn cases() -> Result<&'static IndustryCases, String> {
 
 fn validate_cases(cases: &IndustryCases) -> Result<(), String> {
     for (case, expected) in [
+        (
+            &cases.moutai,
+            (MOUTAI_URL, MOUTAI_SHA256, MOUTAI_BYTES, "600519"),
+        ),
         (&cases.ebay, (EBAY_URL, EBAY_SHA256, EBAY_BYTES, "EBAY")),
         (
             &cases.ping_an,
@@ -343,6 +382,7 @@ fn select_case(cases: &IndustryCases, key: CaseKey) -> &IndustryCase {
         CaseKey::Shopify => &cases.shopify,
         CaseKey::RealtyIncome => &cases.realty_income,
         CaseKey::Ebay => &cases.ebay,
+        CaseKey::Moutai => &cases.moutai,
     }
 }
 
@@ -352,6 +392,7 @@ fn select_source(registry: &IndustrySourceRegistry, key: CaseKey) -> &IndustrySo
         CaseKey::Shopify => &registry.shopify,
         CaseKey::RealtyIncome => &registry.realty_income,
         CaseKey::Ebay => &registry.ebay,
+        CaseKey::Moutai => &registry.moutai,
     }
 }
 
@@ -431,6 +472,16 @@ fn calculate(id: &str, case: &IndustryCase) -> Result<f64, String> {
             .ok_or_else(|| format!("missing industry fact {key}"))
     };
     match id {
+        "book_share_counts" => {
+            let opening = n("opening_total_shares")?;
+            let cancelled = n("cancelled_shares")?;
+            let closing = n("closing_total_shares")?;
+            let unrestricted = n("unrestricted_shares")?;
+            if opening - cancelled != closing || unrestricted > closing {
+                return Err("share structure does not reconcile".into());
+            }
+            Ok(closing - unrestricted)
+        }
         "bank_nim" | "book_bank_nim" => {
             ratio(n("net_interest_income")?, n("average_earning_assets")?)
         }
@@ -451,6 +502,10 @@ fn calculate(id: &str, case: &IndustryCase) -> Result<f64, String> {
 
 fn formula_symbol_mapping(id: &str) -> Value {
     match id {
+        "book_share_counts" => json!({
+            "restricted_shares_residual": "closing_total_shares - unrestricted_shares",
+            "closing_total_shares": "opening_total_shares - cancelled_shares"
+        }),
         "bank_nim" | "book_bank_nim" => json!({
             "net_interest_income": "net_interest_income",
             "average_earning_assets": "average_earning_assets"
@@ -610,6 +665,7 @@ mod tests {
             &mut registry.shopify,
             &mut registry.realty_income,
             &mut registry.ebay,
+            &mut registry.moutai,
         ] {
             let bytes = format!("%PDF fixture {}", source.url).into_bytes();
             source.bytes = bytes.len();
@@ -624,6 +680,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!("axiom-industry-{}", uuid::Uuid::new_v4()));
         let registry = seeded_registry(&root);
         let expected = [
+            ("book_share_counts", "restricted_shares_residual", 0.0),
             ("bank_nim", "net_interest_margin", 93_427.0 / 4_994_494.0),
             (
                 "book_bank_nim",
@@ -702,6 +759,30 @@ mod tests {
             "unsupported industry case concept: book_reit_ffo"
         );
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn share_structure_rejects_nonreconciling_facts_and_teaching_inputs() {
+        let mut case = cases().unwrap().moutai.clone();
+        case.facts.get_mut("cancelled_shares").unwrap().value += 1.0;
+        assert!(calculate("book_share_counts", &case).is_err());
+        case = cases().unwrap().moutai.clone();
+        case.facts.get_mut("unrestricted_shares").unwrap().value += 1.0;
+        assert!(calculate("book_share_counts", &case).is_err());
+        case.facts.remove("closing_total_shares");
+        assert!(calculate("book_share_counts", &case).is_err());
+        assert!(crate::book::evaluate(
+            "book_share_counts",
+            &[],
+            &json!({"free_float_shares": 6e8, "total_shares": 1e9})
+        )
+        .is_err());
+        let entry = crate::knowledge::all_entries()
+            .into_iter()
+            .find(|e| e.id == "book_share_counts")
+            .unwrap();
+        assert!(!entry.formula.contains("自由流通"));
+        assert!(entry.summary.contains("2025"));
     }
 
     #[test]

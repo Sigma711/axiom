@@ -174,6 +174,7 @@ fn every_book_catalog_default_is_executable_and_all_inputs_are_described() {
                 | "book_order_flow"
                 | "book_order_imbalance"
                 | "book_52w_range"
+                | "book_share_counts"
         ) {
             continue;
         }

@@ -309,6 +309,45 @@ impl Strategy for BuyThenHold {
     fn reset(&mut self) {}
 }
 
+struct SizedAshareOrders;
+
+impl Strategy for SizedAshareOrders {
+    fn name(&self) -> &str {
+        "sized_a_share_orders"
+    }
+    fn params(&self) -> std::collections::HashMap<String, f64> {
+        std::collections::HashMap::new()
+    }
+    fn on_bar(&mut self, bar: &Bar) -> Signal {
+        let (side, target_size) = if bar.timestamp == ts(1, 1) || bar.timestamp == ts(2, 1) {
+            (Side::Buy, Some(100.0))
+        } else if bar.timestamp == ts(3, 1) || bar.timestamp == ts(3, 2) {
+            (Side::Sell, Some(100.0))
+        } else if bar.timestamp == ts(3, 3) {
+            // Main-board buys must be a multiple of 100 shares.
+            (Side::Buy, Some(101.0))
+        } else if bar.timestamp == ts(4, 1) {
+            (Side::Buy, Some(0.0))
+        } else if bar.timestamp == ts(4, 2) {
+            (Side::Buy, Some(f64::NAN))
+        } else if bar.timestamp == ts(4, 3) {
+            (Side::Buy, Some(-100.0))
+        } else if bar.timestamp == ts(4, 4) {
+            (Side::Sell, Some(100.0))
+        } else {
+            (Side::Hold, None)
+        };
+        Signal {
+            timestamp: bar.timestamp,
+            side,
+            strength: 1.0,
+            reason: "explicit order quantity".into(),
+            target_size,
+        }
+    }
+    fn reset(&mut self) {}
+}
+
 fn bar_at(timestamp: chrono::DateTime<Utc>, open: f64, close: f64) -> Bar {
     Bar {
         timestamp,
@@ -357,6 +396,58 @@ fn backtest_applies_profile_to_sizing_t_plus_one_and_result_assumptions() {
 }
 
 #[test]
+fn backtest_executes_explicit_add_on_and_partial_sell_quantities() {
+    let engine = BacktestEngine::new(
+        EngineConfig {
+            symbol: "600000".into(),
+            initial_capital: 10_000.0,
+            commission_rate: 0.0,
+            slippage_rate: 0.0,
+        },
+        RiskConfig {
+            max_position_pct: 1.0,
+            ..RiskConfig::default()
+        },
+    )
+    .with_execution_profile(profile(ExecutionMarket::ChinaA(ChinaBoard::MainOrGrowth)));
+
+    let result = engine.run(
+        &mut SizedAshareOrders,
+        &[
+            bar_at(ts(1, 1), 10.0, 10.0),
+            bar_at(ts(2, 1), 10.0, 10.0),
+            bar_at(ts(3, 1), 10.0, 10.0),
+            bar_at(ts(3, 2), 10.0, 10.0),
+            bar_at(ts(3, 3), 10.0, 10.0),
+            bar_at(ts(4, 1), 10.0, 10.0),
+            bar_at(ts(4, 2), 10.0, 10.0),
+            bar_at(ts(4, 3), 10.0, 10.0),
+            bar_at(ts(4, 4), 10.0, 10.0),
+            bar_at(ts(4, 5), 10.0, 10.0),
+        ],
+    );
+
+    assert_eq!(result.fills.len(), 4);
+    assert_eq!(
+        result
+            .fills
+            .iter()
+            .map(|fill| (fill.timestamp, fill.side, fill.size))
+            .collect::<Vec<_>>(),
+        vec![
+            (ts(2, 1), Side::Buy, 100.0),
+            (ts(3, 1), Side::Buy, 100.0),
+            (ts(3, 2), Side::Sell, 100.0),
+            (ts(4, 5), Side::Sell, 100.0),
+        ]
+    );
+    assert_eq!(result.trades.len(), 2);
+    assert!(result.trades.iter().all(|trade| trade.size == 100.0));
+    assert_eq!(result.equity_curve.last().unwrap().cash, 10_000.0);
+    assert_eq!(result.equity_curve.last().unwrap().position_value, 0.0);
+}
+
+#[test]
 fn paper_uses_the_same_profile_and_exposes_assumptions() {
     let mut paper = PaperState::new_with_execution_profile(
         PaperConfigP {
@@ -378,6 +469,47 @@ fn paper_uses_the_same_profile_and_exposes_assumptions() {
         .execution_assumptions
         .iter()
         .any(|item| item.id == "us_whole_share_product_default"));
+}
+
+#[test]
+fn paper_executes_explicit_quantities_with_the_same_market_rules() {
+    let mut paper = PaperState::new_with_execution_profile(
+        PaperConfigP {
+            symbol: "600000".into(),
+            initial_capital: 10_000.0,
+            commission_rate: 0.0,
+            slippage_rate: 0.0,
+            risk: RiskConfig {
+                max_position_pct: 1.0,
+                ..RiskConfig::default()
+            },
+            ..PaperConfigP::default()
+        },
+        Box::new(SizedAshareOrders),
+        profile(ExecutionMarket::ChinaA(ChinaBoard::MainOrGrowth)),
+    );
+    for timestamp in [
+        ts(1, 1),
+        ts(2, 1),
+        ts(3, 1),
+        ts(3, 2),
+        ts(3, 3),
+        ts(4, 1),
+        ts(4, 2),
+        ts(4, 3),
+        ts(4, 4),
+        ts(4, 5),
+    ] {
+        paper.process_bar(bar_at(timestamp, 10.0, 10.0)).unwrap();
+    }
+
+    let snapshot = paper.snapshot();
+    assert_eq!(snapshot.trades_count, 4);
+    assert_eq!(snapshot.completed_trades_count, 2);
+    assert_eq!(snapshot.position_size, 0.0);
+    assert_eq!(snapshot.cash, 10_000.0);
+    assert_eq!(snapshot.last_fill.unwrap().timestamp, ts(4, 5));
+    assert!(paper.portfolio.broker.trade_log().is_empty());
 }
 
 #[test]

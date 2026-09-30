@@ -1796,6 +1796,7 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
 
 fn industry_case_symbol(id: &str) -> &'static str {
     match id {
+        "book_share_counts" => "600519",
         "bank_nim"
         | "book_bank_nim"
         | "book_bank_cost_income"

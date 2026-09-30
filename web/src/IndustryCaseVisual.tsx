@@ -1,6 +1,7 @@
 import type { PracticeResult } from './types';
 
 const resultLabels: Record<string, string> = {
+  book_share_counts: '限售股份余额',
   bank_nim: '银行净息差',
   book_bank_nim: '银行净息差',
   book_bank_cost_income: '成本收入比',
@@ -20,6 +21,7 @@ const unitLabels: Record<string, string> = {
   'USD millions annualized': '百万美元（年化运行率）',
   'square feet': '平方英尺',
   count: '个',
+  shares: '股',
 };
 
 const auditBoundaries: Record<string, string> = {
@@ -30,6 +32,8 @@ const auditBoundaries: Record<string, string> = {
 };
 
 const factLabels: Record<string, string> = {
+  opening_total_shares: '2025年期初股份总数', cancelled_shares: '年内回购注销股份（减少数量）',
+  closing_total_shares: '2025年末股份总数', unrestricted_shares: '2025年末无限售条件流通股份',
   net_interest_income: '净利息收入', average_earning_assets: '平均生息资产',
   operating_expenses: '一般及行政费用（绝对金额）', operating_income: '营业收入',
   nonperforming_loans: '不良贷款', gross_loans: '客户贷款及垫款总额（不含利息）',
@@ -42,6 +46,8 @@ const factLabels: Record<string, string> = {
 };
 
 const symbolMeanings: Record<string, string> = {
+  restricted_shares_residual: '限售股份余额 = 期末总股本 − 期末无限售条件流通股份',
+  closing_total_shares: '期末总股本 = 期初总股本 − 注销股份',
   net_interest_income: '净利息收入', average_earning_assets: '平均生息资产',
   operating_expenses: '经营费用', operating_income: '营业收入',
   nonperforming_loans: '不良贷款', gross_loans: '贷款总额（不含利息）',
@@ -77,6 +83,7 @@ const format = (value: number, unit?: string) => {
 };
 
 export function IndustryCaseVisual({ result, name }: { result: PracticeResult; name: string }) {
+  const disclosureLabel = result.concept_id === 'book_share_counts' ? '股本披露' : '历史行业披露';
   const source = result.industry_case;
   const facts = result.industry_facts;
   if (!source || !facts) return null;
@@ -92,13 +99,13 @@ export function IndustryCaseVisual({ result, name }: { result: PracticeResult; n
   const auditBoundary = auditBoundaries[source.audit_boundary] || source.audit_boundary;
   const fingerprintMatches = source.sha256 === source.verification.matched_sha256 && source.bytes === source.verification.matched_bytes;
 
-  return <section className="ax-filing-case ax-industry-case" aria-label={`${name} 历史行业披露案例`}>
+  return <section className="ax-filing-case ax-industry-case" aria-label={`${name} ${disclosureLabel}案例`}>
     <header>
-      <span className="ax-filing-badge">历史行业披露 · 固定发行人原文</span>
+      <span className="ax-filing-badge">{disclosureLabel} · 固定发行人原文</span>
       <h4>{entityName(source.issuer.name)}（{source.issuer.ticker}）· {source.period.label.replace(/^As of /, '截至 ')}</h4>
       <p>{source.period.start === source.period.end ? source.period.end : `${source.period.start} 至 ${source.period.end}`} · 发布于 {source.published}</p>
       <p>报告主体：{entityName(source.issuer.reporting_entity)} · 指标主体：{entityName(source.issuer.metric_entity)}</p>
-      <p>{auditBoundary} <strong>{source.audited ? '审计范围内' : '未经审计'}</strong>。这是固定历史案例，不是当前行情或当前所选股票的指标。</p>
+      <p>{auditBoundary} <strong>{source.audited ? '审计范围内' : result.concept_id === 'book_share_counts' ? '未声明审计保证' : '未经审计'}</strong>。这是固定历史案例，不是当前行情或当前所选股票的指标。</p>
     </header>
 
     <div className="ax-filing-results">
@@ -106,7 +113,7 @@ export function IndustryCaseVisual({ result, name }: { result: PracticeResult; n
     </div>
 
     <figure className="ax-industry-formula">
-      <figcaption><strong>{facts.calculation.formula}</strong><span>计算只使用下列披露事实；不同单位分组展示，各组独立缩放。</span></figcaption>
+      <figcaption><strong>{result.concept_id === 'book_share_counts' ? facts.calculation.formula.split('；').map(line => <span key={line} style={{ display: 'block', marginBottom: '0.5rem' }}>{line}</span>) : facts.calculation.formula}</strong><span>计算只使用下列披露事实；不同单位分组展示，各组独立缩放。</span></figcaption>
       <div className="ax-industry-formula-flow" aria-label="公式关系">
         {facts.calculation.operands.map(key => <span key={key}>{factLabels[key] || key}</span>)}
         <strong>以上披露值代入公式，得到 {resultLabels[result.concept_id] || name}</strong>

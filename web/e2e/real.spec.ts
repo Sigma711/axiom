@@ -55,7 +55,7 @@ test('Apple split practice independently matches the issuer announcement and liv
 });
 
 async function assertExecutionDisclosure(page: Page, payload: any) {
-  const disclosure = page.getByLabel('成交与价格口径').first();
+  const disclosure = page.getByLabel('成交与价格口径', { exact: true });
   await expect(disclosure).toBeVisible();
   if (!await disclosure.evaluate(node => (node as HTMLDetailsElement).open)) await disclosure.locator('summary').click();
   for (const rule of payload.execution_assumptions || []) {
@@ -461,6 +461,8 @@ test('browser switches among three live markets with matching symbols and valid 
     }
     await expect(page.locator('.ax-chart svg.main-svg').first()).toBeVisible();
     await expect(page.locator('.ax-summary')).toContainText(market.symbol);
+    await expect(page.getByLabel('成交与价格口径')).toHaveCount(1);
+    await expect(page.getByLabel('形态来源与价格口径')).toHaveCount(1);
     await assertExecutionDisclosure(page, payload);
   }
 });
@@ -1830,4 +1832,50 @@ test('Apple filing case verifies the issuer PDF and computes every supported met
     if (conceptId === 'book_yoy') expect(value.notes.join(' ')).toContain('不是 EPS、季度收入或当前增长率');
     if (conceptId === 'book_ccc') expect(value.notes.join(' ')).toContain('负CCC是公式结果，不按零截断');
   }
+});
+
+
+test('Moutai share structure independently verifies annual-report page 47 and public practice', async ({ page, request }) => {
+  test.setTimeout(120_000);
+  const url = 'https://static.cninfo.com.cn/finalpage/2026-04-17/1225114741.PDF';
+  const upstream = await request.get(url, { timeout: 60_000 });
+  expect(upstream.ok()).toBe(true);
+  const bytes = await upstream.body();
+  expect(bytes).toHaveLength(1082847);
+  expect(createHash('sha256').update(bytes).digest('hex')).toBe('474905deeaf0f875fc0a1b097a626c0c7852c427faadc5d7fc7816cbf45ea288');
+  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const loadingTask = getDocument({ data: new Uint8Array(bytes), useSystemFonts: true });
+  const pdf = await loadingTask.promise;
+  const text = (await (await pdf.getPage(47)).getTextContent()).items.map(item => 'str' in item ? item.str : '').join('').replace(/\s/g, '');
+  for (const literal of ['单位：股', '无限售条件流通股份', '股份总数', '1,256,197,800', '3,927,585', '1,252,270,215', '2025年8月30日']) expect(text).toContain(literal);
+  await loadingTask.destroy();
+  await page.goto('/learn');
+  await page.getByRole('textbox', { name: '搜索 概念 / 公式 / 关键词' }).fill('book_share_counts');
+  const card = page.locator('.ax-kb-card[data-concept-id="book_share_counts"]');
+  await expect(card).not.toContainText('使用透明教学输入');
+  await card.getByRole('button', { name: '在数据探索中实践' }).click();
+  await expect(page).toHaveURL(/\/data\?concept=book_share_counts&source=issuer_disclosure$/);
+  const panel = page.getByLabel('概念实践');
+  const received = page.waitForResponse(r => r.url().includes('/api/practice') && r.request().method() === 'POST');
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  const response = await received;
+  expect(response.ok(), await response.text()).toBe(true);
+  expect(response.request().postDataJSON()).toEqual({ concept_id: 'book_share_counts', module: 'data', source: 'issuer_disclosure', symbol: '600519', inputs: {} });
+  const result = await response.json();
+  // Independently read page 47 above; these are raw count literals, not copied API output.
+  expect(Object.fromEntries(result.industry_facts.reported_facts.map((f: {key: string; value: number}) => [f.key, f.value]))).toEqual({ opening_total_shares: 1256197800, cancelled_shares: 3927585, closing_total_shares: 1252270215, unrestricted_shares: 1252270215 });
+  expect(1256197800 - 3927585).toBe(1252270215);
+  expect(result.values).toEqual({ restricted_shares_residual: 1252270215 - 1252270215 });
+  expect(result.industry_case).toMatchObject({ published: '2026-04-17', period: { end: '2025-12-31' }, pdf_pages: [47], url, bytes: 1082847 });
+  const visual = panel.getByRole('region', { name: '股本结构 股本披露案例' });
+  await expect(visual).toContainText('无限售条件流通股份不等于自由流通股');
+  await expect(visual).toContainText('公告日期不冒充注销生效日');
+  await expect(visual.locator('[data-industry-fact]')).toHaveCount(4);
+  await expect(visual.locator('[data-industry-fact] a').first()).toHaveAttribute('href', `${url}#page=47`);
+  await captureHistoricalCard(page, visual, 'moutai-shares-real-dark.png');
+  await page.getByLabel('切换到浅色模式').click();
+  await captureHistoricalCard(page, visual, 'moutai-shares-real-light.png');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await visual.evaluate(node => node.getBoundingClientRect().right <= window.innerWidth)).toBe(true);
+  await captureHistoricalCard(page, visual, 'moutai-shares-real-mobile.png');
 });

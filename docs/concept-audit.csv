@@ -226,7 +226,7 @@ book_second_order_greeks,二阶 Greeks,原书补充·技术实践,4_derivatives_
 book_semiconductor_asp,半导体 ASP,原书行业专属指标,2_company_disclosure,cn_equity|us_equity,data,point_in_time_filing|market_price,evidence_required,,,
 book_semiconductor_utilization,半导体产能利用率,原书行业专属指标,2_company_disclosure,cn_equity|us_equity,data,point_in_time_filing|market_price,evidence_required,,,
 book_sending_receiving,Receiving addresses / Sending addresses,衍生品与链上,4_derivatives_chain_history,crypto,data,server_fetched_bitcoin_mainnet_pinned_block_transaction_first_page,real_required,,,
-book_share_counts,股本结构,原书教学输入,1_stock_history_execution,cn_equity|us_equity,data,dated_share_register|market_price,evidence_required,,,
+book_share_counts,股本结构,发行人历史披露,1_stock_history_execution,issuer_disclosure,data,server_verified_issuer_filing_pdf|embedded_page_cited_industry_facts,real_required,2026-09-30 Moutai FY2025 https://static.cninfo.com.cn/finalpage/2026-04-17/1225114741.PDF p47 published 2026-04-17 as of 2025-12-31,Total and unrestricted 1252270215 shares; 1256197800 - 3927585 cancellation = 1252270215; restricted residual 0; no free float,API and live browser independently retrieve PDF and extract p47; dark light mobile screenshots reviewed
 book_shipping_tce,航运 TCE,原书行业专属指标,2_company_disclosure,cn_equity|us_equity,data,point_in_time_filing|market_price,evidence_required,,,
 book_smi_ergodic_indicator,SMI Ergodic Indicator,原书补充·技术实践,shared_market_result,crypto|cn_equity|us_equity,data|backtest|compare,completed_ohlcv,real_required,,,
 book_smi_ergodic_oscillator,SMI Ergodic Oscillator,原书补充·技术实践,shared_market_result,crypto|cn_equity|us_equity,data|backtest|compare,completed_ohlcv,real_required,,,

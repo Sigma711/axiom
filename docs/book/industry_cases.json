@@ -95,5 +95,51 @@
       "leased_area": {"value": 335777818, "unit": "square feet", "page": 25, "label": "occupied square feet"},
       "lettable_area": {"value": 339361416, "unit": "square feet", "page": 25, "label": "total portfolio square feet"}
     }
+  },
+  "moutai": {
+    "case_id": "moutai_fy2025_share_structure",
+    "issuer": "贵州茅台酒股份有限公司",
+    "ticker": "600519",
+    "alternate_tickers": [
+      "600519.SS"
+    ],
+    "reporting_entity": "贵州茅台酒股份有限公司",
+    "currency": "not_applicable",
+    "scale": "shares",
+    "period_label": "截至2025-12-31（期初与注销数量用于勾稽）",
+    "period_start": "2025-12-31",
+    "period_end": "2025-12-31",
+    "published": "2026-04-17",
+    "source_kind": "issuer_annual_report_via_cninfo",
+    "source_status": "年报股份变动表；不声称该表获得独立审计保证",
+    "url": "https://static.cninfo.com.cn/finalpage/2026-04-17/1225114741.PDF",
+    "sha256": "474905deeaf0f875fc0a1b097a626c0c7852c427faadc5d7fc7816cbf45ea288",
+    "bytes": 1082847,
+    "facts": {
+      "opening_total_shares": {
+        "value": 1256197800,
+        "unit": "shares",
+        "page": 47,
+        "label": "2025年期初股份总数"
+      },
+      "cancelled_shares": {
+        "value": 3927585,
+        "unit": "shares",
+        "page": 47,
+        "label": "年内回购注销股份（减少数量）"
+      },
+      "closing_total_shares": {
+        "value": 1252270215,
+        "unit": "shares",
+        "page": 47,
+        "label": "2025年末股份总数"
+      },
+      "unrestricted_shares": {
+        "value": 1252270215,
+        "unit": "shares",
+        "page": 47,
+        "label": "2025年末无限售条件流通股份"
+      }
+    }
   }
 }

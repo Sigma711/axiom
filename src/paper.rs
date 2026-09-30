@@ -229,10 +229,13 @@ impl PaperState {
         };
         if let Some(signal) = execution_signal {
             if signal.side != crate::types::Side::Hold {
-                if let Some(order) =
-                    self.portfolio
-                        .on_signal(signal.side, bar.open, bar.timestamp, signal.strength)
-                {
+                if let Some(order) = self.portfolio.on_signal_with_target(
+                    signal.side,
+                    bar.open,
+                    bar.timestamp,
+                    signal.strength,
+                    signal.target_size,
+                ) {
                     let (allowed, why) =
                         self.risk
                             .allow_order(&order, &self.portfolio, &*self.portfolio.broker);

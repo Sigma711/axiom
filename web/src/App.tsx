@@ -1012,7 +1012,7 @@ function DataExplore({ targetConcept, targetSource, theme }: { targetConcept?: s
             <span key={i} className="ax-pattern-tag">{p.pattern} · {new Date(p.timestamp).toLocaleDateString()}</span>
           ))}
           <p className="ax-practice-note">形态标签来自独立的真实 K 线快照；其来源在下方单独列示，不与主图来源混合。</p>
-          <ExecutionAssumptionsVisual assumptions={patternAssumptions} provenance={patternProvenance} />
+          <ExecutionAssumptionsVisual assumptions={patternAssumptions} provenance={patternProvenance} label="形态来源与价格口径" />
         </div>
       )}
       <ExecutionAssumptionsVisual provenance={chartData?.market_provenance} />

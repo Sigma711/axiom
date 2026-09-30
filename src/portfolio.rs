@@ -91,14 +91,31 @@ impl Portfolio {
         ts: DateTime<Utc>,
         strength: f64,
     ) -> Option<Order> {
+        self.on_signal_with_target(signal, current_price, ts, strength, None)
+    }
+
+    /// Translate a strategy signal into an order. An explicit target size is
+    /// the requested order quantity; without one, preserve the automatic
+    /// first-entry and full-sell behavior used by existing strategies.
+    pub fn on_signal_with_target(
+        &self,
+        signal: Side,
+        current_price: f64,
+        ts: DateTime<Utc>,
+        strength: f64,
+        target_size: Option<f64>,
+    ) -> Option<Order> {
         let pos = self.position();
         match signal {
             Side::Buy => {
-                if !pos.is_flat() {
+                if target_size.is_none() && !pos.is_flat() {
                     return None; // 简化:已持仓时忽略重复买入
                 }
-                let size = self.calc_buy_size(current_price, strength);
-                if size < self.config.min_trade_size {
+                let size =
+                    target_size.unwrap_or_else(|| self.calc_buy_size(current_price, strength));
+                if size < self.config.min_trade_size
+                    || !self.execution_profile.valid_buy_quantity(size)
+                {
                     return None;
                 }
                 Some(new_order(
@@ -114,16 +131,17 @@ impl Portfolio {
                 if pos.is_flat() {
                     return None;
                 }
-                let size = self
+                let sellable_size = self
                     .broker
                     .sellable_size(&self.config.symbol, ts)
                     .min(pos.size.abs());
+                let size = target_size.unwrap_or(sellable_size);
                 if size < self.config.min_trade_size {
                     return None;
                 }
                 if !self
                     .execution_profile
-                    .valid_sell_quantity(size, pos.size.abs(), size)
+                    .valid_sell_quantity(size, pos.size.abs(), sellable_size)
                 {
                     return None;
                 }

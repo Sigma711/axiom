@@ -45,6 +45,7 @@ async fn fixture_app() -> (Router, tokio::task::JoinHandle<()>, PathBuf) {
                 .route("/ping-an.pdf", get(|| async { PDF }))
                 .route("/shopify.pdf", get(|| async { PDF }))
                 .route("/ebay.pdf", get(|| async { PDF }))
+                .route("/moutai.pdf", get(|| async { PDF }))
                 .route("/realty.pdf", get(|| async { PDF })),
         )
         .await
@@ -59,6 +60,7 @@ async fn fixture_app() -> (Router, tokio::task::JoinHandle<()>, PathBuf) {
         ping_an: source("ping-an.pdf"),
         shopify: source("shopify.pdf"),
         ebay: source("ebay.pdf"),
+        moutai: source("moutai.pdf"),
         realty_income: source("realty.pdf"),
     };
     let cache = std::env::temp_dir().join(format!("axiom-industry-api-{}", uuid::Uuid::new_v4()));
@@ -70,6 +72,7 @@ async fn fixture_app() -> (Router, tokio::task::JoinHandle<()>, PathBuf) {
 async fn industry_api_verifies_each_fixed_issuer_disclosure() {
     let (app, server, cache) = fixture_app().await;
     for (concept, symbol) in [
+        ("book_share_counts", "600519"),
         ("book_bank_nim", "2318.HK"),
         ("book_saas_arr", "SHOP"),
         ("book_platform_take_rate", "EBAY"),
@@ -129,6 +132,54 @@ async fn industry_api_rejects_every_caller_controlled_evidence_seam() {
         StatusCode::BAD_REQUEST,
         "Shopify GMV must not be reused as the fixed eBay take-rate case"
     );
+    server.abort();
+    let _ = tokio::fs::remove_dir_all(cache).await;
+}
+
+#[tokio::test]
+async fn moutai_share_structure_is_dated_and_never_free_float() {
+    let (app, server, cache) = fixture_app().await;
+    let base = json!({"concept_id":"book_share_counts","module":"data","source":"issuer_disclosure","symbol":"600519","inputs":{}});
+    let (status, result) = post(&app, base.clone()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(result["values"], json!({"restricted_shares_residual":0.0}));
+    assert_eq!(
+        result["units"],
+        json!({"restricted_shares_residual":"shares"})
+    );
+    assert_eq!(result["industry_case"]["published"], "2026-04-17");
+    assert_eq!(result["industry_case"]["period"]["end"], "2025-12-31");
+    assert_eq!(result["industry_case"]["pdf_pages"], json!([47]));
+    let facts = result["industry_facts"]["reported_facts"]
+        .as_array()
+        .unwrap();
+    for (key, literal) in [
+        ("opening_total_shares", 1256197800.0),
+        ("cancelled_shares", 3927585.0),
+        ("closing_total_shares", 1252270215.0),
+        ("unrestricted_shares", 1252270215.0),
+    ] {
+        let fact = facts.iter().find(|f| f["key"] == key).unwrap();
+        assert_eq!(fact["value"], literal);
+        assert_eq!(fact["unit"], "shares");
+        assert_eq!(fact["pdf_page"], 47);
+    }
+    assert!(result["values"].get("free_float_shares").is_none());
+    for patch in [
+        json!({"symbol":"AAPL"}),
+        json!({"source":"a_share"}),
+        json!({"module":"backtest"}),
+        json!({"inputs":{"free_float_shares":1252270215}}),
+        json!({"bars":[]}),
+        json!({"limit":1}),
+        json!({"second_symbol":"AAPL"}),
+    ] {
+        let mut body = base.clone();
+        body.as_object_mut()
+            .unwrap()
+            .extend(patch.as_object().unwrap().clone());
+        assert_eq!(post(&app, body).await.0, StatusCode::BAD_REQUEST);
+    }
     server.abort();
     let _ = tokio::fs::remove_dir_all(cache).await;
 }

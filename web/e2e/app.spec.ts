@@ -73,6 +73,7 @@ test('historical split practice uses the fixed stock source and shows a readable
 test('industry disclosure figures explain every metric with its actual issuer units and original pages', async ({ page }) => {
   const recording = JSON.parse(await readFile('e2e/fixtures/industry-cases.json', 'utf8'));
   const expected = [
+    ['book_share_counts', '600519', '0', 47],
     ['bank_nim', '2318.HK', '1.8706', 57],
     ['book_bank_nim', '2318.HK', '1.8706', 57],
     ['book_bank_cost_income', '2318.HK', '27.6642', 57],
@@ -87,7 +88,7 @@ test('industry disclosure figures explain every metric with its actual issuer un
   // Recorded HTTP payloads exercise rendering only. Independent literals above
   // come from disclosure examples; real.spec.ts also retrieves original PDFs.
   await page.route('**/api/practice', route => {
-    if (route.request().method() === 'GET') return route.fulfill({ json: { concepts: recording.concepts, modules: ['data'], total: 10 } });
+    if (route.request().method() === 'GET') return route.fulfill({ json: { concepts: recording.concepts, modules: ['data'], total: recording.concepts.length } });
     const body = route.request().postDataJSON();
     const result = recording.results[body.concept_id];
     expect(body).toEqual({ concept_id: body.concept_id, module: 'data', source: 'issuer_disclosure', symbol: result.symbol, inputs: {} });
@@ -107,7 +108,7 @@ test('industry disclosure figures explain every metric with its actual issuer un
     await visual.getByText('核对原文与文件指纹', { exact: true }).click();
     await expect(visual).toContainText('字节数与指纹完全匹配');
     await expect(visual).not.toContainText('教学代理');
-    await expect(visual).toContainText(concept === 'book_insurance_solvency_ratio' ? '审计范围内' : '未经审计');
+    await expect(visual).toContainText(concept === 'book_insurance_solvency_ratio' ? '审计范围内' : concept === 'book_share_counts' ? '未声明审计保证' : '未经审计');
   }
 });
 
@@ -1411,4 +1412,31 @@ test('Bitcoin address practice renders a script-address set from the mocked conf
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(visual).toHaveScreenshot('address-set-mobile.png');
+});
+
+
+test('Moutai share structure distinguishes unrestricted shares from free float across themes', async ({ page }) => {
+  const recording = JSON.parse(await readFile('e2e/fixtures/industry-cases.json', 'utf8'));
+  await page.route('**/api/practice', route => route.fulfill({ json: route.request().method() === 'GET' ? { concepts: recording.concepts, modules: ['data'], total: recording.concepts.length } : recording.results.book_share_counts }));
+  await page.goto('/data?concept=book_share_counts&source=issuer_disclosure');
+  const panel = page.getByLabel('概念实践');
+  await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  const visual = panel.locator('.ax-industry-case');
+  await expect(visual).toContainText('贵州茅台');
+  await expect(visual.locator('figcaption > strong > span')).toHaveCount(2);
+  await expect(visual).toContainText('2025-12-31');
+  await expect(visual).toContainText('发布于 2026-04-17');
+  await expect(visual.locator('.ax-filing-results')).toContainText('限售股份余额0 股');
+  await expect(visual.locator('[data-industry-fact="opening_total_shares"]')).toContainText('1,256,197,800 股');
+  await expect(visual.locator('[data-industry-fact="cancelled_shares"]')).toContainText('3,927,585 股');
+  await expect(visual.locator('[data-industry-fact="unrestricted_shares"]')).toContainText('1,252,270,215 股');
+  await expect(visual).toContainText('无限售条件流通股份不等于自由流通股');
+  await expect(visual.locator('[data-industry-fact] a').first()).toHaveAttribute('href', 'https://static.cninfo.com.cn/finalpage/2026-04-17/1225114741.PDF#page=47');
+  await expect(visual).toHaveScreenshot('moutai-share-structure-dark.png');
+  await page.getByLabel('切换到浅色模式').click();
+  await expect(visual).toHaveScreenshot('moutai-share-structure-light.png');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await visual.evaluate(node => node.getBoundingClientRect().right <= window.innerWidth)).toBe(true);
+  await expect(visual).toHaveScreenshot('moutai-share-structure-mobile.png');
 });

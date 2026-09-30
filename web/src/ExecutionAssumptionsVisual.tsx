@@ -29,13 +29,14 @@ const bases: Record<string, string> = {
   configured_feed_unverified: '配置的行情接口，原始提供者与价格口径未核验',
 };
 
-export function ExecutionAssumptionsVisual({ assumptions = [], provenance }: {
+export function ExecutionAssumptionsVisual({ assumptions = [], provenance, label = '成交与价格口径' }: {
   assumptions?: ExecutionAssumption[];
   provenance?: MarketProvenance;
+  label?: string;
 }) {
   if (!assumptions.length && !provenance) return null;
-  return <details className="ax-execution" aria-label="成交与价格口径">
-    <summary>成交与价格口径 <span>查看模拟规则和数据来源</span></summary>
+  return <details className="ax-execution" aria-label={label}>
+    <summary>{label} <span>查看模拟规则和数据来源</span></summary>
     {provenance && <div className="ax-execution-source">
       <p><strong>{providers[provenance.provider] || provenance.provider}</strong> · {bases[provenance.price_basis] || provenance.price_basis}</p>
       <p>{provenance.corporate_actions === 'not_simulated' ? '分红、拆股等公司行动未另行记账；价格曲线不代表含分红再投资的总回报。' : provenance.corporate_actions === 'dated_split_event_observed' ? '已观察到有日期的拆股事件；持仓与现金尚未按公司行动记账，报价和调整收盘价也不代表已核验总回报。' : provenance.corporate_actions}</p>

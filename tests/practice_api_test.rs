@@ -1002,7 +1002,7 @@ async fn book_financial_practices_require_equity_evidence_and_reject_crypto() {
             .find(|concept| concept["id"] == id)
             .unwrap();
         let filing_case = id == "book_current_ratio";
-        let industry_case = id == "book_bank_nim";
+        let industry_case = matches!(id, "book_bank_nim" | "book_share_counts");
         let stock_action_case = id == "book_adjustment";
         assert_eq!(
             concept["plan"]["markets"],
@@ -1072,7 +1072,10 @@ async fn book_financial_practices_require_equity_evidence_and_reject_crypto() {
         .unwrap();
     assert_eq!(
         share_count["plan"]["required_datasets"],
-        json!(["dated_share_register", "market_price"])
+        json!([
+            "server_verified_issuer_filing_pdf",
+            "embedded_page_cited_industry_facts"
+        ])
     );
     let cape = document["concepts"]
         .as_array()

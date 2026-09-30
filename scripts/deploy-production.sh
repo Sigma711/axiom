@@ -105,6 +105,7 @@ industry_cases = (
     ("bank_nim", "2318.HK", "net_interest_margin", 93427 / 4994494, "62a5bd793ef9a787cc95750d65e52803aa58fa424b01d94e754ea0120d5be8a3", 14886158),
     ("book_saas_arr", "SHOP", "annualized_recurring_revenue_run_rate", 2136, "4bf71232697a2270b2dbc38fc9609c11c27d545d6f4301fce3356fa60c6ef6de", 86468),
     ("book_platform_take_rate", "EBAY", "platform_take_rate", 10283 / 74667, "10530b8314c4dc49f9737b938f28ead7a70212885c35919fb361d145401f37fb", 1004020),
+    ("book_share_counts", "600519", "restricted_shares_residual", 0, "474905deeaf0f875fc0a1b097a626c0c7852c427faadc5d7fc7816cbf45ea288", 1082847),
     ("book_reit_occupancy", "O", "occupied_area_ratio", 335777818 / 339361416, "a0b3bf067c7b19ebde01ceaac3ecb172ed6a4c7084eeabe276ad1d4599c62a3f", 17522920),
 )
 for concept, symbol, key, expected, fingerprint, size in industry_cases:

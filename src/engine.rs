@@ -121,9 +121,13 @@ impl BacktestEngine {
                 };
             if let Some(signal) = execution_signal {
                 if signal.side != Side::Hold {
-                    if let Some(order) =
-                        portfolio.on_signal(signal.side, bar.open, bar.timestamp, signal.strength)
-                    {
+                    if let Some(order) = portfolio.on_signal_with_target(
+                        signal.side,
+                        bar.open,
+                        bar.timestamp,
+                        signal.strength,
+                        signal.target_size,
+                    ) {
                         let (allowed, _) = risk.allow_order(&order, &portfolio, &*portfolio.broker);
                         if allowed {
                             let fill = portfolio.broker.place_order(order);
