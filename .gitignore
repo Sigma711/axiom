@@ -53,3 +53,5 @@ htmlcov/
 # Verified runtime copies of issuer source documents
 /data/industry-sources/
 /data/filing-sources/
+/data/ownership-sources/
+/data/valuation-sources/

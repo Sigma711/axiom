@@ -68,6 +68,8 @@ pub const ZOOM_URL: &str =
     "https://investors.zoom.us/static-files/70629942-ff77-4bed-91d6-422766c47e6b";
 pub const ZOOM_SHA256: &str = "79f0e6b5126a47869f196d07aa3ab3626c4a61cdbb46e17a79762ab264fbeaf4";
 pub const ZOOM_BYTES: usize = 118_862;
+const ZOOM_ARCHIVED_ORIGINAL: &[u8] =
+    include_bytes!("../data/verified-sources/zoom-q1-fy2025-prepared-remarks.pdf");
 pub const SMIC_URL: &str =
     "https://www1.hkexnews.hk/listedco/listconews/sehk/2025/0211/2025021100441.pdf";
 pub const SMIC_SHA256: &str = "18e7cc96cc2405587fbb06e5da078fe4ce129833e6257009fe1c650a0d070a76";
@@ -912,49 +914,117 @@ async fn verified_source(
     let _guard = SOURCE_LOCK.lock().await;
     let directory = cache_dir.join("industry-sources");
     let cached = directory.join(format!("{}.pdf", expected.sha256));
+    let archived_marker = directory.join(format!("{}.archived-original", expected.sha256));
+    let is_zoom = expected.sha256 == ZOOM_SHA256 && expected.bytes == ZOOM_BYTES;
     if let Ok(bytes) = tokio::fs::read(&cached).await {
         if bytes.len() == expected.bytes && fingerprint(&bytes) == expected.sha256 {
-            return Ok("verified_immutable_cache");
+            if archived_marker.exists() {
+                if tokio::fs::read(&archived_marker)
+                    .await
+                    .is_ok_and(|marker| marker == expected.sha256.as_bytes())
+                    && (!is_zoom
+                        || (bytes.len() == ZOOM_ARCHIVED_ORIGINAL.len()
+                            && fingerprint(&bytes) == ZOOM_SHA256))
+                {
+                    return Ok("verified_archived_original");
+                }
+                let _ = tokio::fs::remove_file(&archived_marker).await;
+            } else {
+                return Ok("verified_immutable_cache");
+            }
         }
         tokio::fs::remove_file(&cached)
             .await
             .map_err(|error| format!("corrupt industry source cache removal failed: {error}"))?;
+        let _ = tokio::fs::remove_file(&archived_marker).await;
     }
-    let response = reqwest::Client::builder()
-        .timeout(Duration::from_secs(60))
-        .build()
-        .map_err(|error| format!("industry source client failed: {error}"))?
-        .get(&expected.url)
-        .send()
-        .await
-        .map_err(|error| format!("industry source request failed: {error}"))?
-        .error_for_status()
-        .map_err(|error| format!("industry source returned an error: {error}"))?;
-    if response
-        .content_length()
-        .is_some_and(|size| size != expected.bytes as u64)
-    {
-        return Err("industry source Content-Length differs from the reviewed document".into());
-    }
-    let mut bytes = Vec::with_capacity(expected.bytes);
-    let mut stream = response.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|error| format!("industry source body failed: {error}"))?;
-        if bytes.len().saturating_add(chunk.len()) > expected.bytes {
-            return Err("industry source body exceeds the reviewed document size".into());
+    let download = async {
+        let response = reqwest::Client::builder()
+            .timeout(Duration::from_secs(60))
+            .build()
+            .map_err(|error| format!("industry source client failed: {error}"))?
+            .get(&expected.url)
+            .send()
+            .await
+            .map_err(|error| format!("industry source request failed: {error}"))?
+            .error_for_status()
+            .map_err(|error| format!("industry source returned an error: {error}"))?;
+        if !is_zoom
+            && response
+                .content_length()
+                .is_some_and(|size| size != expected.bytes as u64)
+        {
+            return Err("industry source Content-Length differs from the reviewed document".into());
         }
-        bytes.extend_from_slice(&chunk);
-    }
-    if bytes.len() != expected.bytes || fingerprint(&bytes) != expected.sha256 {
-        return Err("downloaded industry source is incomplete or has a different SHA-256".into());
-    }
+        if is_zoom
+            && response
+                .content_length()
+                .is_some_and(|size| size > 20_000_000)
+        {
+            return Err("industry source body exceeds safety limit".into());
+        }
+        let mut bytes = Vec::with_capacity(expected.bytes);
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|error| format!("industry source body failed: {error}"))?;
+            let limit = if is_zoom { 20_000_000 } else { expected.bytes };
+            if bytes.len().saturating_add(chunk.len()) > limit {
+                return Err(if is_zoom {
+                    "industry source body exceeds safety limit".into()
+                } else {
+                    "industry source body exceeds the reviewed document size".into()
+                });
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        if is_zoom && !bytes.starts_with(b"%PDF-") {
+            return Err("Zoom original endpoint did not return a PDF".into());
+        }
+        if bytes.len() != expected.bytes || fingerprint(&bytes) != expected.sha256 {
+            return Err(
+                "downloaded industry source is incomplete or has a different SHA-256".into(),
+            );
+        }
+        Ok::<Vec<u8>, String>(bytes)
+    };
+    let (bytes, status, archived) = match download.await {
+        Ok(bytes) => (bytes, "verified_then_cached", false),
+        Err(error)
+            if is_zoom
+                && (error.starts_with("industry source request failed")
+                    || error.starts_with("industry source returned an error")
+                    || error.starts_with("industry source body failed")
+                    || error == "Zoom original endpoint did not return a PDF") =>
+        {
+            if ZOOM_ARCHIVED_ORIGINAL.len() != expected.bytes
+                || fingerprint(ZOOM_ARCHIVED_ORIGINAL) != expected.sha256
+            {
+                return Err(format!(
+                    "archived Zoom original differs from reviewed evidence after live failure: {error}"
+                ));
+            }
+            (
+                ZOOM_ARCHIVED_ORIGINAL.to_vec(),
+                "verified_archived_original",
+                true,
+            )
+        }
+        Err(error) => return Err(error),
+    };
     tokio::fs::create_dir_all(&directory)
         .await
         .map_err(|error| format!("industry source cache directory failed: {error}"))?;
     tokio::fs::write(&cached, &bytes)
         .await
         .map_err(|error| format!("industry source cache write failed: {error}"))?;
-    Ok("verified_then_cached")
+    if archived {
+        tokio::fs::write(&archived_marker, expected.sha256.as_bytes())
+            .await
+            .map_err(|error| format!("industry source archived marker failed: {error}"))?;
+    } else {
+        let _ = tokio::fs::remove_file(&archived_marker).await;
+    }
+    Ok(status)
 }
 
 fn ratio(numerator: f64, denominator: f64) -> Result<f64, String> {
@@ -1147,6 +1217,9 @@ pub async fn evaluate(
     let case = select_case(cases, definition.case);
     let source = select_source(registry, definition.case);
     let cache_status = verified_source(cache_dir, source).await?;
+    let retrieval_note = (cache_status == "verified_archived_original").then_some(
+        "Zoom 原站请求未返回已核验 PDF；本案例使用字节数与 SHA-256 完全相同的已核验原文备份。",
+    );
     let value = calculate(id, case)?;
     let mut reported_facts = Vec::new();
     let mut field_provenance = Map::new();
@@ -1229,7 +1302,8 @@ pub async fn evaluate(
                 "verified_at": chrono::Utc::now(),
                 "requested_url": source.url,
                 "matched_sha256": source.sha256,
-                "matched_bytes": source.bytes
+                "matched_bytes": source.bytes,
+                "retrieval_note": retrieval_note
             }
         },
         "industry_facts": {

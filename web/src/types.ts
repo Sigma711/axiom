@@ -177,12 +177,12 @@ export interface PracticeResult {
     sha256: string;
     bytes: number;
     verification: { status: 'verified_immutable_cache' | 'verified_then_cached' | 'verified_archived_original'; verified_at: string; requested_url: string; matched_sha256: string; matched_bytes: number; retrieval_note?: string | null };
-    sources?: Array<{ id: string; title?: string; url: string; sha256: string; bytes: number; format: string; published: string; verification_basis?: string; verification: { status: string; verified_at: string; requested_url: string; matched_sha256: string; matched_bytes: number; retrieval_note?: string | null } }>;
+    sources?: Array<{ id: string; title?: string; url: string; sha256: string; bytes: number; format: string; published: string | null; retrieved_on?: string | null; verification_basis?: string; verification: { status: string; verified_at: string; requested_url: string; matched_sha256: string; matched_bytes: number; retrieval_note?: string | null } }>;
   };
   industry_facts?: {
     currency: string;
     scale: string;
-    reported_facts: Array<{ key: string; label: string; value: number; unit: string; pdf_page: number | null; source_url?: string | null; source_format?: string; source_section?: string | null; published?: string | null; as_of?: string | null; kind?: 'reported' | 'derived' | 'assumption' }>;
+    reported_facts: Array<{ key: string; label: string; value: number; unit: string; pdf_page: number | null; source_url?: string | null; source_format?: string; source_section?: string | null; published?: string | null; retrieved_on?: string | null; as_of?: string | null; kind?: 'reported' | 'derived' | 'assumption' }>;
     calculation: { formula: string; result_key: string; operands: string[]; symbol_mapping: Record<string, string> };
     field_provenance: Record<string, { kind: 'reported' | 'derived' | 'assumption'; pdf_page?: number | null; note: string }>;
     definitions: { case_boundary: string; metric: string };

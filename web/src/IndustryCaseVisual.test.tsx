@@ -163,10 +163,30 @@ describe('IndustryCaseVisual', () => {
   it('discloses when an exact fingerprint-matched archived original replaced an unavailable source response', () => {
     const result = fixture();
     result.industry_case!.verification.status = 'verified_archived_original';
-    result.industry_case!.verification.retrieval_note = 'Nuveen 原站当前未返回已核验 PDF；本次使用字节数与 SHA-256 完全相同的已核验原文备份。';
+    result.industry_case!.verification.retrieval_note = 'Nuveen 原站请求未返回已核验 PDF；本次使用字节数与 SHA-256 完全相同的已核验原文备份。';
     const html = renderToStaticMarkup(<IndustryCaseVisual result={result} name="NAV 折价" />);
     expect(html).toContain('已核验原文备份');
-    expect(html).toContain('Nuveen 原站当前未返回已核验 PDF');
+    expect(html).toContain('Nuveen 原站请求未返回已核验 PDF');
+  });
+
+  it('distinguishes a market observation date and retrieval date from publication', () => {
+    const result = fixture();
+    result.industry_facts!.reported_facts = [{ key: 'price', label: '历史收盘价', value: 269.05, unit: 'USD/share', pdf_page: null, source_url: 'https://api.nasdaq.com/history', source_format: 'JSON', as_of: '2025-11-03', published: null, retrieved_on: '2026-10-03' }];
+    result.industry_facts!.calculation.operands = ['price'];
+    result.industry_case!.sources = [{ id: 'apple_price', title: 'Nasdaq AAPL 历史收盘价', url: 'https://api.nasdaq.com/history', sha256: 'b'.repeat(64), bytes: 80, format: 'JSON', published: null, retrieved_on: '2026-10-03', verification: result.industry_case!.verification }];
+    const html = renderToStaticMarkup(<IndustryCaseVisual result={result} name="市盈率" />);
+    expect(html).toContain('数据时点 2025-11-03 · 资料获取于 2026-10-03');
+    expect(html).not.toContain('发布于 2026-10-03');
+  });
+
+  it('resolves a formula symbol through its mapped reported-fact key', () => {
+    const result = fixture();
+    result.industry_facts!.reported_facts = [{ key: 'online_monthly_churn', label: 'Online客户月均流失率', value: 0.032, unit: 'fraction per month', pdf_page: 5 }];
+    result.industry_facts!.calculation.operands = ['online_monthly_churn'];
+    result.industry_facts!.calculation.symbol_mapping = { reported_online_monthly_churn: 'online_monthly_churn' };
+    const html = renderToStaticMarkup(<IndustryCaseVisual result={result} name="客户流失率" />);
+    expect(html).toContain('<p class="ax-industry-symbols">Online客户月均流失率</p>');
+    expect(html).not.toContain('reported_online_monthly_churn');
   });
 
   it('shows a fixed historical issuer case with auditable formula and source pages', () => {

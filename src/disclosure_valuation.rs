@@ -7,7 +7,12 @@
 use futures::StreamExt;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
-use std::{collections::BTreeMap, path::Path, sync::OnceLock, time::Duration};
+use std::{
+    collections::{BTreeMap, HashMap},
+    path::Path,
+    sync::{Arc, Mutex as StdMutex, OnceLock, Weak},
+    time::Duration,
+};
 use tokio::sync::Mutex;
 
 pub const SUPPORTED_IDS: &[&str] = &[
@@ -41,12 +46,60 @@ pub const SUPPORTED_IDS: &[&str] = &[
     "book_cape",
 ];
 
-static SOURCE_LOCK: Mutex<()> = Mutex::const_new(());
+static SOURCE_LOCKS: OnceLock<StdMutex<HashMap<String, Weak<Mutex<()>>>>> = OnceLock::new();
 const NUVEEN_PROXY_2025_ARCHIVED_ORIGINAL: &[u8] =
     include_bytes!("../data/verified-sources/nuveen-proxy-2025.pdf");
+const FRED_CPI_2026_10_03_ARCHIVED_ORIGINAL: &[u8] =
+    include_bytes!("../data/verified-sources/fred-cpi-2026-10-03.csv");
+const FRED_ARCHIVE_BYTES: usize = 2_097;
+const FRED_ARCHIVE_SHA256: &str =
+    "d4f940d3358dd45bb74e61cf0a4cfe06194b35050d34a6a122f23f86304577e3";
 
 fn archived_original(source_id: &str) -> Option<&'static [u8]> {
-    (source_id == "nuveen_proxy_2025").then_some(NUVEEN_PROXY_2025_ARCHIVED_ORIGINAL)
+    match source_id {
+        "nuveen_proxy_2025" => Some(NUVEEN_PROXY_2025_ARCHIVED_ORIGINAL),
+        "fred_cpi" => Some(FRED_CPI_2026_10_03_ARCHIVED_ORIGINAL),
+        _ => None,
+    }
+}
+
+struct SourceLockHandle {
+    key: String,
+    lock: Arc<Mutex<()>>,
+}
+
+impl Drop for SourceLockHandle {
+    fn drop(&mut self) {
+        let Some(registry) = SOURCE_LOCKS.get() else {
+            return;
+        };
+        let mut locks = registry
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let this = Arc::downgrade(&self.lock);
+        if Arc::strong_count(&self.lock) == 1
+            && locks
+                .get(&self.key)
+                .is_some_and(|current| current.ptr_eq(&this))
+        {
+            locks.remove(&self.key);
+        }
+    }
+}
+
+fn source_lock(cache_file: &Path) -> SourceLockHandle {
+    let key = cache_file.to_string_lossy().into_owned();
+    let mut locks = SOURCE_LOCKS
+        .get_or_init(|| StdMutex::new(HashMap::new()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    locks.retain(|_, lock| lock.strong_count() > 0);
+    if let Some(lock) = locks.get(&key).and_then(Weak::upgrade) {
+        return SourceLockHandle { key, lock };
+    }
+    let lock = Arc::new(Mutex::new(()));
+    locks.insert(key.clone(), Arc::downgrade(&lock));
+    SourceLockHandle { key, lock }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -209,6 +262,7 @@ fn validate_data(root: &Value) -> Result<(), String> {
             || source["sha256"].as_str().is_none_or(|v| v.len() != 64)
             || source["bytes"].as_u64().is_none_or(|v| v == 0)
             || source["format"].as_str().is_none()
+            || (source["published"].as_str().is_none() && source["retrieved_on"].as_str().is_none())
         {
             return Err(format!("invalid valuation source: {id}"));
         }
@@ -248,7 +302,15 @@ fn canonical_observations(source_id: &str, bytes: &[u8]) -> Result<Vec<u8>, Stri
         if lines.next() != Some("observation_date,CPIAUCSL") {
             return Err("FRED response does not identify CPIAUCSL".into());
         }
-        let rows: BTreeMap<&str, &str> = lines.filter_map(|line| line.split_once(',')).collect();
+        let mut rows = BTreeMap::new();
+        for line in lines {
+            let (date, raw) = line
+                .split_once(',')
+                .ok_or("FRED response contains a malformed CSV row")?;
+            if rows.insert(date, raw).is_some() {
+                return Err(format!("duplicate FRED observation {date}"));
+            }
+        }
         let mut out = String::new();
         for year in 2016..=2025 {
             let date = format!("{year}-09-01");
@@ -258,6 +320,12 @@ fn canonical_observations(source_id: &str, bytes: &[u8]) -> Result<Vec<u8>, Stri
             let value: f64 = raw
                 .parse()
                 .map_err(|_| format!("invalid FRED observation {date}"))?;
+            if !value.is_finite() {
+                return Err(format!("non-finite FRED observation {date}"));
+            }
+            if format!("{value:.3}") != *raw {
+                return Err(format!("non-canonical FRED observation {date}"));
+            }
             out.push_str(&format!("CPIAUCSL|{date}|{value:.3}\n"));
         }
         return Ok(out.into_bytes());
@@ -315,9 +383,10 @@ async fn verified_source(
     if expected.bytes == 0 || expected.bytes > 20_000_000 || expected.sha256.len() != 64 {
         return Err("valuation source expectation is invalid".into());
     }
-    let _guard = SOURCE_LOCK.lock().await;
     let directory = cache_dir.join("valuation-sources");
     let cached = directory.join(format!("{source_id}.source"));
+    let lock = source_lock(&cached);
+    let _guard = lock.lock.clone().lock_owned().await;
     let archived_marker = directory.join(format!("{source_id}.archived-original"));
     if expected.verification_mode == "canonical_observations"
         && source_id == "fred_cpi"
@@ -335,10 +404,13 @@ async fn verified_source(
             reviewed.len() == expected.bytes && fingerprint(reviewed) == expected.sha256
         }) {
             if archived_marker.exists() {
-                if tokio::fs::read(&archived_marker)
+                let marker_matches = tokio::fs::read(&archived_marker)
                     .await
-                    .is_ok_and(|marker| marker == expected.sha256.as_bytes())
-                {
+                    .is_ok_and(|marker| marker == expected.sha256.as_bytes());
+                let archived_payload_matches = source_id != "fred_cpi"
+                    || (bytes.len() == FRED_ARCHIVE_BYTES
+                        && fingerprint(&bytes) == FRED_ARCHIVE_SHA256);
+                if marker_matches && archived_payload_matches {
                     return Ok("verified_archived_original");
                 }
                 let _ = tokio::fs::remove_file(&archived_marker).await;
@@ -353,7 +425,7 @@ async fn verified_source(
     }
     let download = async {
         let response = reqwest::Client::builder()
-            .timeout(Duration::from_secs(120))
+            .timeout(Duration::from_secs(20))
             .user_agent("Axiom educational source verifier")
             .build()
             .map_err(|e| format!("valuation source client failed: {e}"))?
@@ -374,7 +446,22 @@ async fn verified_source(
             bytes.extend_from_slice(&chunk);
         }
         let reviewed = if expected.verification_mode == "canonical_observations" {
-            canonical_observations(source_id, &bytes)?
+            match canonical_observations(source_id, &bytes) {
+                Ok(reviewed) => reviewed,
+                Err(error)
+                    if source_id == "fred_cpi"
+                        && !bytes.starts_with(b"observation_date,CPIAUCSL\n") =>
+                {
+                    return Err(format!(
+                        "FRED endpoint did not return CPIAUCSL CSV: {error}"
+                    ));
+                }
+                Err(error) => {
+                    return Err(format!(
+                        "downloaded valuation source differs from the reviewed evidence: {error}"
+                    ));
+                }
+            }
         } else {
             bytes.clone()
         };
@@ -389,16 +476,28 @@ async fn verified_source(
     let (bytes, status, archived) = match download.await {
         Ok(bytes) => (bytes, "verified_then_cached", false),
         Err(live_error) => {
-            if live_error == "downloaded valuation source differs from the reviewed evidence" {
+            if live_error
+                .starts_with("downloaded valuation source differs from the reviewed evidence")
+                || live_error == "valuation source body exceeds safety limit"
+            {
                 return Err(live_error);
             }
             let Some(bytes) = archived_original(source_id) else {
                 return Err(live_error);
             };
-            if expected.verification_mode != "exact_bytes"
-                || bytes.len() != expected.bytes
-                || fingerprint(bytes) != expected.sha256
-            {
+            let archived_matches = if source_id == "fred_cpi" {
+                bytes.len() == FRED_ARCHIVE_BYTES
+                    && fingerprint(bytes) == FRED_ARCHIVE_SHA256
+                    && canonical_observations(source_id, bytes).is_ok_and(|reviewed| {
+                        reviewed.len() == expected.bytes
+                            && fingerprint(&reviewed) == expected.sha256
+                    })
+            } else {
+                expected.verification_mode == "exact_bytes"
+                    && bytes.len() == expected.bytes
+                    && fingerprint(bytes) == expected.sha256
+            };
+            if !archived_matches {
                 return Err(format!(
                     "archived valuation original differs from the reviewed evidence after live failure: {live_error}"
                 ));
@@ -982,10 +1081,14 @@ pub async fn evaluate(
         } else {
             "exact_document_bytes"
         };
-        let retrieval_note = (status == "verified_archived_original").then_some(
-            "Nuveen 原站当前未返回已核验 PDF；本次使用字节数与 SHA-256 完全相同的已核验原文备份。",
-        );
-        sources.push(json!({"id":source_id,"title":source_title(source_id),"url":meta["url"],"sha256":meta["sha256"],"bytes":meta["bytes"],"format":meta["format"],"published":meta["published"],"verification_basis":basis,"verification":{"status":status,"verified_at":chrono::Utc::now(),"requested_url":config.url,"matched_sha256":config.sha256,"matched_bytes":config.bytes,"fingerprint_scope":basis,"retrieval_note":retrieval_note}}));
+        let retrieval_note = if status != "verified_archived_original" {
+            None
+        } else if *source_id == "fred_cpi" {
+            Some("FRED 原站请求未返回可核验的 CPIAUCSL CSV；本案例使用 2026-10-03 检索的修订后快照，不是当时可得的历史 vintage。")
+        } else {
+            Some("Nuveen 原站请求未返回已核验 PDF；本案例使用字节数与 SHA-256 完全相同的已核验原文备份。")
+        };
+        sources.push(json!({"id":source_id,"title":source_title(source_id),"url":meta["url"],"sha256":meta["sha256"],"bytes":meta["bytes"],"format":meta["format"],"published":meta["published"],"retrieved_on":meta["retrieved_on"],"verification_basis":basis,"verification":{"status":status,"verified_at":chrono::Utc::now(),"requested_url":config.url,"matched_sha256":config.sha256,"matched_bytes":config.bytes,"fingerprint_scope":basis,"retrieval_note":retrieval_note}}));
     }
     let mut facts = Vec::new();
     let mut symbol_mapping = Map::new();
@@ -1005,7 +1108,7 @@ pub async fn evaluate(
             .unwrap_or("reported");
         symbol_mapping.insert((*key).into(), fact["label"].clone());
         field_provenance.insert((*key).into(), json!({"kind":kind,"pdf_page":page,"note":format!("Source field: {}",fact["label"].as_str().unwrap_or(key))}));
-        facts.push(json!({"key":key,"label":fact["label"],"value":fact["value"],"unit":fact["unit"],"pdf_page":page,"source_url":source["url"],"source_format":source["format"],"source_section":fact.get("section").cloned().unwrap_or(Value::Null),"published":source["published"],"as_of":fact["as_of"],"kind":fact.get("kind").cloned().unwrap_or(json!("reported"))}));
+        facts.push(json!({"key":key,"label":fact["label"],"value":fact["value"],"unit":fact["unit"],"pdf_page":page,"source_url":source["url"],"source_format":source["format"],"source_section":fact.get("section").cloned().unwrap_or(Value::Null),"published":source["published"],"retrieved_on":source["retrieved_on"],"as_of":fact["as_of"],"kind":fact.get("kind").cloned().unwrap_or(json!("reported"))}));
     }
     for key in def.assumptions {
         let item = &root["assumptions"][*key];
@@ -1350,7 +1453,7 @@ mod tests {
         assert!(verification["retrieval_note"]
             .as_str()
             .unwrap()
-            .contains("原站当前未返回已核验 PDF"));
+            .contains("原站请求未返回已核验 PDF"));
         let cached =
             std::fs::read(root.join("valuation-sources/nuveen_proxy_2025.source")).unwrap();
         assert_eq!(

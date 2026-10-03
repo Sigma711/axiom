@@ -58,16 +58,18 @@
       "sha256": "538d5fb7aae05cda7831de199af10f3e8ab8d45c9f59f4fb89473724865cb7ce",
       "bytes": 280,
       "format": "FRED current-revision CSV canonical observations (hindsight case)",
-      "published": "2026-10-03",
-      "verification_mode": "canonical_observations"
+      "published": null,
+      "verification_mode": "canonical_observations",
+      "retrieved_on": "2026-10-03"
     },
     "apple_price": {
       "url": "https://api.nasdaq.com/api/quote/AAPL/historical?assetclass=stocks&fromdate=2024-11-01&todate=2026-10-03&limit=5000",
       "sha256": "011aefddcc0e9ee8cfe1e9c911fbe07e5faa14d31177e4c53d7ea4f315733724",
       "bytes": 92,
       "format": "Nasdaq JSON canonical observations",
-      "published": "2026-10-03",
-      "verification_mode": "canonical_observations"
+      "published": null,
+      "verification_mode": "canonical_observations",
+      "retrieved_on": "2026-10-03"
     },
     "ebay_2024": {
       "url": "https://ebay.q4cdn.com/610426115/files/doc_financials/2024/q4/eBay-10-K-2024.pdf",
@@ -81,8 +83,9 @@
       "sha256": "fcdee08d8836be441945953ddff722fb12adfe9669d14e5925dca008781cabe3",
       "bytes": 22,
       "format": "Nasdaq JSON canonical observations",
-      "published": "2026-10-03",
-      "verification_mode": "canonical_observations"
+      "published": null,
+      "verification_mode": "canonical_observations",
+      "retrieved_on": "2026-10-03"
     },
     "hpq_2024": {
       "url": "https://www.hp.com/content/dam/sites/garage-press/press/press-releases/2024/q4-fy24-earnings/Press%20Release%202024%20Q4_Final.pdf",
@@ -103,8 +106,9 @@
       "sha256": "dd6e144994b784923340bb5c1bf3f2ba3a93a89bf352eb94433d50c3f53920fb",
       "bytes": 21,
       "format": "Nasdaq JSON canonical observations",
-      "published": "2026-10-03",
-      "verification_mode": "canonical_observations"
+      "published": null,
+      "verification_mode": "canonical_observations",
+      "retrieved_on": "2026-10-03"
     },
     "nuveen_proxy_2025": {
       "url": "https://documents.nuveen.com/Documents/Nuveen/Viewer.aspx?download=1&uniqueId=0779f60a-86ee-4128-87a3-1db9363e171e",

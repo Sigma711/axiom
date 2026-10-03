@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { expect, test } from './v8-coverage';
 import type { Locator, Page } from '@playwright/test';
@@ -172,43 +172,61 @@ test('every historical industry case follows its verified original disclosure fr
     { symbol: 'SPOT', url: 'https://investors.spotify.com/files/doc_financials/2020/q3/Shareholder-Letter-Q3-2020_FINAL.pdf', bytes: 1_172_171, hash: '82025cc49cce680c62ba9e5576881e6e84c867ba77f44a4f46d82f6c9ae81518' },
     { symbol: 'META', url: 'https://investor.fb.com/files/doc_earnings/2023/q3/presentation/Earnings-Presentation-Q3-2023.pdf', bytes: 172_720, hash: 'dfcaa1c855d2da261f0d392c4a603fddf8897934dc60b3397f272698bf071af4' },
     { symbol: 'SMWB', url: 'https://d1io3yog0oux5.cloudfront.net/_8f428cad86e9f7d21dc312829a41f817/similarweb/db/2008/19607/presentation/SMWB_Q3_2024_Investor_Presentation_.pdf', bytes: 9_680_955, hash: '3278ddfd096ebcc828579466b3e0af46b01f6fe38f72554f1d1304b0bfb53bf0' },
-    { symbol: 'ZM', snapshot: 'zoom-q4-fy2024.pdf', url: 'https://investors.zoom.us/static-files/70629942-ff77-4bed-91d6-422766c47e6b', bytes: 118_862, hash: '79f0e6b5126a47869f196d07aa3ab3626c4a61cdbb46e17a79762ab264fbeaf4' },
+    { symbol: 'ZM', snapshot: '../data/verified-sources/zoom-q1-fy2025-prepared-remarks.pdf', url: 'https://investors.zoom.us/static-files/70629942-ff77-4bed-91d6-422766c47e6b', bytes: 118_862, hash: '79f0e6b5126a47869f196d07aa3ab3626c4a61cdbb46e17a79762ab264fbeaf4' },
     { symbol: 'SNOW', url: 'https://investors.snowflake.com/files/doc_financials/2024/q4/Q4-FY2024-Investor-Presentation-vF.pdf', bytes: 5_257_197, hash: '8da8efb70b65fc2c8928a1d6ccef32e530d447d510fa9da033dcb916ccf80a37' },
     { symbol: '0981.HK', url: 'https://www1.hkexnews.hk/listedco/listconews/sehk/2025/0211/2025021100441.pdf', bytes: 444_831, hash: '18e7cc96cc2405587fbb06e5da078fe4ce129833e6257009fe1c650a0d070a76' },
     { symbol: 'FRO', url: 'https://www.frontlineplc.cy/wp-content/uploads/2024/09/Presentation-Q2-2024.pdf', bytes: 870_579, hash: '394b72e6c229f9586a18a2b1348b8262fc11459afa7c30147df2d5f1ff3677fa' },
     { symbol: 'VZ', url: 'https://www.verizon.com/about/sites/default/files/2024-04/FS_VZ_1Q24_042224.pdf', bytes: 103_314, hash: 'c22a0161f9268b2d9799cbfa1ea78da0e44d16d1cb502896e5a0ac212bae4817' },
   ];
   const industryCache = resolve(process.cwd(), '..', 'target', 'e2e-data', 'industry-sources');
+  const expectedVerification = new Map<string, string>();
   await mkdir(industryCache, { recursive: true });
   for (const source of sources) {
     const portableSnapshot = 'snapshot' in source
-      ? await readFile(resolve(process.cwd(), 'e2e', 'fixtures', 'original-sources', source.snapshot!))
+      ? await readFile(resolve(process.cwd(), source.snapshot!))
       : undefined;
     if (portableSnapshot) {
       expect(portableSnapshot.subarray(0, 5).toString()).toBe('%PDF-');
       expect(portableSnapshot).toHaveLength(source.bytes);
       expect(createHash('sha256').update(portableSnapshot).digest('hex')).toBe(source.hash);
     }
-    let bytes: Buffer;
+    let bytes: Buffer | undefined;
+    let fallbackReason: string | undefined;
     try {
       const response = await request.get(source.url, { timeout: 60_000 });
       const live = await response.body();
-      if (!response.ok() || createHash('sha256').update(live).digest('hex') !== source.hash) throw new Error(`HTTP ${response.status()} or bytes changed`);
-      bytes = live;
+      if (!response.ok()) fallbackReason = `HTTP ${response.status()}`;
+      else if (live.subarray(0, 5).toString() !== '%PDF-') fallbackReason = 'provider returned a non-PDF body';
+      else {
+        if (live.byteLength !== source.bytes || createHash('sha256').update(live).digest('hex') !== source.hash) {
+          throw new Error(`${source.symbol}: reviewed PDF drift or oversized PDF`);
+        }
+        bytes = live;
+      }
     } catch (error) {
-      if (!portableSnapshot) throw error;
+      if (error instanceof Error && error.message.includes('reviewed PDF drift or oversized PDF')) throw error;
+      fallbackReason = `transport failure: ${String(error)}`;
+    }
+    const archived = Boolean(fallbackReason);
+    if (fallbackReason) {
+      if (!portableSnapshot) throw new Error(`${source.symbol}: ${fallbackReason}`);
       test.info().annotations.push({
-        type: 'reviewed-snapshot-fallback',
-        description: `${source.symbol}: provider unavailable or changed; using version-controlled original ${source.snapshot}: ${String(error)}`,
+        type: 'reviewed-original-fallback',
+        description: `${source.symbol}: ${fallbackReason}; using reviewed original ${source.snapshot}`,
       });
       bytes = portableSnapshot;
     }
+    if (!bytes) throw new Error(`${source.symbol}: no verified source bytes`);
     expect(bytes.subarray(0, 5).toString()).toBe('%PDF-');
     expect(bytes).toHaveLength(source.bytes);
     expect(createHash('sha256').update(bytes).digest('hex')).toBe(source.hash);
     // This seeds the application's immutable reviewed-document cache. The
     // annotation above remains explicit when the provider is not live-reachable.
     await writeFile(resolve(industryCache, `${source.hash}.pdf`), bytes);
+    const marker = resolve(industryCache, `${source.hash}.archived-original`);
+    if (archived) await writeFile(marker, source.hash);
+    else await rm(marker, { force: true });
+    expectedVerification.set(source.symbol, archived ? 'verified_archived_original' : 'verified_immutable_cache');
   }
   // Independent literals transcribed from Ping An pp57–58/336, Shopify p1,
   // Realty Income p25 and eBay p44. Ratios use actual business denominators.
@@ -273,7 +291,11 @@ test('every historical industry case follows its verified original disclosure fr
     expect(result.values[item.key]).toBeCloseTo(item.expected, 12);
     const source = sources.find(source => source.symbol === item.symbol)!;
     expect(result.industry_case).toMatchObject({ url: source.url, sha256: source.hash, bytes: source.bytes, audited: item.audited, issuer: { ticker: item.symbol } });
-    expect(result.industry_case.verification).toMatchObject({ status: 'verified_immutable_cache', matched_sha256: source.hash, matched_bytes: source.bytes });
+    expect(result.industry_case.verification).toMatchObject({ status: expectedVerification.get(source.symbol), matched_sha256: source.hash, matched_bytes: source.bytes });
+    if (result.industry_case.verification.status === 'verified_archived_original') {
+      await expect(panel.locator('.ax-industry-case')).toContainText('已核验原文备份');
+      await expect(panel.locator('.ax-industry-case')).toContainText('Zoom 原站请求未返回已核验 PDF');
+    }
     expect(Object.fromEntries(result.industry_facts.reported_facts.map((fact: { key: string; value: number }) => [fact.key, fact.value]))).toEqual(item.facts);
     expect(result.units[item.key]).toBeTruthy();
     expect(result.industry_facts.calculation.formula.trim()).not.toBe('');

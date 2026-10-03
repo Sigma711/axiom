@@ -2,7 +2,10 @@ use axiom::{
     api,
     app_state::AppState,
     config::default_config,
-    industry_case::{fixed_symbol, IndustrySourceConfig, IndustrySourceRegistry, SUPPORTED_IDS},
+    industry_case::{
+        fixed_symbol, IndustrySourceConfig, IndustrySourceRegistry, SUPPORTED_IDS, ZOOM_BYTES,
+        ZOOM_SHA256,
+    },
 };
 use axum::{
     body::{to_bytes, Body},
@@ -13,7 +16,11 @@ use axum::{
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{path::PathBuf, sync::Arc};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tower::ServiceExt;
+
+const ZOOM_PDF: &[u8] =
+    include_bytes!("../data/verified-sources/zoom-q1-fy2025-prepared-remarks.pdf");
 
 async fn post(app: &Router, body: Value) -> (StatusCode, Value) {
     let response = app
@@ -32,6 +39,215 @@ async fn post(app: &Router, body: Value) -> (StatusCode, Value) {
         status,
         serde_json::from_slice(&bytes).unwrap_or_else(|_| json!(String::from_utf8_lossy(&bytes))),
     )
+}
+
+async fn serve_once(status: &'static str, content_type: &'static str, body: Vec<u8>) -> String {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut request = [0_u8; 2048];
+        let _ = stream.read(&mut request).await.unwrap();
+        let header = format!(
+            "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        stream.write_all(header.as_bytes()).await.unwrap();
+        stream.write_all(&body).await.unwrap();
+    });
+    format!("http://{address}/zoom")
+}
+
+async fn zoom_app(url: String, root: &std::path::Path) -> Router {
+    let mut registry = IndustrySourceRegistry::default();
+    registry.zoom.url = url;
+    api::router(Arc::new(
+        AppState::new(default_config(), root.to_path_buf()).with_industry_sources(registry),
+    ))
+}
+
+fn zoom_request() -> Value {
+    json!({"concept_id":"book_saas_churn","module":"data","source":"issuer_disclosure","symbol":"ZM","inputs":{}})
+}
+
+#[tokio::test]
+async fn zoom_http_failure_uses_only_the_exact_archived_original_and_preserves_warm_provenance() {
+    let root =
+        std::env::temp_dir().join(format!("axiom-zoom-archive-api-{}", uuid::Uuid::new_v4()));
+    let app = zoom_app(
+        serve_once("403 Forbidden", "text/html", b"access denied".to_vec()).await,
+        &root,
+    )
+    .await;
+    let (status, result) = post(&app, zoom_request()).await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    assert_eq!(result["values"]["monthly_customer_churn"], 0.032);
+    assert_eq!(
+        result["industry_case"]["verification"]["status"],
+        "verified_archived_original"
+    );
+    assert!(result["industry_case"]["verification"]["retrieval_note"]
+        .as_str()
+        .unwrap()
+        .contains("Zoom 原站请求未返回已核验 PDF"));
+    let (warm_status, warm) = post(&app, zoom_request()).await;
+    assert_eq!(warm_status, StatusCode::OK, "{warm}");
+    assert_eq!(
+        warm["industry_case"]["verification"]["status"],
+        "verified_archived_original"
+    );
+    let _ = tokio::fs::remove_dir_all(root).await;
+}
+
+#[tokio::test]
+async fn zoom_non_pdf_uses_archive_but_changed_and_oversized_pdfs_fail_closed() {
+    let html_root =
+        std::env::temp_dir().join(format!("axiom-zoom-html-api-{}", uuid::Uuid::new_v4()));
+    let html_app = zoom_app(
+        serve_once(
+            "200 OK",
+            "text/html",
+            b"<html>security page</html>".to_vec(),
+        )
+        .await,
+        &html_root,
+    )
+    .await;
+    assert_eq!(post(&html_app, zoom_request()).await.0, StatusCode::OK);
+    let _ = tokio::fs::remove_dir_all(html_root).await;
+
+    let changed_root =
+        std::env::temp_dir().join(format!("axiom-zoom-changed-api-{}", uuid::Uuid::new_v4()));
+    let changed_app = zoom_app(
+        serve_once(
+            "200 OK",
+            "application/pdf",
+            b"%PDF-1.7\nchanged Zoom document".to_vec(),
+        )
+        .await,
+        &changed_root,
+    )
+    .await;
+    assert_eq!(
+        post(&changed_app, zoom_request()).await.0,
+        StatusCode::BAD_GATEWAY
+    );
+    assert!(!changed_root
+        .join(format!("industry-sources/{ZOOM_SHA256}.pdf"))
+        .exists());
+    let _ = tokio::fs::remove_dir_all(changed_root).await;
+
+    let oversized_root =
+        std::env::temp_dir().join(format!("axiom-zoom-oversized-api-{}", uuid::Uuid::new_v4()));
+    let mut oversized = b"%PDF-1.7\n".to_vec();
+    oversized.resize(20_000_001, b'x');
+    let oversized_app = zoom_app(
+        serve_once("200 OK", "application/pdf", oversized).await,
+        &oversized_root,
+    )
+    .await;
+    assert_eq!(
+        post(&oversized_app, zoom_request()).await.0,
+        StatusCode::BAD_GATEWAY
+    );
+    assert!(!oversized_root
+        .join(format!("industry-sources/{ZOOM_SHA256}.pdf"))
+        .exists());
+    let _ = tokio::fs::remove_dir_all(oversized_root).await;
+
+    let mismatch_root = std::env::temp_dir().join(format!(
+        "axiom-zoom-archive-mismatch-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let mut mismatch_registry = IndustrySourceRegistry::default();
+    mismatch_registry.zoom.url = serve_once("403 Forbidden", "text/html", b"denied".to_vec()).await;
+    mismatch_registry.zoom.sha256 = "0".repeat(64);
+    let mismatch_app = api::router(Arc::new(
+        AppState::new(default_config(), mismatch_root.clone())
+            .with_industry_sources(mismatch_registry),
+    ));
+    assert_eq!(
+        post(&mismatch_app, zoom_request()).await.0,
+        StatusCode::BAD_GATEWAY
+    );
+    assert!(!mismatch_root.join("industry-sources").exists());
+}
+
+#[tokio::test]
+async fn zoom_live_pdf_and_marker_integrity_keep_cache_provenance_honest() {
+    assert_eq!(ZOOM_PDF.len(), ZOOM_BYTES);
+    assert_eq!(format!("{:x}", Sha256::digest(ZOOM_PDF)), ZOOM_SHA256);
+    let live_root =
+        std::env::temp_dir().join(format!("axiom-zoom-live-api-{}", uuid::Uuid::new_v4()));
+    let live_app = zoom_app(
+        serve_once("200 OK", "application/pdf", ZOOM_PDF.to_vec()).await,
+        &live_root,
+    )
+    .await;
+    let (_, live) = post(&live_app, zoom_request()).await;
+    assert_eq!(
+        live["industry_case"]["verification"]["status"],
+        "verified_then_cached"
+    );
+    let (_, warm) = post(&live_app, zoom_request()).await;
+    assert_eq!(
+        warm["industry_case"]["verification"]["status"],
+        "verified_immutable_cache"
+    );
+    let _ = tokio::fs::remove_dir_all(live_root).await;
+
+    let marker_root =
+        std::env::temp_dir().join(format!("axiom-zoom-marker-api-{}", uuid::Uuid::new_v4()));
+    let archive_app = zoom_app(
+        serve_once("403 Forbidden", "text/html", b"denied".to_vec()).await,
+        &marker_root,
+    )
+    .await;
+    assert_eq!(post(&archive_app, zoom_request()).await.0, StatusCode::OK);
+    let directory = marker_root.join("industry-sources");
+    std::fs::write(
+        directory.join(format!("{ZOOM_SHA256}.archived-original")),
+        b"wrong",
+    )
+    .unwrap();
+    let changed_app = zoom_app(
+        serve_once(
+            "200 OK",
+            "application/pdf",
+            b"%PDF-1.7\nchanged after marker corruption".to_vec(),
+        )
+        .await,
+        &marker_root,
+    )
+    .await;
+    assert_eq!(
+        post(&changed_app, zoom_request()).await.0,
+        StatusCode::BAD_GATEWAY
+    );
+    assert!(!directory.join(format!("{ZOOM_SHA256}.pdf")).exists());
+
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(directory.join(format!("{ZOOM_SHA256}.pdf")), b"corrupt").unwrap();
+    std::fs::write(
+        directory.join(format!("{ZOOM_SHA256}.archived-original")),
+        ZOOM_SHA256,
+    )
+    .unwrap();
+    let repaired_app = zoom_app(
+        serve_once("403 Forbidden", "text/html", b"denied".to_vec()).await,
+        &marker_root,
+    )
+    .await;
+    let (_, repaired) = post(&repaired_app, zoom_request()).await;
+    assert_eq!(
+        repaired["industry_case"]["verification"]["status"],
+        "verified_archived_original"
+    );
+    assert_eq!(
+        std::fs::read(directory.join(format!("{ZOOM_SHA256}.pdf"))).unwrap(),
+        ZOOM_PDF
+    );
+    let _ = tokio::fs::remove_dir_all(marker_root).await;
 }
 
 async fn fixture_app() -> (Router, tokio::task::JoinHandle<()>, PathBuf) {

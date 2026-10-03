@@ -11,8 +11,9 @@ use axum::{
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::sync::oneshot;
 use tower::ServiceExt;
 
 async fn post(app: &Router, body: Value) -> (StatusCode, Value) {
@@ -48,7 +49,30 @@ async fn serve_once(body: &'static [u8]) -> String {
         stream.write_all(header.as_bytes()).await.unwrap();
         stream.write_all(body).await.unwrap();
     });
-    format!("http://{address}/nuveen.pdf")
+    format!("http://{address}/source?id=CPIAUCSL")
+}
+
+async fn serve_slow_once(body: &'static [u8]) -> (String, oneshot::Receiver<()>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let (accepted_tx, accepted_rx) = oneshot::channel();
+    tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut request = [0_u8; 2048];
+        let _ = stream.read(&mut request).await.unwrap();
+        let _ = accepted_tx.send(());
+        tokio::time::sleep(Duration::from_millis(700)).await;
+        let header = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        stream.write_all(header.as_bytes()).await.unwrap();
+        stream.write_all(body).await.unwrap();
+    });
+    (
+        format!("http://{address}/fred.csv?id=CPIAUCSL"),
+        accepted_rx,
+    )
 }
 
 #[tokio::test]
@@ -71,7 +95,7 @@ async fn nav_discount_api_discloses_the_verified_archived_original_fallback() {
     assert!(verification["retrieval_note"]
         .as_str()
         .unwrap()
-        .contains("原站当前未返回已核验 PDF"));
+        .contains("原站请求未返回已核验 PDF"));
     assert_eq!(
         result["values"]["nav_premium_discount"],
         (14.91 - 16.30) / 16.30
@@ -223,6 +247,14 @@ async fn every_valuation_concept_succeeds_through_the_http_boundary() {
                 .unwrap()
                 .contains("2025-11-03"));
             assert_eq!(result["industry_case"]["period"]["end"], "2025-11-03");
+            let price = result["industry_facts"]["reported_facts"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|fact| fact["key"] == "price")
+                .unwrap();
+            assert!(price["published"].is_null());
+            assert_eq!(price["retrieved_on"], "2026-10-03");
         }
         if *id == "book_cape" {
             assert!(result["industry_case"]["period"]["label"]
@@ -292,4 +324,105 @@ async fn every_valuation_concept_succeeds_through_the_http_boundary() {
         );
     }
     std::fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn slow_fred_cold_fetch_does_not_block_a_cached_pe_request() {
+    let root =
+        std::env::temp_dir().join(format!("axiom-valuation-lock-api-{}", uuid::Uuid::new_v4()));
+    let mut registry = seeded(&root);
+    std::fs::remove_file(root.join("valuation-sources/fred_cpi.source")).unwrap();
+    let (url, accepted) = serve_slow_once(b"<html>temporary provider page</html>").await;
+    registry.sources.get_mut("fred_cpi").unwrap().url = url;
+    let app = api::router(Arc::new(
+        AppState::new(default_config(), root.clone()).with_valuation_sources(registry),
+    ));
+    let cape_app = app.clone();
+    let cape = tokio::spawn(async move {
+        post(&cape_app, json!({"concept_id":"book_cape","module":"data","source":"issuer_disclosure","symbol":"AAPL","inputs":{}})).await
+    });
+    accepted.await.unwrap();
+    let (pe_status, pe) = tokio::time::timeout(
+        Duration::from_millis(400),
+        post(&app, json!({"concept_id":"pe","module":"data","source":"issuer_disclosure","symbol":"AAPL","inputs":{}})),
+    )
+    .await
+    .expect("cached PE must not wait for the unrelated slow FRED source");
+    assert_eq!(pe_status, StatusCode::OK, "{pe}");
+    let (cape_status, cape) = cape.await.unwrap();
+    assert_eq!(cape_status, StatusCode::OK, "{cape}");
+    let fred = cape["industry_case"]["sources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|source| source["id"] == "fred_cpi")
+        .unwrap();
+    assert_eq!(fred["verification"]["status"], "verified_archived_original");
+    assert_eq!(fred["retrieved_on"], "2026-10-03");
+    assert!(fred["published"].is_null());
+    assert!(fred["verification"]["retrieval_note"]
+        .as_str()
+        .unwrap()
+        .contains("不是当时可得的历史 vintage"));
+    let _ = tokio::fs::remove_dir_all(root).await;
+}
+
+#[tokio::test]
+async fn fred_valid_csv_with_changed_observation_is_rejected_instead_of_falling_back() {
+    const DRIFTED: &[u8] = b"observation_date,CPIAUCSL\n2016-09-01,241.176\n2017-09-01,246.435\n2018-09-01,252.182\n2019-09-01,256.430\n2020-09-01,259.997\n2021-09-01,273.910\n2022-09-01,296.349\n2023-09-01,307.276\n2024-09-01,314.732\n2025-09-01,999.999\n";
+    let root = std::env::temp_dir().join(format!(
+        "axiom-valuation-fred-drift-api-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let mut registry = seeded(&root);
+    std::fs::remove_file(root.join("valuation-sources/fred_cpi.source")).unwrap();
+    registry.sources.get_mut("fred_cpi").unwrap().url = serve_once(DRIFTED).await;
+    let app = api::router(Arc::new(
+        AppState::new(default_config(), root.clone()).with_valuation_sources(registry),
+    ));
+    let (status, result) = post(&app, json!({"concept_id":"book_cape","module":"data","source":"issuer_disclosure","symbol":"AAPL","inputs":{}})).await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY, "{result}");
+    assert!(!root.join("valuation-sources/fred_cpi.source").exists());
+    let _ = tokio::fs::remove_dir_all(root).await;
+}
+
+#[tokio::test]
+async fn fred_oversized_csv_is_rejected_instead_of_falling_back() {
+    let root = std::env::temp_dir().join(format!(
+        "axiom-valuation-fred-oversized-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let mut registry = seeded(&root);
+    std::fs::remove_file(root.join("valuation-sources/fred_cpi.source")).unwrap();
+    let mut oversized = b"observation_date,CPIAUCSL\n".to_vec();
+    oversized.resize(20_000_001, b'x');
+    let oversized: &'static [u8] = Box::leak(oversized.into_boxed_slice());
+    registry.sources.get_mut("fred_cpi").unwrap().url = serve_once(oversized).await;
+    let app = api::router(Arc::new(
+        AppState::new(default_config(), root.clone()).with_valuation_sources(registry),
+    ));
+    let (status, result) = post(&app, json!({"concept_id":"book_cape","module":"data","source":"issuer_disclosure","symbol":"AAPL","inputs":{}})).await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY, "{result}");
+    assert!(!root.join("valuation-sources/fred_cpi.source").exists());
+    let _ = tokio::fs::remove_dir_all(root).await;
+}
+
+#[tokio::test]
+async fn fred_archived_snapshot_is_rejected_when_the_expected_canonical_hash_differs() {
+    let root = std::env::temp_dir().join(format!(
+        "axiom-valuation-fred-archive-mismatch-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let mut registry = seeded(&root);
+    std::fs::remove_file(root.join("valuation-sources/fred_cpi.source")).unwrap();
+    let fred = registry.sources.get_mut("fred_cpi").unwrap();
+    fred.url = serve_once(b"<html>temporary provider page</html>").await;
+    fred.sha256 = "0".repeat(64);
+    let app = api::router(Arc::new(
+        AppState::new(default_config(), root.clone()).with_valuation_sources(registry),
+    ));
+    let (status, result) = post(&app, json!({"concept_id":"book_cape","module":"data","source":"issuer_disclosure","symbol":"AAPL","inputs":{}})).await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY, "{result}");
+    assert!(!root.join("valuation-sources/fred_cpi.source").exists());
+    let _ = tokio::fs::remove_dir_all(root).await;
 }

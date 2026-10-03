@@ -8,7 +8,7 @@ test.beforeAll(async ({ request }) => {
   // This case deliberately uses a reviewed post-revision snapshot, not a
   // point-in-time backtest. Provider reachability is recorded separately.
   const url = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL&cosd=2016-09-01&coed=2025-09-01';
-  const reviewed = await readFile(resolve(process.cwd(), 'e2e/fixtures/original-sources/fred-cpi-2026-10-03.csv'));
+  const reviewed = await readFile(resolve(process.cwd(), '../data/verified-sources/fred-cpi-2026-10-03.csv'));
   expect(reviewed.byteLength).toBe(2097);
   expect(createHash('sha256').update(reviewed).digest('hex')).toBe('d4f940d3358dd45bb74e61cf0a4cfe06194b35050d34a6a122f23f86304577e3');
   const canonical = (bytes: Buffer) => {
@@ -143,7 +143,7 @@ test('valuation practices open from knowledge cards and preserve source identity
       expect(source.verification.matched_sha256).toBe('328251373d35c20d0450538dad87c1bf28ca6747393dbc7ddb72d57bb1ccfb19');
       if (source.verification.status === 'verified_archived_original') {
         await expect(visual).toContainText('已核验原文备份');
-        await expect(visual).toContainText('Nuveen 原站当前未返回已核验 PDF');
+        await expect(visual).toContainText('Nuveen 原站请求未返回已核验 PDF');
       }
     }
     if (id === 'book_dcf') {

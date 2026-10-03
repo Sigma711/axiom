@@ -180,8 +180,10 @@ export function IndustryCaseVisual({ result, name }: { result: PracticeResult; n
         <strong>{usesAssumptions ? '以上输入' : '以上披露值'}代入公式，得到 {resultLabels[result.concept_id] || name}</strong>
       </div>
       <p className="ax-industry-symbols">{Object.keys(facts.calculation.symbol_mapping).map(symbol => {
-        const fact = facts.reported_facts.find(item => item.key === symbol);
-        return fact ? factName(symbol, fact.label) : symbolMeanings[symbol] || factLabels[symbol] || symbol;
+        const mappedFactKey = facts.calculation.symbol_mapping[symbol];
+        const fact = facts.reported_facts.find(item => item.key === symbol)
+          || facts.reported_facts.find(item => item.key === mappedFactKey);
+        return fact ? factName(fact.key, fact.label) : symbolMeanings[symbol] || factLabels[symbol] || symbol;
       }).join('；')}</p>
     </figure>
 
@@ -193,7 +195,11 @@ export function IndustryCaseVisual({ result, name }: { result: PracticeResult; n
           const provenance = facts.field_provenance[fact.key];
           return <div className="ax-filing-fact" data-industry-fact={fact.key} key={fact.key}>
             <header><strong>{factName(fact.key, fact.label)}</strong>{fact.kind === 'assumption' ? <span>模型假设</span> : <a href={`${fact.source_url || source.url}${(fact.pdf_page ?? 0) > 0 ? `#page=${fact.pdf_page}` : ''}`} target="_blank" rel="noopener noreferrer">{(fact.pdf_page ?? 0) > 0 ? `PDF 第 ${fact.pdf_page} 页` : fact.source_section || `${fact.source_format || '原文'} 来源`} ↗</a>}</header>
-            {(fact.published || fact.as_of) && <p className="ax-industry-provenance">{fact.as_of && `数据时点 ${fact.as_of}`}{fact.as_of && fact.published && ' · '}{fact.published && `发布于 ${fact.published}`}</p>}
+            {(fact.published || fact.retrieved_on || fact.as_of) && <p className="ax-industry-provenance">{[
+              fact.as_of && `数据时点 ${fact.as_of}`,
+              fact.published && `发布于 ${fact.published}`,
+              fact.retrieved_on && `资料获取于 ${fact.retrieved_on}`,
+            ].filter(Boolean).join(' · ')}</p>}
             <div className="ax-filing-bar year-1"><span aria-hidden="true" style={{ width: `${Math.abs(fact.value) / maximum * 100}%` }} /><p>{format(fact.value, fact.unit)} {unitLabels[fact.unit] || fact.unit}</p></div>
             {provenance && fact.kind !== 'assumption' && <p className="ax-industry-provenance">{provenance.kind === 'reported' ? `原文披露${(fact.pdf_page ?? 0) > 0 ? ` · PDF 第 ${fact.pdf_page} 页` : ` · ${fact.source_section || fact.source_format || '原始记录'}`}` : '披露值推导 · 仅由已列出的原文数值计算'}</p>}
           </div>;
@@ -204,6 +210,6 @@ export function IndustryCaseVisual({ result, name }: { result: PracticeResult; n
     <details className="ax-industry-definitions"><summary>口径定义</summary><p><strong>案例边界</strong>：固定发行人与报告期；不会根据调用方当前选择的标的或数据集外推。</p><p><strong>指标定义</strong>：{facts.definitions.metric}</p></details>
     {result.notes.map((note, index) => <p className="ax-practice-note" key={index}>{note}</p>)}
     <details><summary>核对原文与文件指纹</summary><a href={source.url} target="_blank" rel="noopener noreferrer">{sourceLinkLabel} ↗</a><p>{source.pdf_pages.length > 0 && `原文页：${source.pdf_pages.join('、')} · `}内嵌审阅文件 {format(source.bytes)} 字节</p><p>内嵌 SHA-256 <code>{source.sha256}</code></p><a href={source.verification.requested_url} target="_blank" rel="noopener noreferrer">实际核验地址 ↗</a><p>实际匹配文件 {format(source.verification.matched_bytes)} 字节 · SHA-256 <code>{source.verification.matched_sha256}</code></p><p>{verificationLabels[source.verification.status] || source.verification.status} · {fingerprintMatches ? '字节数与指纹完全匹配' : '字节数或指纹不匹配'} · 核验时间 {source.verification.verified_at}</p>{source.verification.retrieval_note && <p className="ax-industry-provenance">{source.verification.retrieval_note}</p>}</details>
-    {source.sources?.map(document => <details key={document.id}><summary>来源：{document.title || document.id} · {document.format}</summary><a href={document.url} target="_blank" rel="noopener noreferrer">查看原文 ↗</a><p>发布于 {document.published} · {document.verification_basis?.startsWith('canonical') ? '规范化记录 ' : ''}{format(document.bytes)} 字节</p>{document.verification_basis?.startsWith('canonical') && <p>指定日期与标的的记录指纹；接口中其他日期和元数据不参与此核验。</p>}<p>SHA-256 <code>{document.sha256}</code></p><a href={document.verification.requested_url} target="_blank" rel="noopener noreferrer">实际核验地址 ↗</a><p>{verificationLabels[document.verification.status] || document.verification.status} · {document.sha256 === document.verification.matched_sha256 && document.bytes === document.verification.matched_bytes ? '字节数与指纹完全匹配' : '字节数或指纹不匹配'} · 核验时间 {document.verification.verified_at}</p>{document.verification.retrieval_note && <p className="ax-industry-provenance">{document.verification.retrieval_note}</p>}</details>)}
+    {source.sources?.map(document => <details key={document.id}><summary>来源：{document.title || document.id} · {document.format}</summary><a href={document.url} target="_blank" rel="noopener noreferrer">查看原文 ↗</a><p>{[document.published && `发布于 ${document.published}`, document.retrieved_on && `资料获取于 ${document.retrieved_on}`, `${document.verification_basis?.startsWith('canonical') ? '规范化记录 ' : ''}${format(document.bytes)} 字节`].filter(Boolean).join(' · ')}</p>{document.verification_basis?.startsWith('canonical') && <p>指定日期与标的的记录指纹；接口中其他日期和元数据不参与此核验。</p>}<p>SHA-256 <code>{document.sha256}</code></p><a href={document.verification.requested_url} target="_blank" rel="noopener noreferrer">实际核验地址 ↗</a><p>{verificationLabels[document.verification.status] || document.verification.status} · {document.sha256 === document.verification.matched_sha256 && document.bytes === document.verification.matched_bytes ? '字节数与指纹完全匹配' : '字节数或指纹不匹配'} · 核验时间 {document.verification.verified_at}</p>{document.verification.retrieval_note && <p className="ax-industry-provenance">{document.verification.retrieval_note}</p>}</details>)}
   </section>;
 }

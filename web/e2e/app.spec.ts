@@ -87,6 +87,10 @@ test('multi-source disclosure facts keep their own links, dates and assumption l
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await visual.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
   await expect(visual).toHaveScreenshot('disclosure-multi-source-mobile.png');
+  result.status = 'partial';
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  await expect(panel.locator('p.positive').filter({ hasText: '已计算' })).toContainText('已计算可验证部分 · 固定历史披露案例');
+  await expect(panel.locator('p.positive').filter({ hasText: '已计算' })).not.toContainText('全网总量');
 });
 
 test('historical split practice uses the fixed stock source and shows a readable split diagram in both themes', async ({ page }) => {
