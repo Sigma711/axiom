@@ -2,7 +2,7 @@ use axiom::{
     api,
     app_state::AppState,
     config::default_config,
-    industry_case::{IndustrySourceConfig, IndustrySourceRegistry},
+    industry_case::{fixed_symbol, IndustrySourceConfig, IndustrySourceRegistry, SUPPORTED_IDS},
 };
 use axum::{
     body::{to_bytes, Body},
@@ -46,7 +46,9 @@ async fn fixture_app() -> (Router, tokio::task::JoinHandle<()>, PathBuf) {
                 .route("/shopify.pdf", get(|| async { PDF }))
                 .route("/ebay.pdf", get(|| async { PDF }))
                 .route("/moutai.pdf", get(|| async { PDF }))
-                .route("/realty.pdf", get(|| async { PDF })),
+                .route("/realty.pdf", get(|| async { PDF }))
+                .route("/delta.pdf", get(|| async { PDF }))
+                .route("/costco.pdf", get(|| async { PDF })),
         )
         .await
         .unwrap()
@@ -62,6 +64,20 @@ async fn fixture_app() -> (Router, tokio::task::JoinHandle<()>, PathBuf) {
         ebay: source("ebay.pdf"),
         moutai: source("moutai.pdf"),
         realty_income: source("realty.pdf"),
+        delta: source("delta.pdf"),
+        costco: source("costco.pdf"),
+        moderna: source("costco.pdf"),
+        petrobras: source("costco.pdf"),
+        barrick: source("costco.pdf"),
+        siemens: source("costco.pdf"),
+        meta: source("costco.pdf"),
+        spotify: source("costco.pdf"),
+        snowflake: source("costco.pdf"),
+        similarweb: source("costco.pdf"),
+        zoom: source("costco.pdf"),
+        smic: source("costco.pdf"),
+        verizon: source("costco.pdf"),
+        frontline: source("costco.pdf"),
     };
     let cache = std::env::temp_dir().join(format!("axiom-industry-api-{}", uuid::Uuid::new_v4()));
     let state = AppState::new(default_config(), cache.clone()).with_industry_sources(registry);
@@ -71,13 +87,8 @@ async fn fixture_app() -> (Router, tokio::task::JoinHandle<()>, PathBuf) {
 #[tokio::test]
 async fn industry_api_verifies_each_fixed_issuer_disclosure() {
     let (app, server, cache) = fixture_app().await;
-    for (concept, symbol) in [
-        ("book_share_counts", "600519"),
-        ("book_bank_nim", "2318.HK"),
-        ("book_saas_arr", "SHOP"),
-        ("book_platform_take_rate", "EBAY"),
-        ("book_reit_occupancy", "O"),
-    ] {
+    for concept in SUPPORTED_IDS {
+        let symbol = fixed_symbol(concept).unwrap();
         let (status, result) = post(
             &app,
             json!({"concept_id":concept,"module":"data","source":"issuer_disclosure","symbol":symbol,"inputs":{}}),
@@ -99,6 +110,87 @@ async fn industry_api_verifies_each_fixed_issuer_disclosure() {
         assert!(result["industry_facts"]
             .as_object()
             .is_some_and(|v| !v.is_empty()));
+    }
+    server.abort();
+    let _ = tokio::fs::remove_dir_all(cache).await;
+}
+
+#[tokio::test]
+#[allow(clippy::approx_constant)] // 3.14 is Meta's reported DAP literal, not an approximation of PI.
+async fn new_industry_cases_return_independently_recomputed_values() {
+    let (app, server, cache) = fixture_app().await;
+    let expectations = [
+        (
+            "book_biopharma_cash_runway",
+            "cash_runway_months",
+            9_519.0 / 3_004.0 * 12.0,
+        ),
+        ("book_energy_lifting_cost", "lifting_cost", 6.05),
+        ("book_energy_reserve_life", "reserve_life", 13.2),
+        ("book_gold_aisc", "gold_aisc", 1_350.0),
+        ("book_industrial_backlog", "order_backlog", 113.0),
+        (
+            "book_industrial_book_to_bill",
+            "book_to_bill",
+            84_056.0 / 75_930.0,
+        ),
+        ("book_internet_arpu", "premium_arpu", 4.19),
+        (
+            "book_internet_dau_mau",
+            "daily_monthly_active_ratio",
+            3.14 / 3.96,
+        ),
+        ("book_saas_cac_payback", "cac_payback_lower_bound", 21.0),
+        ("book_saas_churn", "monthly_customer_churn", 0.032),
+        ("book_saas_nrr", "net_revenue_retention", 1.31),
+        (
+            "book_semiconductor_asp",
+            "implied_revenue_per_equivalent_wafer",
+            2_207_281.0 * 0.925 * 1_000.0 / 1_991_761.0,
+        ),
+        (
+            "book_semiconductor_utilization",
+            "capacity_utilization",
+            0.855,
+        ),
+        ("book_shipping_tce", "vlcc_spot_tce", 49_600.0),
+        ("book_telecom_arpu", "prepaid_arpu", 31.17),
+        ("book_telecom_churn", "prepaid_monthly_churn", 0.0426),
+    ];
+    for (concept, metric, expected) in expectations {
+        let symbol = fixed_symbol(concept).unwrap();
+        let (status, result) = post(
+            &app,
+            json!({"concept_id":concept,"module":"data","source":"issuer_disclosure","symbol":symbol,"inputs":{}}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{concept}: {result}");
+        let actual = result["values"][metric].as_f64().unwrap();
+        assert!(
+            (actual - expected).abs() <= expected.abs().max(1.0) * 1e-12,
+            "{concept}/{metric}: expected {expected}, got {actual}"
+        );
+        assert!(result["industry_facts"]["calculation"]["formula"]
+            .as_str()
+            .is_some_and(|formula| !formula.trim().is_empty()));
+        assert!(result["industry_facts"]["calculation"]["symbol_mapping"]
+            .as_object()
+            .is_some_and(|mapping| !mapping.is_empty()));
+        assert!(result["notes"].as_array().is_some_and(|notes| notes
+            .iter()
+            .all(|note| note.as_str().is_some_and(|text| !text.trim().is_empty()))));
+        if concept == "book_saas_cac_payback" {
+            assert_eq!(result["values"]["cac_payback_lower_bound"], 21.0);
+            assert_eq!(result["values"]["cac_payback_upper_bound"], 22.0);
+            assert_eq!(
+                result["units"]["cac_payback_lower_bound"],
+                "months lower bound"
+            );
+            assert_eq!(
+                result["units"]["cac_payback_upper_bound"],
+                "months upper bound"
+            );
+        }
     }
     server.abort();
     let _ = tokio::fs::remove_dir_all(cache).await;

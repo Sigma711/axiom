@@ -1,0 +1,978 @@
+{
+  "case_id": "fixed_issuer_valuation_2025",
+  "label": "财报与估值",
+  "issuer": {
+    "name": "Apple Inc.",
+    "ticker": "AAPL"
+  },
+  "period": {
+    "label": "FY2025 / FY2024 comparatives",
+    "start": "2024-09-29",
+    "end": "2025-09-27"
+  },
+  "sources": {
+    "apple_2025": {
+      "url": "https://s2.q4cdn.com/470004039/files/doc_financials/2025/ar/_10-K-2025-As-Filed.pdf",
+      "sha256": "3eb270b22acb7d8d8e9c32a43dc221dec3345f8e4bca02755fdbc1ee16c823de",
+      "bytes": 1858048,
+      "format": "PDF",
+      "published": "2025-10-31"
+    },
+    "apple_q3_2025": {
+      "url": "https://www.apple.com/newsroom/pdfs/fy2025-q3/FY25_Q3_Consolidated_Financial_Statements.pdf",
+      "sha256": "7c982ae6fed09ee53acab12afb1ad374b3fd6a5905c44bf0ef3130f8a8bd67fe",
+      "bytes": 3148382,
+      "format": "PDF",
+      "published": "2025-07-31"
+    },
+    "apple_2022": {
+      "url": "https://s2.q4cdn.com/470004039/files/doc_financials/2022/q4/_10-K-2022-%28As-Filed%29.pdf",
+      "sha256": "40f4a5169ac49f1c3011b8287afe28364138cd4f3e4db36c8d75c9da0f6b2a93",
+      "bytes": 729516,
+      "format": "PDF",
+      "published": "2022-10-28"
+    },
+    "apple_2024": {
+      "url": "https://s2.q4cdn.com/470004039/files/doc_earnings/2024/q4/filing/10-Q4-2024-As-Filed.pdf",
+      "sha256": "319e1217afe72f194575e63350ea6c813eaf5caf0c24e59ce8b221fc1b3ea0d4",
+      "bytes": 963934,
+      "format": "PDF",
+      "published": "2024-11-01"
+    },
+    "apple_2019": {
+      "url": "https://s2.q4cdn.com/470004039/files/doc_financials/2019/ar/_10-K-2019-%28As-Filed%29.pdf",
+      "sha256": "ece287b69ac1a6a030af4c1dce5d1e76cc0c5b85cfed13302440a1a0c372714c",
+      "bytes": 5506647,
+      "format": "PDF",
+      "published": "2019-10-31"
+    },
+    "apple_2016": {
+      "url": "https://s2.q4cdn.com/470004039/files/doc_financials/2016/annual/10-K_2016_9.24.2016_-_as_filed.pdf",
+      "sha256": "c8699277b31c1631faf1d8c7876dd0367be76f8a38e4d3c3e53cf9ad76a86a2f",
+      "bytes": 2050333,
+      "format": "PDF",
+      "published": "2016-10-26"
+    },
+    "fred_cpi": {
+      "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL&cosd=2016-09-01&coed=2025-09-01",
+      "sha256": "538d5fb7aae05cda7831de199af10f3e8ab8d45c9f59f4fb89473724865cb7ce",
+      "bytes": 280,
+      "format": "FRED current-revision CSV canonical observations (hindsight case)",
+      "published": "2026-10-03",
+      "verification_mode": "canonical_observations"
+    },
+    "apple_price": {
+      "url": "https://api.nasdaq.com/api/quote/AAPL/historical?assetclass=stocks&fromdate=2024-11-01&todate=2026-10-03&limit=5000",
+      "sha256": "011aefddcc0e9ee8cfe1e9c911fbe07e5faa14d31177e4c53d7ea4f315733724",
+      "bytes": 92,
+      "format": "Nasdaq JSON canonical observations",
+      "published": "2026-10-03",
+      "verification_mode": "canonical_observations"
+    },
+    "ebay_2024": {
+      "url": "https://ebay.q4cdn.com/610426115/files/doc_financials/2024/q4/eBay-10-K-2024.pdf",
+      "sha256": "10530b8314c4dc49f9737b938f28ead7a70212885c35919fb361d145401f37fb",
+      "bytes": 1004020,
+      "format": "PDF",
+      "published": "2025-02-27"
+    },
+    "ebay_price": {
+      "url": "https://api.nasdaq.com/api/quote/EBAY/historical?assetclass=stocks&fromdate=2025-10-01&todate=2026-10-03&limit=5000",
+      "sha256": "fcdee08d8836be441945953ddff722fb12adfe9669d14e5925dca008781cabe3",
+      "bytes": 22,
+      "format": "Nasdaq JSON canonical observations",
+      "published": "2026-10-03",
+      "verification_mode": "canonical_observations"
+    },
+    "hpq_2024": {
+      "url": "https://www.hp.com/content/dam/sites/garage-press/press/press-releases/2024/q4-fy24-earnings/Press%20Release%202024%20Q4_Final.pdf",
+      "sha256": "5df5cb8ed08b99cf1ceb840e27daf8b14c997fec0bbe2f4b76dcdf043fc8e672",
+      "bytes": 381332,
+      "format": "PDF",
+      "published": "2024-11-26"
+    },
+    "hpq_2025": {
+      "url": "https://www.hp.com/content/dam/sites/garage-press/press/press-releases/2025/q4-fy25-earnings/HP_Q4_2025_Earnings_Press_Release.pdf",
+      "sha256": "62a6b51c3bfa42e55a12183b24155c053ff084e5dff050a15367724cf16a3703",
+      "bytes": 483608,
+      "format": "PDF",
+      "published": "2025-11-25"
+    },
+    "hpq_price": {
+      "url": "https://api.nasdaq.com/api/quote/HPQ/historical?assetclass=stocks&fromdate=2025-11-26&todate=2026-10-03&limit=5000",
+      "sha256": "dd6e144994b784923340bb5c1bf3f2ba3a93a89bf352eb94433d50c3f53920fb",
+      "bytes": 21,
+      "format": "Nasdaq JSON canonical observations",
+      "published": "2026-10-03",
+      "verification_mode": "canonical_observations"
+    },
+    "nuveen_proxy_2025": {
+      "url": "https://documents.nuveen.com/Documents/Nuveen/Viewer.aspx?download=1&uniqueId=0779f60a-86ee-4128-87a3-1db9363e171e",
+      "sha256": "328251373d35c20d0450538dad87c1bf28ca6747393dbc7ddb72d57bb1ccfb19",
+      "bytes": 1438050,
+      "format": "PDF",
+      "published": "2025-12-23"
+    }
+  },
+  "facts": {
+    "price": {
+      "value": 269.05,
+      "unit": "USD/share",
+      "label": "2025-11-03 收盘价",
+      "source_id": "apple_price",
+      "section": "2025-11-03 历史行情行",
+      "as_of": "2025-11-03"
+    },
+    "cape_price": {
+      "value": 271.49,
+      "unit": "USD/share",
+      "label": "2025-11-21 收盘价",
+      "source_id": "apple_price",
+      "section": "2025-11-21 历史行情行",
+      "as_of": "2025-11-21"
+    },
+    "shares": {
+      "value": 14773.26,
+      "unit": "million shares",
+      "label": "期末已发行在外普通股",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2025-09-27"
+    },
+    "diluted_shares": {
+      "value": 15004.697,
+      "unit": "million shares",
+      "label": "稀释加权平均股数",
+      "source_id": "apple_2025",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2025-09-27"
+    },
+    "sales": {
+      "value": 416161,
+      "unit": "USD millions",
+      "label": "2025 财年净销售额",
+      "source_id": "apple_2025",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2025-09-27"
+    },
+    "sales_prev": {
+      "value": 391035,
+      "unit": "USD millions",
+      "label": "2024 财年净销售额",
+      "source_id": "apple_2025",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2024-09-28"
+    },
+    "gross_profit": {
+      "value": 195201,
+      "unit": "USD millions",
+      "label": "2025 财年毛利",
+      "source_id": "apple_2025",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2025-09-27"
+    },
+    "gross_profit_prev": {
+      "value": 180683,
+      "unit": "USD millions",
+      "label": "2024 财年毛利",
+      "source_id": "apple_2025",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2024-09-28"
+    },
+    "sga": {
+      "value": 27601,
+      "unit": "USD millions",
+      "label": "2025 财年销售、一般及行政费用",
+      "source_id": "apple_2025",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2025-09-27"
+    },
+    "sga_prev": {
+      "value": 26097,
+      "unit": "USD millions",
+      "label": "2024 财年销售、一般及行政费用",
+      "source_id": "apple_2025",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2024-09-28"
+    },
+    "operating_income": {
+      "value": 133050,
+      "unit": "USD millions",
+      "label": "2025 财年营业利润",
+      "source_id": "apple_2025",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2025-09-27"
+    },
+    "operating_income_prev": {
+      "value": 123216,
+      "unit": "USD millions",
+      "label": "2024 财年营业利润",
+      "source_id": "apple_2025",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2024-09-28"
+    },
+    "pretax_income": {
+      "value": 132729,
+      "unit": "USD millions",
+      "label": "税前利润",
+      "source_id": "apple_2025",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2025-09-27"
+    },
+    "income_tax": {
+      "value": 20719,
+      "unit": "USD millions",
+      "label": "所得税费用",
+      "source_id": "apple_2025",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2025-09-27"
+    },
+    "net_income": {
+      "value": 112010,
+      "unit": "USD millions",
+      "label": "2025 财年净利润",
+      "source_id": "apple_2025",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2025-09-27"
+    },
+    "net_income_prev": {
+      "value": 93736,
+      "unit": "USD millions",
+      "label": "2024 财年净利润",
+      "source_id": "apple_2025",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2024-09-28"
+    },
+    "eps": {
+      "value": 7.46,
+      "unit": "USD/share",
+      "label": "2025 财年稀释每股收益",
+      "source_id": "apple_2025",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2025-09-27"
+    },
+    "eps_prev": {
+      "value": 6.08,
+      "unit": "USD/share",
+      "label": "2024 财年稀释每股收益",
+      "source_id": "apple_2025",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2024-09-28"
+    },
+    "current_assets": {
+      "value": 147957,
+      "unit": "USD millions",
+      "label": "流动资产",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2025-09-27"
+    },
+    "current_assets_prev": {
+      "value": 152987,
+      "unit": "USD millions",
+      "label": "上期流动资产",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2024-09-28"
+    },
+    "current_liabilities": {
+      "value": 165631,
+      "unit": "USD millions",
+      "label": "流动负债",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2025-09-27"
+    },
+    "current_liabilities_prev": {
+      "value": 176392,
+      "unit": "USD millions",
+      "label": "上期流动负债",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2024-09-28"
+    },
+    "assets": {
+      "value": 359241,
+      "unit": "USD millions",
+      "label": "总资产",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2025-09-27"
+    },
+    "assets_prev": {
+      "value": 364980,
+      "unit": "USD millions",
+      "label": "上期总资产",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2024-09-28"
+    },
+    "assets_prev2": {
+      "value": 352583,
+      "unit": "USD millions",
+      "label": "2023 财年末总资产",
+      "source_id": "apple_2024",
+      "page": 30,
+      "section": "合并资产负债表",
+      "as_of": "2023-09-30"
+    },
+    "liabilities": {
+      "value": 285508,
+      "unit": "USD millions",
+      "label": "总负债",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2025-09-27"
+    },
+    "liabilities_prev": {
+      "value": 308030,
+      "unit": "USD millions",
+      "label": "上期总负债（总资产减股东权益）",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2024-09-28",
+      "kind": "derived"
+    },
+    "equity": {
+      "value": 73733,
+      "unit": "USD millions",
+      "label": "股东权益",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2025-09-27"
+    },
+    "equity_prev": {
+      "value": 56950,
+      "unit": "USD millions",
+      "label": "上期股东权益",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2024-09-28"
+    },
+    "retained_earnings": {
+      "value": -14264,
+      "unit": "USD millions",
+      "label": "累计亏损",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2025-09-27"
+    },
+    "ppe": {
+      "value": 49834,
+      "unit": "USD millions",
+      "label": "物业、厂房及设备净额",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2025-09-27"
+    },
+    "ppe_prev": {
+      "value": 45680,
+      "unit": "USD millions",
+      "label": "上期物业、厂房及设备净额",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2024-09-28"
+    },
+    "receivables": {
+      "value": 39777,
+      "unit": "USD millions",
+      "label": "应收账款净额",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2025-09-27"
+    },
+    "receivables_prev": {
+      "value": 33410,
+      "unit": "USD millions",
+      "label": "上期应收账款净额",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2024-09-28"
+    },
+    "cash": {
+      "value": 35934,
+      "unit": "USD millions",
+      "label": "现金及现金等价物",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2025-09-27"
+    },
+    "cash_prev": {
+      "value": 29943,
+      "unit": "USD millions",
+      "label": "上期现金及现金等价物",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2024-09-28"
+    },
+    "marketable_securities": {
+      "value": 96486,
+      "unit": "USD millions",
+      "label": "流动及非流动有价证券合计",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2025-09-27",
+      "kind": "derived"
+    },
+    "debt": {
+      "value": 98657,
+      "unit": "USD millions",
+      "label": "商业票据及有息借款合计",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2025-09-27",
+      "kind": "derived"
+    },
+    "debt_prev": {
+      "value": 106629,
+      "unit": "USD millions",
+      "label": "上期商业票据及有息借款合计",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2024-09-28",
+      "kind": "derived"
+    },
+    "long_term_debt": {
+      "value": 78328,
+      "unit": "USD millions",
+      "label": "非流动定期债务",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2025-09-27"
+    },
+    "long_term_debt_prev": {
+      "value": 85750,
+      "unit": "USD millions",
+      "label": "上期非流动定期债务",
+      "source_id": "apple_2025",
+      "page": 31,
+      "section": "合并资产负债表",
+      "as_of": "2024-09-28"
+    },
+    "cfo": {
+      "value": 111482,
+      "unit": "USD millions",
+      "label": "经营活动现金流",
+      "source_id": "apple_2025",
+      "page": 33,
+      "section": "合并现金流量表",
+      "as_of": "2025-09-27"
+    },
+    "capex": {
+      "value": 12715,
+      "unit": "USD millions",
+      "label": "购置物业、厂房及设备付款",
+      "source_id": "apple_2025",
+      "page": 33,
+      "section": "合并现金流量表",
+      "as_of": "2025-09-27"
+    },
+    "da": {
+      "value": 11698,
+      "unit": "USD millions",
+      "label": "折旧与摊销",
+      "source_id": "apple_2025",
+      "page": 33,
+      "section": "合并现金流量表",
+      "as_of": "2025-09-27"
+    },
+    "da_prev": {
+      "value": 11445,
+      "unit": "USD millions",
+      "label": "上期折旧与摊销",
+      "source_id": "apple_2025",
+      "page": 33,
+      "section": "合并现金流量表",
+      "as_of": "2024-09-28"
+    },
+    "dividends": {
+      "value": 15421,
+      "unit": "USD millions",
+      "label": "支付股利及股利等价物",
+      "source_id": "apple_2025",
+      "page": 33,
+      "section": "合并现金流量表",
+      "as_of": "2025-09-27"
+    },
+    "dividend_per_share": {
+      "value": 1.02,
+      "unit": "USD/share",
+      "label": "每股或受限股票单位宣告股利",
+      "source_id": "apple_2025",
+      "page": 32,
+      "section": "合并股东权益表",
+      "as_of": "2025-09-27"
+    },
+    "q3_sales": {
+      "value": 94036,
+      "unit": "USD millions",
+      "label": "2025 财年第三季度净销售额",
+      "source_id": "apple_q3_2025",
+      "page": 1,
+      "section": "简明合并经营报表",
+      "as_of": "2025-06-28"
+    },
+    "nine_month_sales": {
+      "value": 313695,
+      "unit": "USD millions",
+      "label": "2025 财年前九个月净销售额",
+      "source_id": "apple_q3_2025",
+      "page": 1,
+      "section": "简明合并经营报表",
+      "as_of": "2025-06-28"
+    },
+    "ebay_price": {
+      "value": 87.58,
+      "unit": "USD/share",
+      "label": "eBay 2025-10-01 收盘价",
+      "source_id": "ebay_price",
+      "section": "Nasdaq 10/01/2025 历史行情行",
+      "as_of": "2025-10-01"
+    },
+    "ebay_eps": {
+      "value": 3.94,
+      "unit": "USD/share",
+      "label": "eBay 2024 财年稀释每股收益",
+      "source_id": "ebay_2024",
+      "page": 65,
+      "section": "合并经营报表",
+      "as_of": "2024-12-31"
+    },
+    "ebay_operating_income": {
+      "value": 2318,
+      "unit": "USD millions",
+      "label": "eBay 营业利润",
+      "source_id": "ebay_2024",
+      "page": 65,
+      "section": "合并经营报表",
+      "as_of": "2024-12-31"
+    },
+    "ebay_interest_expense": {
+      "value": 259,
+      "unit": "USD millions",
+      "label": "eBay 利息费用",
+      "source_id": "ebay_2024",
+      "page": 65,
+      "section": "合并经营报表",
+      "as_of": "2024-12-31"
+    },
+    "ebay_assets": {
+      "value": 19365,
+      "unit": "USD millions",
+      "label": "eBay 总资产",
+      "source_id": "ebay_2024",
+      "page": 64,
+      "section": "合并资产负债表",
+      "as_of": "2024-12-31"
+    },
+    "ebay_equity": {
+      "value": 5158,
+      "unit": "USD millions",
+      "label": "eBay 股东权益",
+      "source_id": "ebay_2024",
+      "page": 64,
+      "section": "合并资产负债表",
+      "as_of": "2024-12-31"
+    },
+    "ebay_goodwill": {
+      "value": 4269,
+      "unit": "USD millions",
+      "label": "eBay 商誉",
+      "source_id": "ebay_2024",
+      "page": 81,
+      "section": "附注4 商誉与无形资产",
+      "as_of": "2024-12-31"
+    },
+    "ebay_intangibles": {
+      "value": 119,
+      "unit": "USD millions",
+      "label": "eBay 可辨认无形资产净额",
+      "source_id": "ebay_2024",
+      "page": 81,
+      "section": "附注4 商誉与无形资产",
+      "as_of": "2024-12-31"
+    },
+    "ebay_shares": {
+      "value": 471,
+      "unit": "million shares",
+      "label": "eBay 期末已发行在外普通股",
+      "source_id": "ebay_2024",
+      "page": 64,
+      "section": "合并资产负债表",
+      "as_of": "2024-12-31"
+    },
+    "peer_apple_price": {
+      "value": 277.55,
+      "unit": "USD/share",
+      "label": "Apple 2025-11-26 收盘价",
+      "source_id": "apple_price",
+      "section": "Nasdaq 11/26/2025 历史行情行",
+      "as_of": "2025-11-26"
+    },
+    "hpq_price": {
+      "value": 23.98,
+      "unit": "USD/share",
+      "label": "HP Inc. 2025-11-26 收盘价",
+      "source_id": "hpq_price",
+      "section": "Nasdaq 11/26/2025 历史行情行",
+      "as_of": "2025-11-26"
+    },
+    "hpq_eps": {
+      "value": 2.65,
+      "unit": "USD/share",
+      "label": "HP Inc. 2025 财年 GAAP 稀释每股收益",
+      "source_id": "hpq_2025",
+      "page": 8,
+      "section": "稀释每股收益计算表",
+      "as_of": "2025-10-31"
+    },
+    "shares_prev": {
+      "value": 15116.786,
+      "unit": "million shares",
+      "label": "2024 财年末已发行在外普通股",
+      "source_id": "apple_2025",
+      "page": 45,
+      "section": "附注10 股东权益",
+      "as_of": "2024-09-28"
+    },
+    "common_shares_issued": {
+      "value": 58.146,
+      "unit": "million shares",
+      "label": "2025 财年股票净发行数",
+      "source_id": "apple_2025",
+      "page": 45,
+      "section": "附注10 股东权益",
+      "as_of": "2025-09-27"
+    },
+    "eps_2016": {
+      "value": 2.0775,
+      "unit": "USD/share split-adjusted",
+      "label": "2016 财年稀释 EPS（2020 年 4:1 拆股后）",
+      "source_id": "apple_2016",
+      "page": 39,
+      "section": "合并经营报表",
+      "as_of": "2016-09-24",
+      "kind": "derived"
+    },
+    "eps_2017": {
+      "value": 2.3025,
+      "unit": "USD/share split-adjusted",
+      "label": "2017 财年稀释 EPS（2020 年 4:1 拆股后）",
+      "source_id": "apple_2019",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2017-09-30",
+      "kind": "derived"
+    },
+    "eps_2018": {
+      "value": 2.9775,
+      "unit": "USD/share split-adjusted",
+      "label": "2018 财年稀释 EPS（2020 年 4:1 拆股后）",
+      "source_id": "apple_2019",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2018-09-29",
+      "kind": "derived"
+    },
+    "eps_2019": {
+      "value": 2.9725,
+      "unit": "USD/share split-adjusted",
+      "label": "2019 财年稀释 EPS（2020 年 4:1 拆股后）",
+      "source_id": "apple_2019",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2019-09-28",
+      "kind": "derived"
+    },
+    "eps_2020": {
+      "value": 3.28,
+      "unit": "USD/share",
+      "label": "2020 财年稀释 EPS",
+      "source_id": "apple_2022",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2020-09-26"
+    },
+    "eps_2021": {
+      "value": 5.61,
+      "unit": "USD/share",
+      "label": "2021 财年稀释 EPS",
+      "source_id": "apple_2022",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2021-09-25"
+    },
+    "eps_2022": {
+      "value": 6.11,
+      "unit": "USD/share",
+      "label": "2022 财年稀释 EPS",
+      "source_id": "apple_2022",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2022-09-24"
+    },
+    "eps_2023": {
+      "value": 6.13,
+      "unit": "USD/share",
+      "label": "2023 财年稀释 EPS",
+      "source_id": "apple_2025",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2023-09-30"
+    },
+    "eps_2024": {
+      "value": 6.08,
+      "unit": "USD/share",
+      "label": "2024 财年稀释 EPS",
+      "source_id": "apple_2025",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2024-09-28"
+    },
+    "eps_2025": {
+      "value": 7.46,
+      "unit": "USD/share",
+      "label": "2025 财年稀释 EPS",
+      "source_id": "apple_2025",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2025-09-27"
+    },
+    "ni_2016": {
+      "value": 45687,
+      "unit": "USD millions",
+      "label": "2016 财年净利润",
+      "source_id": "apple_2016",
+      "page": 39,
+      "section": "合并经营报表",
+      "as_of": "2016-09-24"
+    },
+    "ni_2017": {
+      "value": 48351,
+      "unit": "USD millions",
+      "label": "2017 财年净利润",
+      "source_id": "apple_2019",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2017-09-30"
+    },
+    "ni_2018": {
+      "value": 59531,
+      "unit": "USD millions",
+      "label": "2018 财年净利润",
+      "source_id": "apple_2019",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2018-09-29"
+    },
+    "ni_2019": {
+      "value": 55256,
+      "unit": "USD millions",
+      "label": "2019 财年净利润",
+      "source_id": "apple_2019",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2019-09-28"
+    },
+    "ni_2020": {
+      "value": 57411,
+      "unit": "USD millions",
+      "label": "2020 财年净利润",
+      "source_id": "apple_2022",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2020-09-26"
+    },
+    "ni_2021": {
+      "value": 94680,
+      "unit": "USD millions",
+      "label": "2021 财年净利润",
+      "source_id": "apple_2022",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2021-09-25"
+    },
+    "ni_2022": {
+      "value": 99803,
+      "unit": "USD millions",
+      "label": "2022 财年净利润",
+      "source_id": "apple_2022",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2022-09-24"
+    },
+    "ni_2023": {
+      "value": 96995,
+      "unit": "USD millions",
+      "label": "2023 财年净利润",
+      "source_id": "apple_2025",
+      "page": 29,
+      "section": "合并经营报表",
+      "as_of": "2023-09-30"
+    },
+    "cpi_2016": {
+      "value": 241.176,
+      "unit": "index 1982-84=100",
+      "label": "2016年9月美国CPI-U季调值",
+      "source_id": "fred_cpi",
+      "section": "CPIAUCSL 2016-09-01",
+      "as_of": "2016-09-01"
+    },
+    "cpi_2017": {
+      "value": 246.435,
+      "unit": "index 1982-84=100",
+      "label": "2017年9月美国CPI-U季调值",
+      "source_id": "fred_cpi",
+      "section": "CPIAUCSL 2017-09-01",
+      "as_of": "2017-09-01"
+    },
+    "cpi_2018": {
+      "value": 252.182,
+      "unit": "index 1982-84=100",
+      "label": "2018年9月美国CPI-U季调值",
+      "source_id": "fred_cpi",
+      "section": "CPIAUCSL 2018-09-01",
+      "as_of": "2018-09-01"
+    },
+    "cpi_2019": {
+      "value": 256.43,
+      "unit": "index 1982-84=100",
+      "label": "2019年9月美国CPI-U季调值",
+      "source_id": "fred_cpi",
+      "section": "CPIAUCSL 2019-09-01",
+      "as_of": "2019-09-01"
+    },
+    "cpi_2020": {
+      "value": 259.997,
+      "unit": "index 1982-84=100",
+      "label": "2020年9月美国CPI-U季调值",
+      "source_id": "fred_cpi",
+      "section": "CPIAUCSL 2020-09-01",
+      "as_of": "2020-09-01"
+    },
+    "cpi_2021": {
+      "value": 273.91,
+      "unit": "index 1982-84=100",
+      "label": "2021年9月美国CPI-U季调值",
+      "source_id": "fred_cpi",
+      "section": "CPIAUCSL 2021-09-01",
+      "as_of": "2021-09-01"
+    },
+    "cpi_2022": {
+      "value": 296.349,
+      "unit": "index 1982-84=100",
+      "label": "2022年9月美国CPI-U季调值",
+      "source_id": "fred_cpi",
+      "section": "CPIAUCSL 2022-09-01",
+      "as_of": "2022-09-01"
+    },
+    "cpi_2023": {
+      "value": 307.276,
+      "unit": "index 1982-84=100",
+      "label": "2023年9月美国CPI-U季调值",
+      "source_id": "fred_cpi",
+      "section": "CPIAUCSL 2023-09-01",
+      "as_of": "2023-09-01"
+    },
+    "cpi_2024": {
+      "value": 314.732,
+      "unit": "index 1982-84=100",
+      "label": "2024年9月美国CPI-U季调值",
+      "source_id": "fred_cpi",
+      "section": "CPIAUCSL 2024-09-01",
+      "as_of": "2024-09-01"
+    },
+    "cpi_2025": {
+      "value": 324.245,
+      "unit": "index 1982-84=100",
+      "label": "2025年9月美国CPI-U季调值",
+      "source_id": "fred_cpi",
+      "section": "CPIAUCSL 2025-09-01",
+      "as_of": "2025-09-01"
+    },
+    "diax_nav": {
+      "value": 16.3,
+      "unit": "USD/share",
+      "label": "DIAX 2025年第三季度最高收盘价交易日对应NAV",
+      "source_id": "nuveen_proxy_2025",
+      "page": 52,
+      "section": "Common Share Price Data — September 2025 high observation",
+      "as_of": "截至2025-09-30季度（最高收盘价的具体交易日未披露）",
+      "kind": "reported"
+    },
+    "diax_market_price": {
+      "value": 14.91,
+      "unit": "USD/share",
+      "label": "DIAX 2025年第三季度最高收盘价",
+      "source_id": "nuveen_proxy_2025",
+      "page": 52,
+      "section": "Common Share Price Data — September 2025 high observation",
+      "as_of": "截至2025-09-30季度（最高收盘价的具体交易日未披露）",
+      "kind": "reported"
+    }
+  },
+  "assumptions": {
+    "dcf_growth": {
+      "value": 0.05,
+      "unit": "fraction",
+      "label": "未来五年自由现金流年增长率假设"
+    },
+    "dcf_discount": {
+      "value": 0.09,
+      "unit": "fraction",
+      "label": "贴现率假设"
+    },
+    "dcf_terminal_growth": {
+      "value": 0.03,
+      "unit": "fraction",
+      "label": "永续增长率假设"
+    },
+    "dcf_years": {
+      "value": 5,
+      "unit": "years",
+      "label": "显式预测期假设"
+    },
+    "dcf_net_borrowing": {
+      "value": 0,
+      "unit": "USD millions",
+      "label": "净举债情景假设"
+    }
+  }
+}

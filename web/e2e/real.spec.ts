@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { expect, test } from './v8-coverage';
 import type { Locator, Page } from '@playwright/test';
@@ -12,13 +12,6 @@ test('Apple split practice independently matches the issuer announcement and liv
   const issuerText = await issuerResponse.text();
   expect(issuerText).toMatch(/four-for-one stock split/i);
   expect(issuerText).toMatch(/August 31, 2020/i);
-
-  const providerUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/AAPL?period1=1595808000&period2=1601510400&interval=1d&includePrePost=false&events=div%2Csplits';
-  const upstreamResponse = await request.get(providerUrl, { headers: { 'user-agent': 'AXIOM educational market reader/1.0' }, timeout: 25_000 });
-  expect(upstreamResponse.ok()).toBe(true);
-  const upstream = (await upstreamResponse.json()).chart.result[0];
-  const event = Object.values(upstream.events.splits).find((item: any) => item.date === 1598880600) as { date: number; numerator: number; denominator: number; splitRatio: string } | undefined;
-  expect(event).toMatchObject({ numerator: 4, denominator: 1, splitRatio: '4:1' });
 
   await page.goto('/learn');
   await page.getByRole('textbox', { name: '搜索 概念 / 公式 / 关键词' }).fill('book_adjustment');
@@ -33,7 +26,37 @@ test('Apple split practice independently matches the issuer announcement and liv
   const response = await responsePromise;
   expect(response.ok(), await response.text()).toBe(true);
   const result = await response.json();
-  expect(result).toMatchObject({ concept_id: 'book_adjustment', input_kind: 'stock_action_case', provenance: 'server_fetched_stock_corporate_action', source: 'us_stock', symbol: 'AAPL', values: { new_shares_per_old_share: 4, split_only_price_multiplier: .25 } });
+  expect(result).toMatchObject({ concept_id: 'book_adjustment', input_kind: 'stock_action_case', source: 'us_stock', symbol: 'AAPL', values: { new_shares_per_old_share: 4, split_only_price_multiplier: .25 } });
+  const retrieval = result.adjustment_evidence.retrieval;
+  expect(result.provenance).toBe(retrieval === 'restricted_server_relay'
+    ? 'server_relayed_stock_corporate_action'
+    : 'server_fetched_stock_corporate_action');
+  expect(result.bar_origin).toBe(retrieval === 'restricted_server_relay'
+    ? 'restricted_server_relay_us_stock_adjustment_evidence'
+    : 'server_fetched_us_stock_adjustment_evidence');
+  const sourceUrl = result.adjustment_evidence.endpoint as string;
+  expect(new URL(sourceUrl).hostname).toMatch(/^query[12]\.finance\.yahoo\.com$/);
+  let upstreamResponse = await request.get(sourceUrl, { headers: { 'user-agent': 'AXIOM educational market reader/1.0' }, timeout: 25_000 });
+  let upstreamPayload: any;
+  if (upstreamResponse.ok()) {
+    upstreamPayload = await upstreamResponse.json();
+  } else {
+    const relayUrl = process.env.AXIOM_YAHOO_RELAY_URL || 'https://sigma711.top/axiom/api/provider/yahoo-chart';
+    upstreamResponse = await request.get(relayUrl, {
+      params: { symbol: 'AAPL', period1: '1595808000', period2: '1601510400' },
+      timeout: 25_000,
+    });
+    expect(upstreamResponse.ok(), await upstreamResponse.text()).toBe(true);
+    const envelope = await upstreamResponse.json();
+    expect(envelope).toMatchObject({ provider: 'yahoo', retrieval: 'restricted_server_relay', source_url: sourceUrl });
+    upstreamPayload = envelope.payload;
+  }
+  const upstream = upstreamPayload.chart.result[0];
+  expect(upstream.meta.symbol).toBe('AAPL');
+  expect(upstream.meta.currency).toBe('USD');
+  expect(['EQUITY', 'ETF']).toContain(upstream.meta.instrumentType);
+  const event = Object.values(upstream.events.splits).find((item: any) => item.date === 1598880600) as { date: number; numerator: number; denominator: number; splitRatio: string } | undefined;
+  expect(event).toMatchObject({ numerator: 4, denominator: 1, splitRatio: '4:1' });
   expect(result.adjustment_evidence.event).toMatchObject({ effective_trading_date: '2020-08-31', numerator: event!.numerator, denominator: event!.denominator, split_ratio: event!.splitRatio });
   const first = result.adjustment_evidence.observations[0];
   const index = upstream.timestamp.indexOf(Date.parse(first.timestamp) / 1000);
@@ -46,7 +69,7 @@ test('Apple split practice independently matches the issuer announcement and liv
   await expect(visual).toContainText('不是收益');
   await visual.getByText('核对事件与行情来源').click();
   await expect(visual.getByRole('link', { name: 'Apple 官方拆股公告 ↗' })).toHaveAttribute('href', issuerUrl);
-  await expect(visual.getByRole('link', { name: '查看行情接口 ↗' })).toHaveAttribute('href', new RegExp('query1\\.finance\\.yahoo\\.com'));
+  await expect(visual.getByRole('link', { name: '查看行情接口 ↗' })).toHaveAttribute('href', sourceUrl);
   await visual.screenshot({ path: test.info().outputPath('stock-adjustment-real-dark.png') });
   await page.getByLabel('切换到浅色模式').click();
   await expect(visual).toBeVisible();
@@ -72,7 +95,10 @@ test('unadjusted-price pitfall opens the same source-backed Apple split lesson',
   const response = await responsePromise;
   expect(response.ok(), await response.text()).toBe(true);
   const result = await response.json();
-  expect(result).toMatchObject({ concept_id: 'book_pitfall_adjustment', provenance: 'server_fetched_stock_corporate_action', source: 'us_stock', symbol: 'AAPL', values: { new_shares_per_old_share: 4, split_only_price_multiplier: .25 } });
+  expect(result).toMatchObject({ concept_id: 'book_pitfall_adjustment', source: 'us_stock', symbol: 'AAPL', values: { new_shares_per_old_share: 4, split_only_price_multiplier: .25 } });
+  expect(result.provenance).toBe(result.adjustment_evidence.retrieval === 'restricted_server_relay'
+    ? 'server_relayed_stock_corporate_action'
+    : 'server_fetched_stock_corporate_action');
   await expect(panel.getByRole('figure', { name: '苹果公司历史拆股示意' })).toContainText('不是收益');
   await expect(panel).toContainText('供应商');
 });
@@ -131,20 +157,58 @@ async function captureHistoricalCard(page: Page, visual: Locator, name: string) 
 }
 
 test('every historical industry case follows its verified original disclosure from the knowledge card to practice', async ({ page, request }) => {
-  test.setTimeout(420_000);
+  test.setTimeout(900_000);
   const sources = [
     { symbol: '2318.HK', url: 'https://pagroup.pingan.com/resource/pingan/IR-Docs/2025/pingan-ar24-report.pdf', bytes: 14_886_158, hash: '62a5bd793ef9a787cc95750d65e52803aa58fa424b01d94e754ea0120d5be8a3' },
     { symbol: 'SHOP', url: 'https://s27.q4cdn.com/572064924/files/doc_financials/2024/q4/Q4-2024-Press-Release-Final.pdf', bytes: 86_468, hash: '4bf71232697a2270b2dbc38fc9609c11c27d545d6f4301fce3356fa60c6ef6de' },
     { symbol: 'O', url: 'https://www.realtyincome.com/sites/realty-income/files/2025-02/realty-income-q4-2024-supplemental-information.pdf', bytes: 17_522_920, hash: 'a0b3bf067c7b19ebde01ceaac3ecb172ed6a4c7084eeabe276ad1d4599c62a3f' },
     { symbol: 'EBAY', url: 'https://ebay.q4cdn.com/610426115/files/doc_financials/2024/q4/eBay-10-K-2024.pdf', bytes: 1_004_020, hash: '10530b8314c4dc49f9737b938f28ead7a70212885c35919fb361d145401f37fb' },
+    { symbol: 'DAL', url: 'https://s2.q4cdn.com/181345880/files/doc_financials/2024/q4/DAL-12-31-2024-10K-2-11-25-Filed.pdf', bytes: 897_733, hash: '61116b7fe79dd0c687d88c04ac376e4d09a6c3760163bbe9433f572bb2549afa' },
+    { symbol: 'COST', url: 'https://s201.q4cdn.com/287523651/files/doc_news/Costco-Wholesale-Corporation-Reports-Fourth-Quarter-and-Fiscal-Year-2024-Operating-Results-2024.pdf', bytes: 138_152, hash: '590d2dc15e168ca52697a8d8b85b0f388cbea3eab8235b2ec8aa77ed4f173c57' },
+    { symbol: 'MRNA', url: 'https://s29.q4cdn.com/435878511/files/doc_financials/2024/ar/MRNA010_AR_WEB_FULL.pdf', bytes: 3_098_566, hash: '2347835006ac22d5cd9b74683568893431149071740e81ff17603504ff70c1a5' },
+    { symbol: 'PBR', url: 'https://transparencia.petrobras.com.br/documents/1357439/14971831/Relat%C3%B3rio%2Bde%2BGest%C3%A3o%2B-%2B2024.pdf/50685b26-3e9e-2ece-3035-33eebe338c73?download=true&t=1748554910000&version=1.0', bytes: 6_302_154, hash: '04372d526d67247b9ad66098a58d85ca2bf00b534478575ead5f650a7a463122' },
+    { symbol: 'GOLD', url: 'https://www.barrick.com/files/doc_financial/annual_reports/2024/Barrick_Annual_Report_2024.pdf', bytes: 11_789_238, hash: '3cb6cf59458e8799650d1c219222f8c01e41b1fbda9351523ed6b602f3875b86' },
+    { symbol: 'SIE.DE', url: 'https://assets.new.siemens.com/siemens/assets/api/uuid:344347ec-a1bd-44cb-aaaa-711d1b3ec1b8/Siemens-Annual-Report-2024.pdf', bytes: 4_671_939, hash: '75f568180a8d35287f970a4812817dcd2b5c690ec937bf80f17b6fe68f42521e' },
+    { symbol: 'SPOT', url: 'https://investors.spotify.com/files/doc_financials/2020/q3/Shareholder-Letter-Q3-2020_FINAL.pdf', bytes: 1_172_171, hash: '82025cc49cce680c62ba9e5576881e6e84c867ba77f44a4f46d82f6c9ae81518' },
+    { symbol: 'META', url: 'https://investor.fb.com/files/doc_earnings/2023/q3/presentation/Earnings-Presentation-Q3-2023.pdf', bytes: 172_720, hash: 'dfcaa1c855d2da261f0d392c4a603fddf8897934dc60b3397f272698bf071af4' },
+    { symbol: 'SMWB', url: 'https://d1io3yog0oux5.cloudfront.net/_8f428cad86e9f7d21dc312829a41f817/similarweb/db/2008/19607/presentation/SMWB_Q3_2024_Investor_Presentation_.pdf', bytes: 9_680_955, hash: '3278ddfd096ebcc828579466b3e0af46b01f6fe38f72554f1d1304b0bfb53bf0' },
+    { symbol: 'ZM', snapshot: 'zoom-q4-fy2024.pdf', url: 'https://investors.zoom.us/static-files/70629942-ff77-4bed-91d6-422766c47e6b', bytes: 118_862, hash: '79f0e6b5126a47869f196d07aa3ab3626c4a61cdbb46e17a79762ab264fbeaf4' },
+    { symbol: 'SNOW', url: 'https://investors.snowflake.com/files/doc_financials/2024/q4/Q4-FY2024-Investor-Presentation-vF.pdf', bytes: 5_257_197, hash: '8da8efb70b65fc2c8928a1d6ccef32e530d447d510fa9da033dcb916ccf80a37' },
+    { symbol: '0981.HK', url: 'https://www1.hkexnews.hk/listedco/listconews/sehk/2025/0211/2025021100441.pdf', bytes: 444_831, hash: '18e7cc96cc2405587fbb06e5da078fe4ce129833e6257009fe1c650a0d070a76' },
+    { symbol: 'FRO', url: 'https://www.frontlineplc.cy/wp-content/uploads/2024/09/Presentation-Q2-2024.pdf', bytes: 870_579, hash: '394b72e6c229f9586a18a2b1348b8262fc11459afa7c30147df2d5f1ff3677fa' },
+    { symbol: 'VZ', url: 'https://www.verizon.com/about/sites/default/files/2024-04/FS_VZ_1Q24_042224.pdf', bytes: 103_314, hash: 'c22a0161f9268b2d9799cbfa1ea78da0e44d16d1cb502896e5a0ac212bae4817' },
   ];
+  const industryCache = resolve(process.cwd(), '..', 'target', 'e2e-data', 'industry-sources');
+  await mkdir(industryCache, { recursive: true });
   for (const source of sources) {
-    const response = await request.get(source.url, { timeout: 60_000 });
-    expect(response.ok()).toBe(true);
-    const bytes = await response.body();
+    const portableSnapshot = 'snapshot' in source
+      ? await readFile(resolve(process.cwd(), 'e2e', 'fixtures', 'original-sources', source.snapshot!))
+      : undefined;
+    if (portableSnapshot) {
+      expect(portableSnapshot.subarray(0, 5).toString()).toBe('%PDF-');
+      expect(portableSnapshot).toHaveLength(source.bytes);
+      expect(createHash('sha256').update(portableSnapshot).digest('hex')).toBe(source.hash);
+    }
+    let bytes: Buffer;
+    try {
+      const response = await request.get(source.url, { timeout: 60_000 });
+      const live = await response.body();
+      if (!response.ok() || createHash('sha256').update(live).digest('hex') !== source.hash) throw new Error(`HTTP ${response.status()} or bytes changed`);
+      bytes = live;
+    } catch (error) {
+      if (!portableSnapshot) throw error;
+      test.info().annotations.push({
+        type: 'reviewed-snapshot-fallback',
+        description: `${source.symbol}: provider unavailable or changed; using version-controlled original ${source.snapshot}: ${String(error)}`,
+      });
+      bytes = portableSnapshot;
+    }
     expect(bytes.subarray(0, 5).toString()).toBe('%PDF-');
     expect(bytes).toHaveLength(source.bytes);
     expect(createHash('sha256').update(bytes).digest('hex')).toBe(source.hash);
+    // This seeds the application's immutable reviewed-document cache. The
+    // annotation above remains explicit when the provider is not live-reachable.
+    await writeFile(resolve(industryCache, `${source.hash}.pdf`), bytes);
   }
   // Independent literals transcribed from Ping An pp57–58/336, Shopify p1,
   // Realty Income p25 and eBay p44. Ratios use actual business denominators.
@@ -159,6 +223,33 @@ test('every historical industry case follows its verified original disclosure fr
     { id: 'book_platform_gmv', symbol: 'SHOP', key: 'gross_merchandise_value', expected: 292275, facts: { gross_merchandise_value: 292275 }, page: 1, audited: false },
     { id: 'book_platform_take_rate', symbol: 'EBAY', key: 'platform_take_rate', expected: 10283 / 74667, facts: { platform_revenue: 10283, gross_merchandise_value: 74667 }, page: 44, audited: false },
     { id: 'book_reit_occupancy', symbol: 'O', key: 'occupied_area_ratio', expected: 335777818 / 339361416, facts: { leased_area: 335777818, lettable_area: 339361416 }, page: 25, audited: false },
+    { id: 'book_airline_casm', symbol: 'DAL', key: 'cost_per_available_seat_mile', expected: 55648 / 288394 * 100, facts: { total_operating_expense: 55648, available_seat_miles: 288394, reported_casm: 19.3 }, page: 40, audited: false },
+    { id: 'book_airline_load_factor', symbol: 'DAL', key: 'passenger_load_factor', expected: 246145 / 288394, facts: { revenue_passenger_miles: 246145, available_seat_miles: 288394, reported_load_factor: .85 }, page: 42, audited: false },
+    { id: 'book_airline_rasm', symbol: 'DAL', key: 'total_revenue_per_available_seat_mile', expected: 61643 / 288394 * 100, facts: { total_operating_revenue: 61643, available_seat_miles: 288394, reported_trasm: 21.37 }, page: 38, audited: false },
+    { id: 'book_bank_cet1_ratio', symbol: '2318.HK', key: 'cet1_capital_adequacy_ratio', expected: .0912, facts: { core_tier_1_capital_adequacy_ratio: .0912 }, page: 4, audited: false },
+    { id: 'book_bank_provision_coverage', symbol: '2318.HK', key: 'provision_coverage_ratio', expected: 2.5071, facts: { provision_coverage_ratio: 2.5071 }, page: 4, audited: false },
+    { id: 'book_insurance_combined_ratio', symbol: '2318.HK', key: 'combined_ratio', expected: .983, facts: { property_casualty_combined_ratio: .983 }, page: 4, audited: false },
+    { id: 'book_insurance_nbv', symbol: '2318.HK', key: 'new_business_value', expected: 28534, facts: { life_health_new_business_value: 28534 }, page: 4, audited: false },
+    { id: 'book_reit_affo', symbol: 'O', key: 'affo_available_to_common_stockholders', expected: 3621437, facts: { affo_available_to_common_stockholders: 3621437 }, page: 6, audited: false },
+    { id: 'book_reit_cap_rate', symbol: 'O', key: 'net_cash_capitalization_rate', expected: .072, facts: { disposition_net_cash_cap_rate: .072 }, page: 15, audited: false },
+    { id: 'book_reit_ffo', symbol: 'O', key: 'ffo_available_to_common_stockholders', expected: 3467659, facts: { ffo_available_to_common_stockholders: 3467659 }, page: 5, audited: false },
+    { id: 'book_retail_same_store_sales_growth', symbol: 'COST', key: 'same_store_sales_growth', expected: .053, facts: { total_company_comparable_sales_growth: .053 }, page: 1, audited: false },
+    { id: 'book_biopharma_cash_runway', symbol: 'MRNA', key: 'cash_runway_months', expected: 9519 / 3004 * 12, facts: { cash_and_investments: 9519, annual_operating_cash_burn: 3004 }, page: 122, audited: true },
+    { id: 'book_energy_lifting_cost', symbol: 'PBR', key: 'lifting_cost', expected: 6.05, facts: { reported_lifting_cost: 6.05 }, page: 78, audited: false },
+    { id: 'book_energy_reserve_life', symbol: 'PBR', key: 'reserve_life', expected: 13.2, facts: { reported_reserve_life: 13.2 }, page: 79, audited: false },
+    { id: 'book_gold_aisc', symbol: 'GOLD', key: 'gold_aisc', expected: 1350, facts: { reported_gold_aisc: 1350 }, page: 30, audited: false },
+    { id: 'book_industrial_backlog', symbol: 'SIE.DE', key: 'order_backlog', expected: 113, facts: { order_backlog: 113 }, page: 15, audited: false },
+    { id: 'book_industrial_book_to_bill', symbol: 'SIE.DE', key: 'book_to_bill', expected: 84056 / 75930, facts: { orders: 84056, revenue: 75930 }, page: 15, audited: false },
+    { id: 'book_internet_arpu', symbol: 'SPOT', key: 'premium_arpu', expected: 4.19, facts: { premium_arpu: 4.19 }, page: 4, audited: false },
+    { id: 'book_internet_dau_mau', symbol: 'META', key: 'daily_monthly_active_ratio', expected: 3.14 / 3.96, facts: { family_dap: 3.14, family_map: 3.96 }, page: 10, audited: false },
+    { id: 'book_saas_cac_payback', symbol: 'SMWB', key: 'cac_payback_lower_bound', expected: 21, facts: { cac_payback_lower_bound: 21, cac_payback_upper_bound: 22 }, page: 22, audited: false },
+    { id: 'book_saas_churn', symbol: 'ZM', key: 'monthly_customer_churn', expected: .032, facts: { online_monthly_churn: .032 }, page: 5, audited: false },
+    { id: 'book_saas_nrr', symbol: 'SNOW', key: 'net_revenue_retention', expected: 1.31, facts: { net_revenue_retention: 1.31 }, page: 21, audited: false },
+    { id: 'book_semiconductor_asp', symbol: '0981.HK', key: 'implied_revenue_per_equivalent_wafer', expected: 2207281 * .925 * 1000 / 1991761, facts: { revenue: 2207281, wafer_revenue_share: .925, wafer_shipments: 1991761 }, page: 5, audited: false },
+    { id: 'book_semiconductor_utilization', symbol: '0981.HK', key: 'capacity_utilization', expected: .855, facts: { utilization_rate: .855 }, page: 5, audited: false },
+    { id: 'book_shipping_tce', symbol: 'FRO', key: 'vlcc_spot_tce', expected: 49600, facts: { vlcc_spot_tce: 49600 }, page: 3, audited: false },
+    { id: 'book_telecom_arpu', symbol: 'VZ', key: 'prepaid_arpu', expected: 31.17, facts: { prepaid_arpu: 31.17 }, page: 7, audited: false },
+    { id: 'book_telecom_churn', symbol: 'VZ', key: 'prepaid_monthly_churn', expected: .0426, facts: { prepaid_churn: .0426 }, page: 6, audited: false },
   ];
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -182,14 +273,24 @@ test('every historical industry case follows its verified original disclosure fr
     expect(result.values[item.key]).toBeCloseTo(item.expected, 12);
     const source = sources.find(source => source.symbol === item.symbol)!;
     expect(result.industry_case).toMatchObject({ url: source.url, sha256: source.hash, bytes: source.bytes, audited: item.audited, issuer: { ticker: item.symbol } });
-    expect(result.industry_case.verification).toMatchObject({ matched_sha256: source.hash, matched_bytes: source.bytes });
+    expect(result.industry_case.verification).toMatchObject({ status: 'verified_immutable_cache', matched_sha256: source.hash, matched_bytes: source.bytes });
     expect(Object.fromEntries(result.industry_facts.reported_facts.map((fact: { key: string; value: number }) => [fact.key, fact.value]))).toEqual(item.facts);
+    expect(result.units[item.key]).toBeTruthy();
+    expect(result.industry_facts.calculation.formula.trim()).not.toBe('');
+    expect(Object.keys(result.industry_facts.calculation.symbol_mapping).length).toBeGreaterThan(0);
+    expect(result.industry_facts.reported_facts.every((fact: { pdf_page: number; unit: string }) => fact.pdf_page > 0 && fact.unit.trim() !== '')).toBe(true);
     const visual = panel.locator('.ax-industry-case');
     await expect(visual).toBeVisible();
     await expect(visual).toContainText('固定历史案例');
+    await expect(visual.locator('.ax-industry-formula')).toBeVisible();
+    await expect(visual.locator('.ax-industry-unit-group')).not.toHaveCount(0);
+    await expect(visual).not.toContainText('PDF 第 0 页');
     await expect(visual.locator('[data-industry-fact]')).toHaveCount(Object.keys(item.facts).length);
     await expect(visual.locator('[data-industry-fact]').first().getByRole('link')).toHaveAttribute('href', `${source.url}#page=${item.page}`);
+    await expect(visual.locator(`a[href="${source.url}"]`).first()).toHaveAttribute('href', source.url);
   }
+  await page.goto('/data?concept=book_reit_occupancy&source=issuer_disclosure');
+  await page.getByLabel('概念实践').getByRole('button', { name: '运行实践' }).click();
   const visual = page.getByLabel('概念实践').locator('.ax-industry-case');
   await captureHistoricalCard(page, visual, 'industry-occupancy-dark.png');
   await page.getByLabel('切换到浅色模式').click();
@@ -197,6 +298,95 @@ test('every historical industry case follows its verified original disclosure fr
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await visual.evaluate(node => node.getBoundingClientRect().right <= window.innerWidth)).toBe(true);
   await captureHistoricalCard(page, visual, 'industry-occupancy-mobile.png');
+  expect(errors).toEqual([]);
+});
+
+test('every ownership and analyst disclosure follows its fixed original source from catalog to visible calculation', async ({ page, request }) => {
+  test.setTimeout(600_000);
+  const documents = [
+    { url: 'https://static.cninfo.com.cn/finalpage/2026-04-17/1225114741.PDF', bytes: 1_082_847, hash: '474905deeaf0f875fc0a1b097a626c0c7852c427faadc5d7fc7816cbf45ea288' },
+    { url: 'https://cdn.cboe.com/resources/us/equities/market-statistics/short-interest/Bats_Listed_Short_Interest-finra-20261002.csv', bytes: 127_080, hash: '564c843210b40a596568deb62da27c10e5627b00754b4372197b7ea90942763e' },
+    { url: 'https://mediaassets.airbus.com/pm_38_787_787398-089y4vnyo3.pdf', bytes: 81_415, hash: '6152126d3b4b46b3ffad7c68dc76a6d6ec40908f28b2af85bf514a2ba62e6e9b' },
+    { url: 'https://www.afm.nl/downloadregisterfile.aspx?type=openbaarmaking-voorwetenschap&enc=7Rpj0BBaMD5lzfwUlyQ9TIe+XbKYS1JE7+GVfXY2PxNqAT3NVNKp3QCQcI2WUb5gS/PYmhvg5EA+E7FpgiengZj0NLAMUDbP/oPnUtKH27VA0/CZGu7E4hLGdYYwwWpdTyp/cuqK9u2A7er37RJifDgVQS3W6HmCKGWO1CEeZNXO0g0IROVIr+z+5qosB2fxjW2qofVbttWzylRmw6K7ZNM1O+nSGFVNazbTDT6ekO3vaajCoWPbTc7g3zIvR0ilTPg8vjdE1aEQ10Qyj60J7wrJWgG+ROEOcLEujFwVnZc4hQg9b/oBAl+w6cUoq0F56qLbopyLMcJnwQKx89Mczg==', bytes: 296_359, hash: '21f849df5646b6b57e006827581768016e3b0995ec8d95d096f573a7886f8610' },
+
+    { url: 'https://downloads.research-hub.de/2025%2002%2024%20Airbus%20Update___kh66mlcm.pdf', bytes: 991_184, hash: '2819c2970703eaf90c22f57db151915bbd8a03dd259eb8478848a6fe25643471' },
+    { url: 'https://www.signify.com/static/2025/20260114-signify-analyst-consensus-pre-q4-2025.pdf', bytes: 231_176, hash: 'c2ebe6999e54928dc1f2041a0194e6a856e900b184147ad3974ac51e68842bb3' },
+  ];
+  const ownershipCache = resolve(process.cwd(), '..', 'target', 'e2e-data', 'ownership-sources');
+  await mkdir(ownershipCache, { recursive: true });
+  for (const document of documents) {
+    const response = await request.get(document.url, { timeout: 60_000 });
+    expect(response.ok(), document.url).toBe(true);
+    const bytes = await response.body();
+    if (document.url.endsWith('.csv')) {
+      const text = Buffer.from(bytes).toString('utf8');
+      expect(text).toContain('Cycle Settlement Date,BATS-Symbol');
+      expect(text).toContain(',ARKW,');
+    } else {
+      expect(bytes.subarray(0, 5).toString()).toBe('%PDF-');
+    }
+    expect(bytes).toHaveLength(document.bytes);
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe(document.hash);
+    await writeFile(resolve(ownershipCache, `${document.hash}.source`), bytes);
+  }
+  const holders = [681282935, 56996777, 55048844, 27849688, 11573000, 10397104, 10324650, 8039447, 7377868, 5629234];
+  const cases = [
+    { id: 'buyback_rate', symbol: '600519', key: 'buyback_rate', expected: (3927585 + 87059) / 1256197800, facts: { first_program_repurchased_shares: 3927585, second_program_repurchased_shares: 87059, opening_total_shares: 1256197800 } },
+    { id: 'holder_concentration', symbol: '600519', key: 'top_holder_fraction', expected: holders.reduce((sum, value) => sum + value, 0) / 1252270215, facts: Object.fromEntries([...holders.map((value, index) => [`holder_${index + 1}_shares`, value]), ['closing_total_shares', 1252270215]]) },
+    { id: 'insider_trading', symbol: '600519', key: 'insider_trading_rate', expected: 2071359 / (681282935 - 2071359), facts: { controlling_holder_acquired_shares: 2071359, controlling_holder_shares: 681282935 } },
+    { id: 'institution_holding', symbol: '600519', key: 'institution_holding', expected: (11573000 + 10324650 + 7377868 + 5629234) / 1252270215, facts: { holder_5_shares: 11573000, holder_7_shares: 10324650, holder_9_shares: 7377868, holder_10_shares: 5629234, closing_total_shares: 1252270215 } },
+    { id: 'restricted_shares', symbol: '600519', key: 'restricted_share_fraction', expected: 0, facts: { closing_total_shares: 1252270215, unrestricted_shares: 1252270215 } },
+    { id: 'share_pledge', symbol: '600519', key: 'share_pledge', expected: 0, facts: { controlling_holder_pledged_shares: 0, controlling_holder_shares: 681282935 } },
+    { id: 'short_interest', symbol: 'ARKW', key: 'days_to_cover', expected: 378713 / 56692, status: 'partial', facts: { aggregate_short_shares: 378713, average_daily_share_volume: 56692, reported_days_to_cover: 6.68 } },
+    { id: 'consensus', symbol: 'AIR.PA', key: 'mean_eps', expected: 2.82, facts: { q4_consensus_reported_eps: 2.82, q4_consensus_analyst_count: 20 } },
+    { id: 'earnings_surprise', symbol: 'AIR.PA', key: 'earnings_surprise', expected: (3.27 - 2.82) / 2.82, facts: { q4_consensus_reported_eps: 2.82, q4_2025_reported_eps: 3.27 } },
+    { id: 'forecast_dispersion', symbol: 'LIGHT.AS', key: 'forecast_dispersion', expected: (1579 - 1496) / 1533, facts: { q4_sales_high: 1579, q4_sales_low: 1496, q4_sales_average: 1533 } },
+    { id: 'revision', symbol: 'AIR.PA', key: 'earnings_revision', expected: (6.01 - 5.85) / 5.85, facts: { mwb_2025_eps: 6.01, mwb_2025_previous_eps: 5.85 } },
+    { id: 'target_upside', symbol: 'AIR.PA', key: 'target_upside', expected: (145 - 159.9) / 159.9, facts: { mwb_target_price: 145, mwb_current_price: 159.9 } },
+  ];
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  for (const item of cases) {
+    await page.goto('/learn');
+    await page.getByRole('textbox', { name: '搜索 概念 / 公式 / 关键词' }).fill(item.id);
+    const card = page.locator(`.ax-kb-card[data-concept-id="${item.id}"]`);
+    await expect(card).toHaveCount(1);
+    await card.getByRole('button', { name: '在数据探索中实践' }).click();
+    await expect(page).toHaveURL(new RegExp(`/data\\?concept=${item.id}&source=issuer_disclosure$`));
+    const panel = page.getByLabel('概念实践');
+    await expect(panel.locator('.ax-practice-inputs')).toHaveCount(0);
+    const sent = page.waitForRequest(r => r.url().includes('/api/practice') && r.method() === 'POST');
+    const received = page.waitForResponse(r => r.url().includes('/api/practice') && r.request().method() === 'POST');
+    await panel.getByRole('button', { name: '运行实践' }).click();
+    const [outbound, response] = await Promise.all([sent, received]);
+    expect(outbound.postDataJSON()).toEqual({ concept_id: item.id, module: 'data', source: 'issuer_disclosure', symbol: item.symbol, inputs: {} });
+    expect(response.ok(), `${item.id}: ${await response.text()}`).toBe(true);
+    const result = await response.json();
+    expect(result).toMatchObject({ concept_id: item.id, input_kind: 'industry_case', provenance: 'verified_original_public_source', source: 'issuer_disclosure', symbol: item.symbol, status: 'status' in item ? item.status : 'computed', bars: [], inputs: {} });
+    expect(result.values[item.key]).toBeCloseTo(item.expected, 12);
+    expect(result.units[item.key]).toBeTruthy();
+    expect(Object.fromEntries(result.industry_facts.reported_facts.map((fact: { key: string; value: number }) => [fact.key, fact.value]))).toEqual(item.facts);
+    expect(result.industry_facts.reported_facts.every((fact: { pdf_page: number | null; unit: string; source_url: string }) => (fact.pdf_page === null || fact.pdf_page > 0) && fact.unit.trim() !== '' && fact.source_url.startsWith('https://'))).toBe(true);
+    expect(result.industry_facts.calculation.formula.trim()).not.toBe('');
+    expect(result.industry_case.sources.every((source: { verification: { status: string } }) => source.verification.status === 'verified_immutable_cache')).toBe(true);
+    const visual = panel.locator('.ax-industry-case');
+    await expect(visual).toBeVisible();
+    await expect(visual.locator('.ax-industry-formula')).toBeVisible();
+    await expect(visual.locator('.ax-industry-unit-group')).not.toHaveCount(0);
+    await expect(visual.locator('[data-industry-fact]')).toHaveCount(Object.keys(item.facts).length);
+    await expect(visual).not.toContainText('PDF 第 0 页');
+    await expect(visual.locator('[data-industry-fact] a')).toHaveCount(Object.keys(item.facts).length);
+    await expect(visual.locator(`a[href="${result.industry_case.url}"]`).first()).toHaveAttribute('href', result.industry_case.url);
+  }
+  const visual = page.getByLabel('概念实践').locator('.ax-industry-case');
+  await expect(visual).toBeVisible();
+  await visual.screenshot({ path: test.info().outputPath('ownership-target-upside-dark.png') });
+  await page.getByLabel('切换到浅色模式').click();
+  await visual.screenshot({ path: test.info().outputPath('ownership-target-upside-light.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(await visual.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await visual.screenshot({ path: test.info().outputPath('ownership-target-upside-mobile.png') });
   expect(errors).toEqual([]);
 });
 

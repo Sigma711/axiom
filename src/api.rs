@@ -158,6 +158,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/config", get(get_config))
         .route("/api/strategies", get(get_strategies))
         .route("/api/data", get(get_data))
+        .nest(
+            "/api/provider",
+            crate::yahoo_gateway::router(Default::default()).with_state(()),
+        )
         .route("/api/backtest", post(post_backtest))
         .route("/api/paper/snapshot", get(get_paper_snapshot))
         .route("/api/paper/start", post(post_paper_start))
@@ -1550,15 +1554,24 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
             "goal":"固定核对贵州茅台2025-12-31股本与股东关系，并按中证自由流通量定义透明复算；同日流通市值使用2025-12-31未复权收盘价。明确区分无限售条件流通股份、自由流通量与指数分级靠档调整股本。"
         });
     }
-    if crate::industry_case::is_supported(&concept.id) {
+    if crate::industry_case::is_supported(&concept.id)
+        || crate::disclosure_ownership::is_supported(&concept.id)
+        || crate::disclosure_valuation::is_supported(&concept.id)
+    {
         return json!({
-            "markets":["issuer_disclosure"],
+            "markets": if crate::disclosure_valuation::is_supported(&concept.id) { json!(["us_equity"]) } else { json!(["issuer_disclosure"]) },
             "modules":["data"],
-            "required_datasets":["server_verified_issuer_filing_pdf","embedded_page_cited_industry_facts"],
+            "required_datasets": if crate::disclosure_valuation::is_supported(&concept.id) {
+                json!(crate::disclosure_valuation::required_datasets(&concept.id))
+            } else if crate::disclosure_ownership::is_supported(&concept.id) {
+                json!(["verified_dated_ownership_or_analyst_disclosures","page_cited_same_scope_facts"])
+            } else {
+                json!(["server_verified_issuer_filing_pdf","embedded_page_cited_industry_facts"])
+            },
             "source_policy":"real_required",
             "fixed_source":"issuer_disclosure",
-            "fixed_symbol":industry_case_symbol(&concept.id),
-            "goal":"按同一报告期与主体的原文数据，观察指标如何计算，以及口径如何影响结果。"
+            "fixed_symbol":disclosure_case_symbol(&concept.id),
+            "goal":"核对各字段的主体、期间与来源，观察指标如何计算，以及口径如何影响结果。"
         });
     }
     if crate::filing_case::is_supported(&concept.id) {
@@ -1845,18 +1858,13 @@ fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
     }
 }
 
-fn industry_case_symbol(id: &str) -> &'static str {
-    match id {
-        "book_share_counts" | "book_float_market_cap" | "book_free_float" => "600519",
-        "bank_nim"
-        | "book_bank_nim"
-        | "book_bank_cost_income"
-        | "book_bank_npl_ratio"
-        | "book_insurance_solvency_ratio" => "2318.HK",
-        "book_saas_arr" | "book_saas_rule_of_40" | "book_platform_gmv" => "SHOP",
-        "book_platform_take_rate" => "EBAY",
-        "book_reit_occupancy" => "O",
-        _ => "",
+fn disclosure_case_symbol(id: &str) -> Option<&'static str> {
+    if crate::disclosure_ownership::is_supported(id) {
+        Some(crate::disclosure_ownership::fixed_symbol(id))
+    } else if crate::disclosure_valuation::is_supported(id) {
+        Some(crate::disclosure_valuation::fixed_symbol(id))
+    } else {
+        crate::industry_case::fixed_symbol(id)
     }
 }
 
@@ -2349,6 +2357,9 @@ async fn post_practice(
             "practice module is not applicable to this concept",
         ));
     }
+    if concept.input_kind == "market_bars" && req.inputs.get("period").is_some() {
+        crate::practice::period(&req.inputs, "period").map_err(validate::bad)?;
+    }
     if concept.id == "book_adjustment" || concept.id == "book_pitfall_adjustment" {
         if source != "us_stock"
             || symbol != "AAPL"
@@ -2387,12 +2398,26 @@ async fn post_practice(
             price_basis: "provider_quote_and_adjusted_close_semantics_unverified".into(),
             corporate_actions: "dated_split_event_observed".into(),
         };
+        let (provenance, bar_origin) = match evidence.retrieval {
+            "live_provider_response" => (
+                "server_fetched_stock_corporate_action",
+                "server_fetched_us_stock_adjustment_evidence",
+            ),
+            "restricted_server_relay" => (
+                "server_relayed_stock_corporate_action",
+                "restricted_server_relay_us_stock_adjustment_evidence",
+            ),
+            _ => (
+                "unverified_stock_corporate_action_transport",
+                "unverified_us_stock_adjustment_evidence",
+            ),
+        };
         return Ok(Json(json!({
             "concept_id":concept.id,
             "status":"computed",
             "reason":Value::Null,
             "input_kind":"stock_action_case",
-            "provenance":"server_fetched_stock_corporate_action",
+            "provenance":provenance,
             "context":"historical_corporate_action",
             "module":"data",
             "source":"us_stock",
@@ -2410,7 +2435,7 @@ async fn post_practice(
             "adjustment_evidence":evidence,
             "market_provenance":market_provenance,
             "market_data_as_of":market_data_as_of,
-            "bar_origin":"server_fetched_us_stock_adjustment_evidence",
+            "bar_origin":bar_origin,
             "bars":[],
             "series":[],
             "inputs":{},
@@ -2448,8 +2473,7 @@ async fn post_practice(
         result["bar_origin"] = json!("server_verified_issuer_filing_pdf");
         return Ok(Json(result));
     }
-    if crate::industry_case::is_supported(&concept.id) {
-        let expected_symbol = industry_case_symbol(&concept.id);
+    if let Some(expected_symbol) = disclosure_case_symbol(&concept.id) {
         if source != "issuer_disclosure"
             || symbol != expected_symbol
             || req.limit.is_some()
@@ -2470,18 +2494,40 @@ async fn post_practice(
                 "Issuer disclosure verification is disabled in offline mode".into(),
             ));
         }
-        let mut result = crate::industry_case::evaluate(
-            &concept.id,
-            &state.data_cache_dir,
-            &state.industry_sources,
-        )
-        .await
+        let mut result = if crate::disclosure_ownership::is_supported(&concept.id) {
+            crate::disclosure_ownership::evaluate(
+                &concept.id,
+                &state.data_cache_dir,
+                &state.ownership_sources,
+            )
+            .await
+        } else if crate::disclosure_valuation::is_supported(&concept.id) {
+            crate::disclosure_valuation::evaluate(
+                &concept.id,
+                &state.data_cache_dir,
+                &state.valuation_sources,
+            )
+            .await
+        } else {
+            crate::industry_case::evaluate(
+                &concept.id,
+                &state.data_cache_dir,
+                &state.industry_sources,
+            )
+            .await
+        }
         .map_err(|error| (StatusCode::BAD_GATEWAY, error))?;
         result["module"] = json!("data");
         result["symbol"] = json!(expected_symbol);
         result["source"] = json!("issuer_disclosure");
         result["context"] = json!("historical_industry_disclosure");
-        result["bar_origin"] = json!("server_verified_issuer_filing_pdf");
+        result["bar_origin"] = if crate::disclosure_valuation::is_supported(&concept.id)
+            || crate::disclosure_ownership::is_supported(&concept.id)
+        {
+            json!("server_verified_disclosures_and_dated_observations")
+        } else {
+            json!("server_verified_issuer_filing_pdf")
+        };
         return Ok(Json(result));
     }
     validate::market(&symbol, &source, limit, 5000)?;

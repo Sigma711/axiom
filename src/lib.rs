@@ -31,6 +31,8 @@ pub mod broker;
 pub mod config;
 pub mod corporate_actions;
 pub mod data;
+pub mod disclosure_ownership;
+pub mod disclosure_valuation;
 pub mod engine;
 pub mod execution;
 pub mod filing_case;
@@ -70,3 +72,4 @@ pub mod code_links;
 pub mod workflows;
 
 pub mod book_charts;
+pub mod yahoo_gateway;

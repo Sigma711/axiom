@@ -138,9 +138,9 @@ export interface PracticeResult {
   status: 'computed' | 'partial' | 'undefined' | 'insufficient_data';
   reason: string | null;
   input_kind: PracticeConcept['input_kind'];
-  provenance: 'provided_market_bars' | 'provided_result_context' | 'editable_teaching_inputs' | 'server_fetched_provisional_snapshot' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_spot_order_book' | 'server_fetched_completed_stock_daily_bars' | 'server_fetched_binance_recent_trades' | 'server_fetched_bitcoin_block_snapshot' | 'server_fetched_bitcoin_transaction_sample' | 'server_fetched_bitcoin_transaction_first_page' | 'verified_issuer_filing_case' | 'verified_original_issuer_disclosure' | 'verified_independent_a_share_float_case' | 'server_fetched_stock_corporate_action';
+  provenance: 'provided_market_bars' | 'provided_result_context' | 'editable_teaching_inputs' | 'server_fetched_provisional_snapshot' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_spot_order_book' | 'server_fetched_completed_stock_daily_bars' | 'server_fetched_binance_recent_trades' | 'server_fetched_bitcoin_block_snapshot' | 'server_fetched_bitcoin_transaction_sample' | 'server_fetched_bitcoin_transaction_first_page' | 'verified_issuer_filing_case' | 'verified_original_issuer_disclosure' | 'verified_independent_a_share_float_case' | 'server_fetched_stock_corporate_action' | 'server_relayed_stock_corporate_action' | 'unverified_stock_corporate_action_transport';
   adjustment_evidence?: {
-    provider: string; endpoint: string; fetched_at: string; scope: string; issuer_confirmation_url?: string; issuer_confirmation?: string;
+    provider: string; retrieval: 'live_provider_response' | 'restricted_server_relay'; endpoint: string; fetched_at: string; scope: string; issuer_confirmation_url?: string; issuer_confirmation?: string;
     event: { kind: 'split'; effective_at: string; effective_trading_date: string; numerator: number; denominator: number; split_ratio: string };
     observations: Array<Bar & { adjusted_close: number }>;
     quote_basis: string; adjusted_close_basis: string; calculation: string;
@@ -163,6 +163,8 @@ export interface PracticeResult {
   };
   industry_case?: {
     case_id: string;
+    label?: string;
+    format?: string;
     issuer: { name: string; ticker: string; alternate_tickers: string[]; reporting_entity: string; metric_entity: string };
     period: { label: string; start: string; end: string };
     published: string;
@@ -174,15 +176,17 @@ export interface PracticeResult {
     pdf_pages: number[];
     sha256: string;
     bytes: number;
-    verification: { status: 'verified_immutable_cache' | 'verified_then_cached'; verified_at: string; requested_url: string; matched_sha256: string; matched_bytes: number };
+    verification: { status: 'verified_immutable_cache' | 'verified_then_cached' | 'verified_archived_original'; verified_at: string; requested_url: string; matched_sha256: string; matched_bytes: number; retrieval_note?: string | null };
+    sources?: Array<{ id: string; title?: string; url: string; sha256: string; bytes: number; format: string; published: string; verification_basis?: string; verification: { status: string; verified_at: string; requested_url: string; matched_sha256: string; matched_bytes: number; retrieval_note?: string | null } }>;
   };
   industry_facts?: {
     currency: string;
     scale: string;
-    reported_facts: Array<{ key: string; label: string; value: number; unit: string; pdf_page: number }>;
+    reported_facts: Array<{ key: string; label: string; value: number; unit: string; pdf_page: number | null; source_url?: string | null; source_format?: string; source_section?: string | null; published?: string | null; as_of?: string | null; kind?: 'reported' | 'derived' | 'assumption' }>;
     calculation: { formula: string; result_key: string; operands: string[]; symbol_mapping: Record<string, string> };
-    field_provenance: Record<string, { kind: 'reported' | 'derived'; pdf_page?: number; note: string }>;
+    field_provenance: Record<string, { kind: 'reported' | 'derived' | 'assumption'; pdf_page?: number | null; note: string }>;
     definitions: { case_boundary: string; metric: string };
+    derived_metrics?: Array<{ key: string; label: string; description: string }>;
   };
   float_case?: {
     case_id: string; issuer: { name: string; ticker: string }; as_of: string; share_register_date: string; published: string;
@@ -221,7 +225,7 @@ export interface PracticeResult {
   depth_snapshot?: { source: string; endpoint: string; symbol: string; depth_limit: number; update_id: number; timestamp: null; timestamp_note: string };
   provisional_snapshot?: { candle: Bar; is_closed: false; fetched_at: string; expected_close_at: string; completion_evidence: string };
   context?: 'module_snapshot' | 'selected_dataset' | 'editable_teaching_inputs' | 'provided_result_context' | 'historical_filing_case' | 'historical_industry_disclosure' | 'historical_corporate_action';
-  bar_origin?: 'server_fetched_completed_source_bars' | 'server_fetched_completed_binance_usdt_spot_bars' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_provisional_snapshot' | 'server_verified_issuer_filing_pdf';
+  bar_origin?: 'server_fetched_completed_source_bars' | 'server_fetched_completed_binance_usdt_spot_bars' | 'server_fetched_completed_binance_usdt_spot_1h_klines' | 'server_fetched_binance_provisional_snapshot' | 'server_fetched_us_stock_adjustment_evidence' | 'restricted_server_relay_us_stock_adjustment_evidence' | 'unverified_us_stock_adjustment_evidence' | 'server_verified_issuer_filing_pdf' | 'server_verified_disclosures_and_dated_observations';
   execution_assumptions?: ExecutionAssumption[];
   market_provenance?: MarketProvenance;
 }

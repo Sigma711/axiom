@@ -14,6 +14,7 @@ fn evidence(numerator: f64, denominator: f64) -> StockAdjustmentEvidence {
         provider: "yahoo",
         endpoint: "https://query1.finance.yahoo.com/v8/finance/chart/AAPL".into(),
         fetched_at: Utc.with_ymd_and_hms(2026, 10, 1, 0, 0, 0).unwrap(),
+        retrieval: "live_provider_response",
         scope: "aapl_2020_4_for_1_split_historical_window",
         event: StockSplitEvent {
             kind: "split",

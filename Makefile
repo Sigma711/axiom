@@ -43,7 +43,7 @@ serve: build
 	AXIOM_PORT=$(AXIOM_PORT) cargo run --release --locked
 serve-test:
 	mkdir -p target/e2e-data/a-share-float-sources
-	cp data/verified-sources/*.pdf target/e2e-data/a-share-float-sources/
+	cp data/verified-sources/474905deeaf0f875fc0a1b097a626c0c7852c427faadc5d7fc7816cbf45ea288.pdf data/verified-sources/ae056c65f53fcacd0b2cffd3562af0f2696d32593e25543ba279b59b07e57ee6.pdf data/verified-sources/de6491e03e5d57ecf1aca104b1412543643a59e387a5343c9bd21ecbbdeba5b6.pdf target/e2e-data/a-share-float-sources/
 	AXIOM_PORT=18080 AXIOM_OFFLINE=0 AXIOM_DATA_DIR=target/e2e-data cargo run --locked
 dev:
 	cd web && $(NPM) run dev -- --host 127.0.0.1

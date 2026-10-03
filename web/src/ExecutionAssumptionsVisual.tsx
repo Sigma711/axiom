@@ -16,7 +16,7 @@ export type MarketProvenance = {
 
 const providers: Record<string, string> = {
   configured_crypto_endpoint: '配置的兼容行情接口',
-  eastmoney: '东方财富', tencent: '腾讯行情', yahoo: 'Yahoo Finance', nasdaq: 'Nasdaq',
+  eastmoney: '东方财富', tencent: '腾讯行情', yahoo: 'Yahoo Finance', yahoo_via_restricted_relay: 'Yahoo Finance · 经 AXIOM 获取', nasdaq: 'Nasdaq',
   binance_spot: 'Binance 现货', local_csv_cache: '历史 CSV 缓存', caller_provided: '调用方提供', caller_provided_unverified: '调用方提供',
 };
 const bases: Record<string, string> = {

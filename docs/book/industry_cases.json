@@ -3,7 +3,9 @@
     "case_id": "ping_an_group_fy2024_annual_report",
     "issuer": "Ping An Insurance (Group) Company of China, Ltd.",
     "ticker": "2318.HK",
-    "alternate_tickers": ["601318.SS"],
+    "alternate_tickers": [
+      "601318.SS"
+    ],
     "reporting_entity": "Ping An Insurance (Group) Company of China, Ltd. and its subsidiaries",
     "currency": "CNY",
     "scale": "millions",
@@ -12,26 +14,92 @@
     "period_end": "2024-12-31",
     "published": "2025-03-19",
     "source_kind": "issuer_official_annual_report_pdf",
-    "source_status": "Annual report containing audited financial statements; each metric states whether its cited page is inside the audit boundary",
+    "source_status": "年度报告包含经审计财务报表；每项指标分别说明所引页是否处于审计边界内",
     "url": "https://pagroup.pingan.com/resource/pingan/IR-Docs/2025/pingan-ar24-report.pdf",
     "sha256": "62a5bd793ef9a787cc95750d65e52803aa58fa424b01d94e754ea0120d5be8a3",
     "bytes": 14886158,
     "facts": {
-      "net_interest_income": {"value": 93427, "unit": "CNY millions", "page": 57, "label": "net interest income"},
-      "average_earning_assets": {"value": 4994494, "unit": "CNY millions", "page": 57, "label": "average interest-earning assets"},
-      "operating_expenses": {"value": 40582, "unit": "CNY millions", "page": 57, "label": "general and administrative expenses, absolute amount"},
-      "operating_income": {"value": 146695, "unit": "CNY millions", "page": 57, "label": "operating income"},
-      "nonperforming_loans": {"value": 35738, "unit": "CNY millions", "page": 58, "label": "non-performing loans"},
-      "gross_loans": {"value": 3374103, "unit": "CNY millions", "page": 58, "label": "loans and advances to customers excluding interest"},
-      "available_capital": {"value": 138649, "unit": "CNY millions", "page": 336, "label": "actual capital"},
-      "required_capital": {"value": 67536, "unit": "CNY millions", "page": 336, "label": "minimum capital"}
+      "net_interest_income": {
+        "value": 93427,
+        "unit": "CNY millions",
+        "page": 57,
+        "label": "净利息收入"
+      },
+      "average_earning_assets": {
+        "value": 4994494,
+        "unit": "CNY millions",
+        "page": 57,
+        "label": "平均生息资产"
+      },
+      "operating_expenses": {
+        "value": 40582,
+        "unit": "CNY millions",
+        "page": 57,
+        "label": "一般及行政费用绝对值"
+      },
+      "operating_income": {
+        "value": 146695,
+        "unit": "CNY millions",
+        "page": 57,
+        "label": "营业收入"
+      },
+      "nonperforming_loans": {
+        "value": 35738,
+        "unit": "CNY millions",
+        "page": 58,
+        "label": "不良贷款"
+      },
+      "gross_loans": {
+        "value": 3374103,
+        "unit": "CNY millions",
+        "page": 58,
+        "label": "客户贷款及垫款总额（不含利息）"
+      },
+      "available_capital": {
+        "value": 138649,
+        "unit": "CNY millions",
+        "page": 336,
+        "label": "实际资本"
+      },
+      "required_capital": {
+        "value": 67536,
+        "unit": "CNY millions",
+        "page": 336,
+        "label": "最低资本"
+      },
+      "core_tier_1_capital_adequacy_ratio": {
+        "value": 0.0912,
+        "unit": "fraction",
+        "page": 4,
+        "label": "平安银行核心一级资本充足率"
+      },
+      "provision_coverage_ratio": {
+        "value": 2.5071,
+        "unit": "fraction",
+        "page": 4,
+        "label": "平安银行拨备覆盖率"
+      },
+      "property_casualty_combined_ratio": {
+        "value": 0.983,
+        "unit": "fraction",
+        "page": 4,
+        "label": "财产险综合成本率"
+      },
+      "life_health_new_business_value": {
+        "value": 28534,
+        "unit": "CNY millions",
+        "page": 4,
+        "label": "按2024年更新假设计量的寿险及健康险新业务价值"
+      }
     }
   },
   "shopify": {
     "case_id": "shopify_fy2024_q4_press_release",
     "issuer": "Shopify Inc.",
     "ticker": "SHOP",
-    "alternate_tickers": ["SHOP.TO"],
+    "alternate_tickers": [
+      "SHOP.TO"
+    ],
     "reporting_entity": "Shopify Inc. and its consolidated subsidiaries",
     "currency": "USD",
     "scale": "millions",
@@ -40,16 +108,41 @@
     "period_end": "2024-12-31",
     "published": "2025-02-11",
     "source_kind": "issuer_linked_earnings_release_pdf",
-    "source_status": "Earnings release; no audit assurance is asserted for MRR, GMV or non-GAAP free cash flow",
+    "source_status": "业绩公告；不声称MRR、GMV或非GAAP自由现金流获得审计保证",
     "url": "https://s27.q4cdn.com/572064924/files/doc_financials/2024/q4/Q4-2024-Press-Release-Final.pdf",
     "sha256": "4bf71232697a2270b2dbc38fc9609c11c27d545d6f4301fce3356fa60c6ef6de",
     "bytes": 86468,
     "facts": {
-      "monthly_recurring_revenue": {"value": 178, "unit": "USD millions", "page": 1, "label": "MRR at 2024-12-31"},
-      "revenue_2024": {"value": 8880, "unit": "USD millions", "page": 1, "label": "2024 revenue"},
-      "revenue_2023": {"value": 7060, "unit": "USD millions", "page": 1, "label": "2023 revenue"},
-      "free_cash_flow": {"value": 1597, "unit": "USD millions", "page": 1, "label": "2024 non-GAAP free cash flow"},
-      "gross_merchandise_value": {"value": 292275, "unit": "USD millions", "page": 1, "label": "2024 GMV"}
+      "monthly_recurring_revenue": {
+        "value": 178,
+        "unit": "USD millions",
+        "page": 1,
+        "label": "截至2024-12-31的月度经常性收入MRR"
+      },
+      "revenue_2024": {
+        "value": 8880,
+        "unit": "USD millions",
+        "page": 1,
+        "label": "2024年收入"
+      },
+      "revenue_2023": {
+        "value": 7060,
+        "unit": "USD millions",
+        "page": 1,
+        "label": "2023年收入"
+      },
+      "free_cash_flow": {
+        "value": 1597,
+        "unit": "USD millions",
+        "page": 1,
+        "label": "2024年非GAAP自由现金流"
+      },
+      "gross_merchandise_value": {
+        "value": 292275,
+        "unit": "USD millions",
+        "page": 1,
+        "label": "2024年平台成交总额GMV"
+      }
     }
   },
   "ebay": {
@@ -70,8 +163,18 @@
     "sha256": "10530b8314c4dc49f9737b938f28ead7a70212885c35919fb361d145401f37fb",
     "bytes": 1004020,
     "facts": {
-      "platform_revenue": {"value": 10283, "unit": "USD millions", "page": 44, "label": "2024 年平台净收入（包含市场服务与广告）"},
-      "gross_merchandise_value": {"value": 74667, "unit": "USD millions", "page": 44, "label": "2024 年平台成交总额（包含运费与税款）"}
+      "platform_revenue": {
+        "value": 10283,
+        "unit": "USD millions",
+        "page": 44,
+        "label": "2024 年平台净收入（包含市场服务与广告）"
+      },
+      "gross_merchandise_value": {
+        "value": 74667,
+        "unit": "USD millions",
+        "page": 44,
+        "label": "2024 年平台成交总额（包含运费与税款）"
+      }
     }
   },
   "realty_income": {
@@ -87,13 +190,129 @@
     "period_end": "2024-12-31",
     "published": "2025-02-24",
     "source_kind": "issuer_official_supplemental_information_pdf",
-    "source_status": "Unaudited supplemental operating information",
+    "source_status": "未经审计的补充经营资料",
     "url": "https://www.realtyincome.com/sites/realty-income/files/2025-02/realty-income-q4-2024-supplemental-information.pdf",
     "sha256": "a0b3bf067c7b19ebde01ceaac3ecb172ed6a4c7084eeabe276ad1d4599c62a3f",
     "bytes": 17522920,
     "facts": {
-      "leased_area": {"value": 335777818, "unit": "square feet", "page": 25, "label": "occupied square feet"},
-      "lettable_area": {"value": 339361416, "unit": "square feet", "page": 25, "label": "total portfolio square feet"}
+      "leased_area": {
+        "value": 335777818,
+        "unit": "square feet",
+        "page": 25,
+        "label": "已出租面积"
+      },
+      "lettable_area": {
+        "value": 339361416,
+        "unit": "square feet",
+        "page": 25,
+        "label": "组合可出租总面积"
+      },
+      "ffo_available_to_common_stockholders": {
+        "value": 3467659,
+        "unit": "USD thousands",
+        "page": 5,
+        "label": "FY2024归属于普通股股东的FFO"
+      },
+      "affo_available_to_common_stockholders": {
+        "value": 3621437,
+        "unit": "USD thousands",
+        "page": 6,
+        "label": "FY2024归属于普通股股东的AFFO"
+      },
+      "disposition_net_cash_cap_rate": {
+        "value": 0.072,
+        "unit": "fraction",
+        "page": 15,
+        "label": "FY2024已出租处置物业净现金资本化率"
+      }
+    }
+  },
+  "delta": {
+    "case_id": "delta_fy2024_form_10k_operating_statistics",
+    "issuer": "Delta Air Lines, Inc.",
+    "ticker": "DAL",
+    "alternate_tickers": [],
+    "reporting_entity": "Delta Air Lines, Inc. consolidated operations, including regional carriers under capacity purchase agreements",
+    "currency": "USD",
+    "scale": "per available seat mile and fraction",
+    "period_label": "FY2024",
+    "period_start": "2024-01-01",
+    "period_end": "2024-12-31",
+    "published": "2025-02-11",
+    "source_kind": "issuer_official_form_10k_pdf",
+    "source_status": "Form 10-K经营统计；不声称这些经营指标获得单独审计保证",
+    "url": "https://s2.q4cdn.com/181345880/files/doc_financials/2024/q4/DAL-12-31-2024-10K-2-11-25-Filed.pdf",
+    "sha256": "61116b7fe79dd0c687d88c04ac376e4d09a6c3760163bbe9433f572bb2549afa",
+    "bytes": 897733,
+    "facts": {
+      "total_operating_expense": {
+        "value": 55648,
+        "unit": "USD millions",
+        "page": 40,
+        "label": "FY2024总运营成本"
+      },
+      "total_operating_revenue": {
+        "value": 61643,
+        "unit": "USD millions",
+        "page": 38,
+        "label": "FY2024总运营收入"
+      },
+      "revenue_passenger_miles": {
+        "value": 246145,
+        "unit": "millions of passenger miles",
+        "page": 42,
+        "label": "FY2024收入客英里RPM"
+      },
+      "available_seat_miles": {
+        "value": 288394,
+        "unit": "millions of available seat miles",
+        "page": 42,
+        "label": "FY2024可用座英里ASM"
+      },
+      "reported_casm": {
+        "value": 19.3,
+        "unit": "US cents per ASM",
+        "page": 42,
+        "label": "FY2024报告CASM（保留两位小数）"
+      },
+      "reported_load_factor": {
+        "value": 0.85,
+        "unit": "fraction",
+        "page": 42,
+        "label": "FY2024报告客座率（取整百分比）"
+      },
+      "reported_trasm": {
+        "value": 21.37,
+        "unit": "US cents per ASM",
+        "page": 42,
+        "label": "FY2024报告TRASM（保留两位小数）"
+      }
+    }
+  },
+  "costco": {
+    "case_id": "costco_fy2024_results_comparable_sales",
+    "issuer": "Costco Wholesale Corporation",
+    "ticker": "COST",
+    "alternate_tickers": [],
+    "reporting_entity": "Costco Wholesale Corporation total company comparable locations",
+    "currency": "not_applicable",
+    "scale": "fraction",
+    "period_label": "52 weeks ended 2024-09-01",
+    "period_start": "2023-09-04",
+    "period_end": "2024-09-01",
+    "published": "2024-09-26",
+    "source_kind": "issuer_official_earnings_release_pdf",
+    "source_status": "发行人业绩公告；可比销售属于补充信息且不声称获得审计保证",
+    "url": "https://s201.q4cdn.com/287523651/files/doc_news/Costco-Wholesale-Corporation-Reports-Fourth-Quarter-and-Fiscal-Year-2024-Operating-Results-2024.pdf",
+    "sha256": "590d2dc15e168ca52697a8d8b85b0f388cbea3eab8235b2ec8aa77ed4f173c57",
+    "bytes": 138152,
+    "facts": {
+      "total_company_comparable_sales_growth": {
+        "value": 0.053,
+        "unit": "fraction",
+        "page": 1,
+        "label": "FY2024 52周全公司可比销售增长（未调整）"
+      }
     }
   },
   "moutai": {
@@ -139,6 +358,392 @@
         "unit": "shares",
         "page": 47,
         "label": "2025年末无限售条件流通股份"
+      }
+    }
+  },
+  "moderna": {
+    "case_id": "moderna_fy2024_cash_runway",
+    "issuer": "Moderna, Inc.",
+    "ticker": "MRNA",
+    "alternate_tickers": [],
+    "reporting_entity": "Moderna, Inc. and consolidated subsidiaries",
+    "currency": "USD",
+    "scale": "millions",
+    "period_label": "FY2024 / as of 2024-12-31",
+    "period_start": "2024-01-01",
+    "period_end": "2024-12-31",
+    "published": "2025-02-21",
+    "source_kind": "issuer_official_annual_report_pdf",
+    "source_status": "年度报告；输入金额来自经审计财务报表及流动性分析",
+    "url": "https://s29.q4cdn.com/435878511/files/doc_financials/2024/ar/MRNA010_AR_WEB_FULL.pdf",
+    "sha256": "2347835006ac22d5cd9b74683568893431149071740e81ff17603504ff70c1a5",
+    "bytes": 3098566,
+    "facts": {
+      "cash_and_investments": {
+        "value": 9519,
+        "unit": "USD millions",
+        "page": 122,
+        "label": "2024-12-31现金、现金等价物及投资"
+      },
+      "annual_operating_cash_burn": {
+        "value": 3004,
+        "unit": "USD millions",
+        "page": 123,
+        "label": "FY2024经营活动现金净流出绝对值"
+      }
+    }
+  },
+  "petrobras": {
+    "case_id": "petrobras_fy2024_operating_indicators",
+    "issuer": "Petróleo Brasileiro S.A. — Petrobras",
+    "ticker": "PBR",
+    "alternate_tickers": [
+      "PETR4.SA"
+    ],
+    "reporting_entity": "Petróleo Brasileiro S.A. — Petrobras",
+    "currency": "USD",
+    "scale": "per boe and years",
+    "period_label": "FY2024 / as of 2024-12-31",
+    "period_start": "2024-01-01",
+    "period_end": "2024-12-31",
+    "published": "2025-05-29",
+    "source_kind": "issuer_official_management_report_pdf",
+    "source_status": "管理报告经营指标；不声称获得财务报表审计保证",
+    "url": "https://transparencia.petrobras.com.br/documents/1357439/14971831/Relat%C3%B3rio%2Bde%2BGest%C3%A3o%2B-%2B2024.pdf/50685b26-3e9e-2ece-3035-33eebe338c73?download=true&t=1748554910000&version=1.0",
+    "sha256": "04372d526d67247b9ad66098a58d85ca2bf00b534478575ead5f650a7a463122",
+    "bytes": 6302154,
+    "facts": {
+      "reported_lifting_cost": {
+        "value": 6.05,
+        "unit": "USD per boe",
+        "page": 78,
+        "label": "2024年巴西Lifting Cost（不含政府分成及租赁）"
+      },
+      "reported_reserve_life": {
+        "value": 13.2,
+        "unit": "years",
+        "page": 79,
+        "label": "按SEC已探明储量计算的R/P"
+      }
+    }
+  },
+  "barrick": {
+    "case_id": "barrick_fy2024_gold_aisc",
+    "issuer": "Barrick Gold Corporation",
+    "ticker": "GOLD",
+    "alternate_tickers": [
+      "ABX.TO"
+    ],
+    "reporting_entity": "Barrick Gold Corporation attributable gold operations",
+    "currency": "USD",
+    "scale": "per ounce",
+    "period_label": "FY2024",
+    "period_start": "2024-01-01",
+    "period_end": "2024-12-31",
+    "published": "2025-02-12",
+    "source_kind": "issuer_official_annual_report_pdf",
+    "source_status": "年度报告非GAAP经营指标",
+    "url": "https://www.barrick.com/files/doc_financial/annual_reports/2024/Barrick_Annual_Report_2024.pdf",
+    "sha256": "3cb6cf59458e8799650d1c219222f8c01e41b1fbda9351523ed6b602f3875b86",
+    "bytes": 11789238,
+    "facts": {
+      "reported_gold_aisc": {
+        "value": 1350,
+        "unit": "USD per ounce",
+        "page": 30,
+        "label": "2024年应占黄金全部维持成本AISC"
+      }
+    }
+  },
+  "siemens": {
+    "case_id": "siemens_fy2024_orders_backlog",
+    "issuer": "Siemens AG",
+    "ticker": "SIE.DE",
+    "alternate_tickers": [
+      "SIEGY"
+    ],
+    "reporting_entity": "Siemens continuing operations",
+    "currency": "EUR",
+    "scale": "millions except backlog in billions",
+    "period_label": "FY2024 ended 2024-09-30",
+    "period_start": "2023-10-01",
+    "period_end": "2024-09-30",
+    "published": "2024-12-05",
+    "source_kind": "issuer_official_annual_report_pdf",
+    "source_status": "年度报告管理层经营指标",
+    "url": "https://assets.new.siemens.com/siemens/assets/api/uuid:344347ec-a1bd-44cb-aaaa-711d1b3ec1b8/Siemens-Annual-Report-2024.pdf",
+    "sha256": "75f568180a8d35287f970a4812817dcd2b5c690ec937bf80f17b6fe68f42521e",
+    "bytes": 4671939,
+    "facts": {
+      "orders": {
+        "value": 84056,
+        "unit": "EUR millions",
+        "page": 15,
+        "label": "FY2024订单"
+      },
+      "revenue": {
+        "value": 75930,
+        "unit": "EUR millions",
+        "page": 15,
+        "label": "FY2024收入"
+      },
+      "order_backlog": {
+        "value": 113,
+        "unit": "EUR billions",
+        "page": 15,
+        "label": "2024-09-30订单积压"
+      }
+    }
+  },
+  "meta": {
+    "case_id": "meta_q3_2023_family_metrics",
+    "issuer": "Meta Platforms, Inc.",
+    "ticker": "META",
+    "alternate_tickers": [],
+    "reporting_entity": "Meta Family of Apps",
+    "currency": "USD",
+    "scale": "billions of people and USD per person",
+    "period_label": "Q3 2023",
+    "period_start": "2023-07-01",
+    "period_end": "2023-09-30",
+    "published": "2023-10-25",
+    "source_kind": "issuer_official_earnings_presentation_pdf",
+    "source_status": "发行人估计的用户经营指标",
+    "url": "https://investor.fb.com/files/doc_earnings/2023/q3/presentation/Earnings-Presentation-Q3-2023.pdf",
+    "sha256": "dfcaa1c855d2da261f0d392c4a603fddf8897934dc60b3397f272698bf071af4",
+    "bytes": 172720,
+    "facts": {
+      "family_dap": {
+        "value": 3.14,
+        "unit": "billions of people",
+        "page": 10,
+        "label": "2023年9月Family DAP"
+      },
+      "family_map": {
+        "value": 3.96,
+        "unit": "billions of people",
+        "page": 11,
+        "label": "2023-09-30 Family MAP"
+      },
+      "family_arpp": {
+        "value": 8.71,
+        "unit": "USD per person per quarter",
+        "page": 12,
+        "label": "Q3 2023 Family ARPP"
+      }
+    }
+  },
+  "spotify": {
+    "case_id": "spotify_q3_2020_premium_arpu",
+    "issuer": "Spotify Technology S.A.",
+    "ticker": "SPOT",
+    "alternate_tickers": [],
+    "reporting_entity": "Spotify Premium users",
+    "currency": "EUR",
+    "scale": "per Premium user per month",
+    "period_label": "Q3 2020",
+    "period_start": "2020-07-01",
+    "period_end": "2020-09-30",
+    "published": "2020-10-29",
+    "source_kind": "issuer_official_shareholder_letter_pdf",
+    "source_status": "股东信经营指标；相关中期财务报表未经审计",
+    "url": "https://investors.spotify.com/files/doc_financials/2020/q3/Shareholder-Letter-Q3-2020_FINAL.pdf",
+    "sha256": "82025cc49cce680c62ba9e5576881e6e84c867ba77f44a4f46d82f6c9ae81518",
+    "bytes": 1172171,
+    "facts": {
+      "premium_arpu": {
+        "value": 4.19,
+        "unit": "EUR per Premium user per month",
+        "page": 4,
+        "label": "Q3 2020 Premium每用户平均收入"
+      }
+    }
+  },
+  "snowflake": {
+    "case_id": "snowflake_q4_fy2024_nrr",
+    "issuer": "Snowflake Inc.",
+    "ticker": "SNOW",
+    "alternate_tickers": [],
+    "reporting_entity": "Snowflake capacity-contract customer cohort",
+    "currency": "not_applicable",
+    "scale": "fraction",
+    "period_label": "Q4 FY2024 ended 2024-01-31",
+    "period_start": "2023-11-01",
+    "period_end": "2024-01-31",
+    "published": "2024-02-28",
+    "source_kind": "issuer_official_investor_presentation_pdf",
+    "source_status": "投资者演示经营指标",
+    "url": "https://investors.snowflake.com/files/doc_financials/2024/q4/Q4-FY2024-Investor-Presentation-vF.pdf",
+    "sha256": "8da8efb70b65fc2c8928a1d6ccef32e530d447d510fa9da033dcb916ccf80a37",
+    "bytes": 5257197,
+    "facts": {
+      "net_revenue_retention": {
+        "value": 1.31,
+        "unit": "fraction",
+        "page": 21,
+        "label": "Q4 FY2024净收入留存率"
+      }
+    }
+  },
+  "similarweb": {
+    "case_id": "similarweb_q3_2024_cac_payback",
+    "issuer": "Similarweb Ltd.",
+    "ticker": "SMWB",
+    "alternate_tickers": [],
+    "reporting_entity": "Similarweb customer acquisition activity",
+    "currency": "not_applicable",
+    "scale": "months",
+    "period_label": "TTM ended 2024-09-30",
+    "period_start": "2023-10-01",
+    "period_end": "2024-09-30",
+    "published": "2024-11-12",
+    "source_kind": "issuer_official_investor_presentation_pdf",
+    "source_status": "投资者演示非GAAP推导区间",
+    "url": "https://d1io3yog0oux5.cloudfront.net/_8f428cad86e9f7d21dc312829a41f817/similarweb/db/2008/19607/presentation/SMWB_Q3_2024_Investor_Presentation_.pdf",
+    "sha256": "3278ddfd096ebcc828579466b3e0af46b01f6fe38f72554f1d1304b0bfb53bf0",
+    "bytes": 9680955,
+    "facts": {
+      "cac_payback_lower_bound": {
+        "value": 21,
+        "unit": "months lower bound",
+        "page": 22,
+        "label": "当前CAC回收期21–22个月区间下限"
+      },
+      "cac_payback_upper_bound": {
+        "value": 22,
+        "unit": "months upper bound",
+        "page": 22,
+        "label": "当前CAC回收期21–22个月区间上限"
+      }
+    }
+  },
+  "zoom": {
+    "case_id": "zoom_q1_fy2025_online_churn",
+    "issuer": "Zoom Video Communications, Inc.",
+    "ticker": "ZM",
+    "alternate_tickers": [],
+    "reporting_entity": "Zoom Online customers",
+    "currency": "not_applicable",
+    "scale": "fraction per month",
+    "period_label": "Q1 FY2025 ended 2024-04-30",
+    "period_start": "2024-02-01",
+    "period_end": "2024-04-30",
+    "published": "2024-05-21",
+    "source_kind": "issuer_official_prepared_remarks_pdf",
+    "source_status": "业绩准备稿经营指标",
+    "url": "https://investors.zoom.us/static-files/70629942-ff77-4bed-91d6-422766c47e6b",
+    "sha256": "79f0e6b5126a47869f196d07aa3ab3626c4a61cdbb46e17a79762ab264fbeaf4",
+    "bytes": 118862,
+    "facts": {
+      "online_monthly_churn": {
+        "value": 0.032,
+        "unit": "fraction per month",
+        "page": 5,
+        "label": "Online客户月均流失率"
+      }
+    }
+  },
+  "smic": {
+    "case_id": "smic_q4_2024_wafer_economics",
+    "issuer": "Semiconductor Manufacturing International Corporation",
+    "ticker": "0981.HK",
+    "alternate_tickers": [
+      "688981.SS"
+    ],
+    "reporting_entity": "SMIC consolidated foundry operations",
+    "currency": "USD",
+    "scale": "thousands and 8-inch-equivalent wafers",
+    "period_label": "Q4 2024",
+    "period_start": "2024-10-01",
+    "period_end": "2024-12-31",
+    "published": "2025-02-11",
+    "source_kind": "issuer_official_hkex_results_announcement_pdf",
+    "source_status": "未经审计季度财务与经营指标",
+    "url": "https://www1.hkexnews.hk/listedco/listconews/sehk/2025/0211/2025021100441.pdf",
+    "sha256": "18e7cc96cc2405587fbb06e5da078fe4ce129833e6257009fe1c650a0d070a76",
+    "bytes": 444831,
+    "facts": {
+      "revenue": {
+        "value": 2207281,
+        "unit": "USD thousands",
+        "page": 5,
+        "label": "Q4 2024总收入"
+      },
+      "wafer_revenue_share": {
+        "value": 0.925,
+        "unit": "fraction",
+        "page": 5,
+        "label": "晶圆服务收入占比"
+      },
+      "wafer_shipments": {
+        "value": 1991761,
+        "unit": "8-inch-equivalent wafers",
+        "page": 5,
+        "label": "Q4 2024晶圆出货量"
+      },
+      "utilization_rate": {
+        "value": 0.855,
+        "unit": "fraction",
+        "page": 5,
+        "label": "Q4 2024产能利用率"
+      }
+    }
+  },
+  "verizon": {
+    "case_id": "verizon_q1_2024_prepaid_metrics",
+    "issuer": "Verizon Communications Inc.",
+    "ticker": "VZ",
+    "alternate_tickers": [],
+    "reporting_entity": "Verizon Consumer wireless retail prepaid connections",
+    "currency": "USD",
+    "scale": "per connection per month and fraction",
+    "period_label": "Q1 2024",
+    "period_start": "2024-01-01",
+    "period_end": "2024-03-31",
+    "published": "2024-04-22",
+    "source_kind": "issuer_official_financial_operating_statistics_pdf",
+    "source_status": "未经审计补充经营统计",
+    "url": "https://www.verizon.com/about/sites/default/files/2024-04/FS_VZ_1Q24_042224.pdf",
+    "sha256": "c22a0161f9268b2d9799cbfa1ea78da0e44d16d1cb502896e5a0ac212bae4817",
+    "bytes": 103314,
+    "facts": {
+      "prepaid_arpu": {
+        "value": 31.17,
+        "unit": "USD per connection per month",
+        "page": 7,
+        "label": "Consumer无线零售预付费ARPU"
+      },
+      "prepaid_churn": {
+        "value": 0.0426,
+        "unit": "fraction per month",
+        "page": 6,
+        "label": "Consumer无线零售预付费月流失率"
+      }
+    }
+  },
+  "frontline": {
+    "case_id": "frontline_q2_2024_vlcc_tce",
+    "issuer": "Frontline plc",
+    "ticker": "FRO",
+    "alternate_tickers": [],
+    "reporting_entity": "Frontline VLCC spot fleet",
+    "currency": "USD",
+    "scale": "per day",
+    "period_label": "Q2 2024",
+    "period_start": "2024-04-01",
+    "period_end": "2024-06-30",
+    "published": "2024-08-30",
+    "source_kind": "issuer_official_investor_presentation_pdf",
+    "source_status": "非IFRS经营指标",
+    "url": "https://www.frontlineplc.cy/wp-content/uploads/2024/09/Presentation-Q2-2024.pdf",
+    "sha256": "394b72e6c229f9586a18a2b1348b8262fc11459afa7c30147df2d5f1ff3677fa",
+    "bytes": 870579,
+    "facts": {
+      "vlcc_spot_tce": {
+        "value": 49600,
+        "unit": "USD per day",
+        "page": 3,
+        "label": "Q2 2024 VLCC现货TCE"
       }
     }
   }

@@ -41,6 +41,8 @@ pub fn all_entries() -> Vec<KnowledgeEntry> {
     for entry in &mut entries {
         crate::filing_case::configure_knowledge(entry);
         crate::industry_case::configure_knowledge(entry);
+        crate::disclosure_ownership::configure_knowledge(entry);
+        crate::disclosure_valuation::configure_knowledge(entry);
         crate::a_share_float::configure_knowledge(entry);
         if entry.summary.trim().is_empty() {
             entry.summary = entry

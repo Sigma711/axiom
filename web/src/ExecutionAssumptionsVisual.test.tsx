@@ -41,6 +41,13 @@ describe('ExecutionAssumptionsVisual', () => {
       expect(html).toContain('不代表含分红再投资的总回报');
     }
   });
+  it('labels Yahoo data obtained through AXIOM without exposing a machine provider id', () => {
+    const endpoint = 'https://query2.finance.yahoo.com/v8/finance/chart/AAPL';
+    const html = renderToStaticMarkup(<ExecutionAssumptionsVisual provenance={{ provider: 'yahoo_via_restricted_relay', endpoint, price_basis: 'provider_adjustment_unverified', corporate_actions: 'split_coverage_verified_no_event_in_window' }} />);
+    expect(html).toContain('Yahoo Finance · 经 AXIOM 获取');
+    expect(html).not.toContain('yahoo_via_restricted_relay');
+    expect(html).toContain('href="https://query2.finance.yahoo.com/v8/finance/chart/AAPL"');
+  });
   it('distinguishes an observed split event from portfolio accounting', () => {
     const html = renderToStaticMarkup(<ExecutionAssumptionsVisual provenance={{ provider: 'yahoo', endpoint: 'https://query1.finance.yahoo.com/v8/finance/chart/AAPL', price_basis: 'provider_quote_and_adjusted_close_semantics_unverified', corporate_actions: 'dated_split_event_observed' }} />);
     expect(html).toContain('供应商报价与调整收盘价，口径未独立核验');

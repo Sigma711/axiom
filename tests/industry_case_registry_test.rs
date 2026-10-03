@@ -1,4 +1,7 @@
-use axiom::{industry_case::SUPPORTED_IDS, knowledge, practice};
+use axiom::{
+    industry_case::{fixed_symbol, SUPPORTED_IDS},
+    knowledge, practice,
+};
 
 #[test]
 fn industry_cases_replace_teaching_inputs_in_both_public_registries() {
@@ -19,5 +22,10 @@ fn industry_cases_replace_teaching_inputs_in_both_public_registries() {
         let entry = entries.iter().find(|item| item.id == *id).unwrap();
         assert!(entry.signals.contains("已验证的发行人历史披露"), "{id}");
         assert!(!entry.formula.trim().is_empty(), "{id}");
+        assert!(fixed_symbol(id).is_some(), "{id}");
     }
+    assert_eq!(fixed_symbol("book_airline_casm"), Some("DAL"));
+    assert_eq!(fixed_symbol("book_reit_affo"), Some("O"));
+    assert_eq!(fixed_symbol("book_bank_cet1_ratio"), Some("2318.HK"));
+    assert_eq!(fixed_symbol("not_a_concept"), None);
 }

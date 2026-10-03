@@ -42,15 +42,42 @@ async fn request(app: &axum::Router, path: &str, value: Value) -> (StatusCode, V
     )
 }
 
+#[tokio::test]
+async fn invalid_indicator_periods_are_rejected_before_any_market_request() {
+    let root = std::env::temp_dir().join(format!("axiom-invalid-period-{}", uuid::Uuid::new_v4()));
+    let mut state = AppState::new(default_config(), root.clone());
+    let mut feed = HttpFeed::new(&root);
+    feed.base_url = "http://127.0.0.1:1/unreachable".into();
+    state.feed = Arc::new(feed);
+    let app = api::router(Arc::new(state));
+    for period in [
+        json!(0),
+        json!(-1),
+        json!(1.5),
+        json!(10001),
+        json!("14"),
+        json!(true),
+    ] {
+        let (status, result) = request(&app, "/api/practice", json!({"concept_id":"rsi","module":"data","source":"binance","symbol":"BTCUSDT","inputs":{"period":period}})).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{period}: {result}");
+        assert!(result.to_string().contains("period"), "{result}");
+    }
+    let _ = std::fs::remove_dir_all(root);
+}
+
 async fn mock_aapl_adjustment(Query(q): Query<HashMap<String, String>>) -> Json<Value> {
     assert_eq!(q.get("interval").map(String::as_str), Some("1d"));
     assert_eq!(q.get("events").map(String::as_str), Some("div,splits"));
     Json(aapl_adjustment_payload())
 }
 
+async fn unavailable_aapl_adjustment() -> StatusCode {
+    StatusCode::SERVICE_UNAVAILABLE
+}
+
 fn aapl_adjustment_payload() -> Value {
     json!({"chart":{"result":[{
-        "meta":{"symbol":"AAPL"},
+        "meta":{"symbol":"AAPL","currency":"USD","instrumentType":"EQUITY"},
         "timestamp":[1598621400,1598880600],
         "indicators":{
             "quote":[{
@@ -92,7 +119,12 @@ async fn aapl_adjustment_practice_uses_dated_split_evidence_without_calling_quot
     let server = tokio::spawn(async move {
         axum::serve(
             listener,
-            axum::Router::new().route("/v8/finance/chart/AAPL", get(mock_aapl_adjustment)),
+            axum::Router::new()
+                .route(
+                    "/unavailable/v8/finance/chart/AAPL",
+                    get(unavailable_aapl_adjustment),
+                )
+                .route("/fallback/v8/finance/chart/AAPL", get(mock_aapl_adjustment)),
         )
         .await
         .unwrap()
@@ -103,7 +135,9 @@ async fn aapl_adjustment_practice_uses_dated_split_evidence_without_calling_quot
     ));
     let mut state = AppState::new(default_config(), dir.clone());
     let mut feed = HttpFeed::new(&dir);
-    feed.us_stock_adjustment_url = format!("http://127.0.0.1:{port}/v8/finance/chart");
+    feed.us_stock_adjustment_url = format!("http://127.0.0.1:{port}/unavailable/v8/finance/chart");
+    feed.us_stock_adjustment_fallback_url =
+        format!("http://127.0.0.1:{port}/fallback/v8/finance/chart");
     state.feed = Arc::new(feed);
     let app = api::router(Arc::new(state));
 
@@ -121,6 +155,13 @@ async fn aapl_adjustment_practice_uses_dated_split_evidence_without_calling_quot
         body["adjustment_evidence"]["provider"],
         "configured_endpoint"
     );
+    assert_eq!(
+        body["adjustment_evidence"]["retrieval"],
+        "live_provider_response"
+    );
+    let selected_endpoint = body["adjustment_evidence"]["endpoint"].as_str().unwrap();
+    assert!(selected_endpoint.contains("/fallback/v8/finance/chart/AAPL"));
+    assert!(selected_endpoint.contains("events=div%2Csplits"));
     assert_eq!(body["values"]["new_shares_per_old_share"], 4.0);
     assert_eq!(body["values"]["old_shares_per_new_share"], 0.25);
     assert_eq!(body["values"]["split_only_price_multiplier"], 0.25);
@@ -206,6 +247,9 @@ async fn aapl_adjustment_practice_rejects_missing_events_and_misaligned_adjusted
         let mut state = AppState::new(default_config(), dir.clone());
         let mut feed = HttpFeed::new(&dir);
         feed.us_stock_adjustment_url = format!("http://127.0.0.1:{port}/{case}/v8/finance/chart");
+        feed.us_stock_adjustment_fallback_url =
+            format!("http://127.0.0.1:{port}/{case}/v8/finance/chart");
+        feed.us_stock_relay_url = None;
         state.feed = Arc::new(feed);
         let app = api::router(Arc::new(state));
         let (status, body) = request(
@@ -375,8 +419,8 @@ async fn teaching_and_result_practice_contexts_are_explicit_and_validated() {
         json!({"concept_id":"beta","module":"backtest","source":"synthetic","bars":[{"timestamp":"2024-01-01T00:00:00Z","open":1.0,"high":1.0,"low":1.0,"close":1.0,"volume":0.0}],"inputs":{"strategy_returns":[0.01,0.02],"benchmark_returns":[0.01]}}),
         json!({"concept_id":"eps","module":"data","source":"binance","inputs":{}}),
     ] {
-        let (status, _) = request(&app, "/api/practice", body).await;
-        assert_eq!(status, StatusCode::BAD_REQUEST);
+        let (status, output) = request(&app, "/api/practice", body.clone()).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}: {output}");
     }
     let (status, _) = request(
         &app,
@@ -1027,7 +1071,7 @@ async fn book_financial_practices_require_equity_evidence_and_reject_crypto() {
             .iter()
             .find(|concept| concept["id"] == id)
             .unwrap();
-        let filing_case = id == "book_current_ratio";
+        let filing_case = id == "book_current_ratio" || id == "book_dcf";
         let industry_case = matches!(id, "book_bank_nim" | "book_share_counts");
         let stock_action_case = matches!(id, "book_adjustment" | "book_pitfall_adjustment");
         assert_eq!(
@@ -1109,13 +1153,14 @@ async fn book_financial_practices_require_equity_evidence_and_reject_crypto() {
         .iter()
         .find(|concept| concept["id"] == "book_cape")
         .unwrap();
-    assert_eq!(cape["plan"]["markets"], json!(["cn_equity", "us_equity"]));
+    assert_eq!(cape["plan"]["markets"], json!(["us_equity"]));
     assert_eq!(
         cape["plan"]["required_datasets"],
         json!([
-            "ten_annual_point_in_time_eps",
-            "ten_annual_cpi",
-            "market_price"
+            "issuer_financial_disclosures",
+            "nasdaq_historical_close_observations",
+            "ten_year_diluted_eps_split_adjusted_history",
+            "fred_cpiaucsl_revised_snapshot_post_revisions"
         ])
     );
     for id in ["book_etf_flows", "book_etf_balances"] {
@@ -1559,6 +1604,52 @@ async fn book_r_squared_uses_verified_same_period_equity_and_market_returns() {
     assert_eq!(status, StatusCode::OK, "{out}");
     assert_eq!(out["provenance"], "provided_result_context");
     assert!((out["values"]["r_squared"].as_f64().unwrap() - 0.790_826_854_342_459_4).abs() < 1e-12);
+
+    // Reject internally inconsistent results even when arrays are individually valid.
+    for (patch, message) in [
+        (
+            json!({"initial_capital":101.0}),
+            "initial_capital must match",
+        ),
+        (
+            json!({"equity":[100.0,98.0,105.0]}),
+            "one value per supplied bar",
+        ),
+        (
+            json!({"equity":[100.0,0.0,105.0,103.0,106.09]}),
+            "observations must be positive",
+        ),
+        (
+            json!({"strategy_returns":[0.0,0.0,0.0]}),
+            "consecutive supplied equity returns",
+        ),
+        (
+            json!({"benchmark_returns":[0.0,0.0,0.0]}),
+            "same-timestamp bar-close returns",
+        ),
+        (
+            json!({"strategy_returns":[0.0,0.0],"benchmark_returns":[0.0,0.0]}),
+            "at least three aligned bars",
+        ),
+        (
+            json!({"equity_points":[
+                {"timestamp":"2024-01-01T00:00:00Z","equity":99.0},
+                {"timestamp":"2024-01-01T01:00:00Z","equity":105.0},
+                {"timestamp":"2024-01-01T02:00:00Z","equity":103.0},
+                {"timestamp":"2024-01-01T03:00:00Z","equity":106.09}
+            ]}),
+            "must match the supplied equity sequence",
+        ),
+    ] {
+        let mut changed = inputs.clone();
+        changed
+            .as_object_mut()
+            .unwrap()
+            .extend(patch.as_object().unwrap().clone());
+        let (status, error) = request(&app, "/api/practice", body(changed)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{patch}: {error}");
+        assert!(error.to_string().contains(message), "{patch}: {error}");
+    }
 
     for changed in [
         json!({"initial_capital":100.0,"equity":[100.0,98.0,105.0,103.0,106.09],"strategy_returns":[105.0/98.0-1.0,0.01,0.03],"benchmark_returns":[0.1,-0.1,0.1]}),

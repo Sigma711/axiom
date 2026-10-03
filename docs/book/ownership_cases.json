@@ -1,0 +1,350 @@
+{
+  "moutai": {
+    "case_id": "moutai_fy2025_ownership_disclosures",
+    "issuer": "贵州茅台酒股份有限公司",
+    "ticker": "600519",
+    "period": {
+      "label": "FY2025 / 2025-12-31",
+      "start": "2025-01-01",
+      "end": "2025-12-31"
+    },
+    "sources": {
+      "moutai_annual_report": {
+        "title": "贵州茅台酒股份有限公司2025年年度报告",
+        "url": "https://static.cninfo.com.cn/finalpage/2026-04-17/1225114741.PDF",
+        "format": "PDF",
+        "published": "2026-04-17",
+        "as_of": "2025-12-31",
+        "sha256": "474905deeaf0f875fc0a1b097a626c0c7852c427faadc5d7fc7816cbf45ea288",
+        "bytes": 1082847
+      }
+    },
+    "facts": {
+      "opening_total_shares": {
+        "value": 1256197800,
+        "unit": "shares",
+        "pdf_page": 47,
+        "label": "2025年期初股份总数",
+        "source_id": "moutai_annual_report"
+      },
+      "first_program_repurchased_shares": {
+        "value": 3927585,
+        "unit": "shares",
+        "pdf_page": 52,
+        "label": "第一期实际已回购股份数",
+        "source_id": "moutai_annual_report",
+        "section": "第六节 八、股份回购在报告期的具体实施情况"
+      },
+      "second_program_repurchased_shares": {
+        "value": 87059,
+        "unit": "shares",
+        "pdf_page": 52,
+        "label": "第二期截至报告期末实际已回购股份数",
+        "source_id": "moutai_annual_report",
+        "section": "第六节 八、股份回购在报告期的具体实施情况"
+      },
+      "closing_total_shares": {
+        "value": 1252270215,
+        "unit": "shares",
+        "pdf_page": 47,
+        "label": "2025年末股份总数",
+        "source_id": "moutai_annual_report"
+      },
+      "unrestricted_shares": {
+        "value": 1252270215,
+        "unit": "shares",
+        "pdf_page": 47,
+        "label": "2025年末无限售条件流通股份",
+        "source_id": "moutai_annual_report"
+      },
+      "holder_1_shares": {
+        "value": 681282935,
+        "unit": "shares",
+        "pdf_page": 48,
+        "label": "前十名股东第1名期末持股数",
+        "source_id": "moutai_annual_report"
+      },
+      "holder_2_shares": {
+        "value": 56996777,
+        "unit": "shares",
+        "pdf_page": 48,
+        "label": "前十名股东第2名期末持股数",
+        "source_id": "moutai_annual_report"
+      },
+      "holder_3_shares": {
+        "value": 55048844,
+        "unit": "shares",
+        "pdf_page": 48,
+        "label": "前十名股东第3名期末持股数",
+        "source_id": "moutai_annual_report"
+      },
+      "holder_4_shares": {
+        "value": 27849688,
+        "unit": "shares",
+        "pdf_page": 48,
+        "label": "前十名股东第4名期末持股数",
+        "source_id": "moutai_annual_report"
+      },
+      "holder_5_shares": {
+        "value": 11573000,
+        "unit": "shares",
+        "pdf_page": 48,
+        "label": "上证50交易型开放式指数证券投资基金期末持股数",
+        "source_id": "moutai_annual_report"
+      },
+      "holder_6_shares": {
+        "value": 10397104,
+        "unit": "shares",
+        "pdf_page": 48,
+        "label": "前十名股东第6名期末持股数",
+        "source_id": "moutai_annual_report"
+      },
+      "holder_7_shares": {
+        "value": 10324650,
+        "unit": "shares",
+        "pdf_page": 49,
+        "label": "沪深300交易型开放式指数证券投资基金期末持股数",
+        "source_id": "moutai_annual_report"
+      },
+      "holder_8_shares": {
+        "value": 8039447,
+        "unit": "shares",
+        "pdf_page": 49,
+        "label": "前十名股东第8名期末持股数",
+        "source_id": "moutai_annual_report"
+      },
+      "holder_9_shares": {
+        "value": 7377868,
+        "unit": "shares",
+        "pdf_page": 49,
+        "label": "嘉实沪深300交易型开放式指数证券投资基金期末持股数",
+        "source_id": "moutai_annual_report"
+      },
+      "holder_10_shares": {
+        "value": 5629234,
+        "unit": "shares",
+        "pdf_page": 49,
+        "label": "华夏沪深300交易型开放式指数证券投资基金期末持股数",
+        "source_id": "moutai_annual_report"
+      },
+      "controlling_holder_shares": {
+        "value": 681282935,
+        "unit": "shares",
+        "pdf_page": 48,
+        "label": "控股股东期末持股数",
+        "source_id": "moutai_annual_report"
+      },
+      "controlling_holder_pledged_shares": {
+        "value": 0,
+        "unit": "shares",
+        "pdf_page": 48,
+        "label": "控股股东质押、标记或冻结数量（状态为无）",
+        "source_id": "moutai_annual_report"
+      },
+      "controlling_holder_acquired_shares": {
+        "value": 2071359,
+        "unit": "shares",
+        "pdf_page": 137,
+        "label": "控股股东报告期集中竞价增持股份数",
+        "source_id": "moutai_annual_report",
+        "section": "十七、其他重要事项（2）控股股东增持公司股份事项"
+      }
+    }
+  },
+  "signify": {
+    "case_id": "signify_pre_q4_2025_analyst_consensus",
+    "issuer": "Signify N.V.",
+    "ticker": "LIGHT.AS",
+    "period": {
+      "label": "Q4 2025 pre-results analyst consensus",
+      "start": "2025-10-01",
+      "end": "2025-12-31"
+    },
+    "sources": {
+      "signify_consensus": {
+        "title": "Signify Analyst Consensus - Jan 14, 2026",
+        "url": "https://www.signify.com/static/2025/20260114-signify-analyst-consensus-pre-q4-2025.pdf",
+        "format": "PDF",
+        "published": "2026-01-14",
+        "as_of": "2026-01-14",
+        "sha256": "c2ebe6999e54928dc1f2041a0194e6a856e900b184147ad3974ac51e68842bb3",
+        "bytes": 231176
+      }
+    },
+    "facts": {
+      "q4_sales_average": {
+        "value": 1533,
+        "unit": "EUR million",
+        "pdf_page": 1,
+        "label": "Q4 2025总收入分析师平均预测",
+        "source_id": "signify_consensus",
+        "section": "Q4 2025 - Sales - Signify total"
+      },
+      "q4_sales_high": {
+        "value": 1579,
+        "unit": "EUR million",
+        "pdf_page": 1,
+        "label": "Q4 2025总收入分析师最高预测",
+        "source_id": "signify_consensus",
+        "section": "Q4 2025 - Sales - Signify total"
+      },
+      "q4_sales_low": {
+        "value": 1496,
+        "unit": "EUR million",
+        "pdf_page": 1,
+        "label": "Q4 2025总收入分析师最低预测",
+        "source_id": "signify_consensus",
+        "section": "Q4 2025 - Sales - Signify total"
+      }
+    }
+  },
+  "airbus": {
+    "case_id": "airbus_analyst_evidence_2025_2026",
+    "issuer": "Airbus SE",
+    "ticker": "AIR.PA",
+    "period": {
+      "label": "FY/Q4 2025 analyst evidence",
+      "start": "2025-01-01",
+      "end": "2025-12-31"
+    },
+    "sources": {
+      "airbus_consensus": {
+        "title": "Consolidated Airbus Market Consensus Q4 2025",
+        "url": "https://mediaassets.airbus.com/pm_38_787_787398-089y4vnyo3.pdf",
+        "format": "PDF",
+        "published": "undated PDF; collection window ended 2026-02-12",
+        "as_of": "2026-02-12",
+        "sha256": "6152126d3b4b46b3ffad7c68dc76a6d6ec40908f28b2af85bf514a2ba62e6e9b",
+        "bytes": 81415
+      },
+      "mwb_report": {
+        "title": "mwb research Airbus Update",
+        "url": "https://downloads.research-hub.de/2025%2002%2024%20Airbus%20Update___kh66mlcm.pdf",
+        "format": "PDF",
+        "published": "2025-02-24",
+        "as_of": "2025-02-24",
+        "sha256": "2819c2970703eaf90c22f57db151915bbd8a03dd259eb8478848a6fe25643471",
+        "bytes": 991184
+      },
+      "airbus_fy_results": {
+        "title": "Airbus FY2025 press release submitted by Airbus SE to the Dutch AFM inside-information register",
+        "url": "https://www.afm.nl/downloadregisterfile.aspx?type=openbaarmaking-voorwetenschap&enc=7Rpj0BBaMD5lzfwUlyQ9TIe+XbKYS1JE7+GVfXY2PxNqAT3NVNKp3QCQcI2WUb5gS/PYmhvg5EA+E7FpgiengZj0NLAMUDbP/oPnUtKH27VA0/CZGu7E4hLGdYYwwWpdTyp/cuqK9u2A7er37RJifDgVQS3W6HmCKGWO1CEeZNXO0g0IROVIr+z+5qosB2fxjW2qofVbttWzylRmw6K7ZNM1O+nSGFVNazbTDT6ekO3vaajCoWPbTc7g3zIvR0ilTPg8vjdE1aEQ10Qyj60J7wrJWgG+ROEOcLEujFwVnZc4hQg9b/oBAl+w6cUoq0F56qLbopyLMcJnwQKx89Mczg==",
+        "canonical_url": "https://www.airbus.com/en/newsroom/press-releases/2026-02-airbus-reports-full-year-fy-2025-results",
+        "registry_page_url": "https://www.afm.nl/en/sector/registers/meldingenregisters/openbaarmaking-voorwetenschap/details?id=C2602-01215",
+        "format": "PDF",
+        "published": "2026-02-19",
+        "as_of": "2025-12-31",
+        "sha256": "21f849df5646b6b57e006827581768016e3b0995ec8d95d096f573a7886f8610",
+        "bytes": 296359
+      }
+    },
+    "facts": {
+      "q4_consensus_reported_eps": {
+        "value": 2.82,
+        "unit": "EUR/share",
+        "pdf_page": 1,
+        "label": "20名卖方分析师Q4 2025报告口径EPS一致预期",
+        "source_id": "airbus_consensus"
+      },
+      "q4_consensus_analyst_count": {
+        "value": 20,
+        "unit": "analysts",
+        "pdf_page": 1,
+        "label": "一致预期贡献分析师数量",
+        "source_id": "airbus_consensus"
+      },
+      "mwb_target_price": {
+        "value": 145,
+        "unit": "EUR/share",
+        "pdf_page": 1,
+        "label": "mwb research目标价",
+        "source_id": "mwb_report"
+      },
+      "mwb_previous_target_price": {
+        "value": 127,
+        "unit": "EUR/share",
+        "pdf_page": 1,
+        "label": "mwb research同份报告列示的前次目标价",
+        "source_id": "mwb_report"
+      },
+      "mwb_current_price": {
+        "value": 159.9,
+        "unit": "EUR/share",
+        "pdf_page": 1,
+        "label": "mwb research报告采用的当前价",
+        "source_id": "mwb_report"
+      },
+      "mwb_2025_eps": {
+        "value": 6.01,
+        "unit": "EUR/share",
+        "pdf_page": 2,
+        "label": "mwb research更新后的2025E报告口径EPS",
+        "source_id": "mwb_report",
+        "section": "Airbus SE estimates table"
+      },
+      "mwb_2025_previous_eps": {
+        "value": 5.85,
+        "unit": "EUR/share",
+        "pdf_page": 2,
+        "label": "mwb research同份报告列示的更新前2025E EPS",
+        "source_id": "mwb_report",
+        "section": "Changes in estimates (old; delta +2.8%)"
+      },
+      "q4_2025_reported_eps": {
+        "value": 3.27,
+        "unit": "EUR/share",
+        "pdf_page": 7,
+        "label": "Airbus公布的Q4 2025报告口径EPS",
+        "source_id": "airbus_fy_results",
+        "section": "physical page 7; Consolidated Airbus – Fourth Quarter (Q4) 2025 Results"
+      }
+    }
+  },
+  "cboe_short_interest": {
+    "case_id": "cboe_arkw_consolidated_short_interest_2026_09_15",
+    "issuer": "ARK Next Generation Technology (exact Cboe CSV security name)",
+    "ticker": "ARKW",
+    "period": {
+      "label": "Cboe consolidated short-interest settlement date 2026-09-15",
+      "start": "2026-09-15",
+      "end": "2026-09-15"
+    },
+    "sources": {
+      "cboe_consolidated_short_interest": {
+        "title": "Cboe BZX Listed Consolidated Short Interest Report (FINRA cycle), published 2026-10-02",
+        "url": "https://cdn.cboe.com/resources/us/equities/market-statistics/short-interest/Bats_Listed_Short_Interest-finra-20261002.csv",
+        "format": "CSV",
+        "published": "2026-10-02",
+        "as_of": "2026-09-15",
+        "sha256": "564c843210b40a596568deb62da27c10e5627b00754b4372197b7ea90942763e",
+        "bytes": 127080
+      }
+    },
+    "facts": {
+      "aggregate_short_shares": {
+        "value": 378713,
+        "unit": "shares",
+        "pdf_page": null,
+        "label": "ARKW当前周期合并市场淡仓股数",
+        "source_id": "cboe_consolidated_short_interest",
+        "section": "CSV line 80; # Shares Net Short Current Cycle"
+      },
+      "average_daily_share_volume": {
+        "value": 56692,
+        "unit": "shares per trading day",
+        "pdf_page": null,
+        "label": "本结算周期日均成交股数",
+        "source_id": "cboe_consolidated_short_interest",
+        "section": "CSV line 80; Cycle Avg Daily Trade Vol"
+      },
+      "reported_days_to_cover": {
+        "value": 6.68,
+        "unit": "days",
+        "pdf_page": null,
+        "label": "Cboe报告的最低回补交易天数",
+        "source_id": "cboe_consolidated_short_interest",
+        "section": "CSV line 80; Min # of Trade Days To Cover Shorts"
+      }
+    }
+  }
+}

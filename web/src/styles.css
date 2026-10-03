@@ -592,7 +592,7 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
 .ax-block-timing figcaption { margin-top: .6rem; font-size: .88rem; line-height: 1.65; }
 .ax-block-timing-caveat { margin: .5rem 0 0; color: var(--text-dim); font-size: .8rem; line-height: 1.55; }
 @media (max-width: 640px) { .ax-block-timing-scroll-hint { display: block; } }
-.ax-filing-case { margin: 1rem 0; padding: clamp(.9rem, 2vw, 1.4rem); border: 1px solid var(--border); border-radius: 14px; background: var(--bg-card); color: var(--text); }
+.ax-filing-case { margin: 1rem 0; padding: clamp(.9rem, 2vw, 1.4rem); border: 1px solid var(--border); border-radius: 14px; background: var(--bg-card); color: var(--text); scroll-margin-top: 72px; }
 .ax-filing-case > header h4 { margin: .65rem 0 .3rem; font-size: 1.2rem; }
 .ax-filing-case > header p { color: var(--text-dim); font-size: .85rem; line-height: 1.7; }
 .ax-filing-badge { color: var(--accent); font-size: .8rem; letter-spacing: .04em; }
@@ -632,6 +632,11 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
 .ax-industry-unit-group h5 { margin: 0 0 .75rem; color: var(--text-dim); font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; }
 .ax-industry-provenance { margin: .3rem 0 0; color: var(--text-dim); font-size: .75rem; line-height: 1.55; }
 .ax-industry-definitions p { margin: .55rem 0; }
+.ax-industry-case { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .ax-industry-case .ax-filing-fact header { flex-wrap: wrap; gap: .35rem .75rem; }
+  .ax-industry-case .ax-filing-fact a { white-space: normal; }
+}
 .ax-book-toc { display: flex; flex-direction: column; height: 76vh; min-height: 0; box-sizing: border-box; }
 .ax-book-toc > nav { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: var(--text-faint) transparent; }
 .ax-book-toc-toggle { flex-shrink: 0; }

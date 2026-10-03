@@ -30,6 +30,57 @@ pub const EBAY_BYTES: usize = 1_004_020;
 pub const MOUTAI_URL: &str = "https://static.cninfo.com.cn/finalpage/2026-04-17/1225114741.PDF";
 pub const MOUTAI_SHA256: &str = "474905deeaf0f875fc0a1b097a626c0c7852c427faadc5d7fc7816cbf45ea288";
 pub const MOUTAI_BYTES: usize = 1_082_847;
+pub const DELTA_URL: &str = "https://s2.q4cdn.com/181345880/files/doc_financials/2024/q4/DAL-12-31-2024-10K-2-11-25-Filed.pdf";
+pub const DELTA_SHA256: &str = "61116b7fe79dd0c687d88c04ac376e4d09a6c3760163bbe9433f572bb2549afa";
+pub const DELTA_BYTES: usize = 897_733;
+pub const COSTCO_URL: &str = "https://s201.q4cdn.com/287523651/files/doc_news/Costco-Wholesale-Corporation-Reports-Fourth-Quarter-and-Fiscal-Year-2024-Operating-Results-2024.pdf";
+pub const COSTCO_SHA256: &str = "590d2dc15e168ca52697a8d8b85b0f388cbea3eab8235b2ec8aa77ed4f173c57";
+pub const COSTCO_BYTES: usize = 138_152;
+pub const MODERNA_URL: &str =
+    "https://s29.q4cdn.com/435878511/files/doc_financials/2024/ar/MRNA010_AR_WEB_FULL.pdf";
+pub const MODERNA_SHA256: &str = "2347835006ac22d5cd9b74683568893431149071740e81ff17603504ff70c1a5";
+pub const MODERNA_BYTES: usize = 3_098_566;
+pub const PETROBRAS_URL: &str = "https://transparencia.petrobras.com.br/documents/1357439/14971831/Relat%C3%B3rio%2Bde%2BGest%C3%A3o%2B-%2B2024.pdf/50685b26-3e9e-2ece-3035-33eebe338c73?download=true&t=1748554910000&version=1.0";
+pub const PETROBRAS_SHA256: &str =
+    "04372d526d67247b9ad66098a58d85ca2bf00b534478575ead5f650a7a463122";
+pub const PETROBRAS_BYTES: usize = 6_302_154;
+pub const BARRICK_URL: &str = "https://www.barrick.com/files/doc_financial/annual_reports/2024/Barrick_Annual_Report_2024.pdf";
+pub const BARRICK_SHA256: &str = "3cb6cf59458e8799650d1c219222f8c01e41b1fbda9351523ed6b602f3875b86";
+pub const BARRICK_BYTES: usize = 11_789_238;
+pub const SIEMENS_URL: &str = "https://assets.new.siemens.com/siemens/assets/api/uuid:344347ec-a1bd-44cb-aaaa-711d1b3ec1b8/Siemens-Annual-Report-2024.pdf";
+pub const SIEMENS_SHA256: &str = "75f568180a8d35287f970a4812817dcd2b5c690ec937bf80f17b6fe68f42521e";
+pub const SIEMENS_BYTES: usize = 4_671_939;
+pub const META_URL: &str = "https://investor.fb.com/files/doc_earnings/2023/q3/presentation/Earnings-Presentation-Q3-2023.pdf";
+pub const META_SHA256: &str = "dfcaa1c855d2da261f0d392c4a603fddf8897934dc60b3397f272698bf071af4";
+pub const META_BYTES: usize = 172_720;
+pub const SPOTIFY_URL: &str = "https://investors.spotify.com/files/doc_financials/2020/q3/Shareholder-Letter-Q3-2020_FINAL.pdf";
+pub const SPOTIFY_SHA256: &str = "82025cc49cce680c62ba9e5576881e6e84c867ba77f44a4f46d82f6c9ae81518";
+pub const SPOTIFY_BYTES: usize = 1_172_171;
+pub const SNOWFLAKE_URL: &str = "https://investors.snowflake.com/files/doc_financials/2024/q4/Q4-FY2024-Investor-Presentation-vF.pdf";
+pub const SNOWFLAKE_SHA256: &str =
+    "8da8efb70b65fc2c8928a1d6ccef32e530d447d510fa9da033dcb916ccf80a37";
+pub const SNOWFLAKE_BYTES: usize = 5_257_197;
+pub const SIMILARWEB_URL: &str = "https://d1io3yog0oux5.cloudfront.net/_8f428cad86e9f7d21dc312829a41f817/similarweb/db/2008/19607/presentation/SMWB_Q3_2024_Investor_Presentation_.pdf";
+pub const SIMILARWEB_SHA256: &str =
+    "3278ddfd096ebcc828579466b3e0af46b01f6fe38f72554f1d1304b0bfb53bf0";
+pub const SIMILARWEB_BYTES: usize = 9_680_955;
+pub const ZOOM_URL: &str =
+    "https://investors.zoom.us/static-files/70629942-ff77-4bed-91d6-422766c47e6b";
+pub const ZOOM_SHA256: &str = "79f0e6b5126a47869f196d07aa3ab3626c4a61cdbb46e17a79762ab264fbeaf4";
+pub const ZOOM_BYTES: usize = 118_862;
+pub const SMIC_URL: &str =
+    "https://www1.hkexnews.hk/listedco/listconews/sehk/2025/0211/2025021100441.pdf";
+pub const SMIC_SHA256: &str = "18e7cc96cc2405587fbb06e5da078fe4ce129833e6257009fe1c650a0d070a76";
+pub const SMIC_BYTES: usize = 444_831;
+pub const VERIZON_URL: &str =
+    "https://www.verizon.com/about/sites/default/files/2024-04/FS_VZ_1Q24_042224.pdf";
+pub const VERIZON_SHA256: &str = "c22a0161f9268b2d9799cbfa1ea78da0e44d16d1cb502896e5a0ac212bae4817";
+pub const VERIZON_BYTES: usize = 103_314;
+pub const FRONTLINE_URL: &str =
+    "https://www.frontlineplc.cy/wp-content/uploads/2024/09/Presentation-Q2-2024.pdf";
+pub const FRONTLINE_SHA256: &str =
+    "394b72e6c229f9586a18a2b1348b8262fc11459afa7c30147df2d5f1ff3677fa";
+pub const FRONTLINE_BYTES: usize = 870_579;
 
 pub const SUPPORTED_IDS: &[&str] = &[
     "book_share_counts",
@@ -43,6 +94,33 @@ pub const SUPPORTED_IDS: &[&str] = &[
     "book_platform_gmv",
     "book_platform_take_rate",
     "book_reit_occupancy",
+    "book_airline_casm",
+    "book_airline_load_factor",
+    "book_airline_rasm",
+    "book_bank_cet1_ratio",
+    "book_bank_provision_coverage",
+    "book_insurance_combined_ratio",
+    "book_insurance_nbv",
+    "book_reit_affo",
+    "book_reit_cap_rate",
+    "book_reit_ffo",
+    "book_retail_same_store_sales_growth",
+    "book_biopharma_cash_runway",
+    "book_energy_lifting_cost",
+    "book_energy_reserve_life",
+    "book_gold_aisc",
+    "book_industrial_backlog",
+    "book_industrial_book_to_bill",
+    "book_internet_arpu",
+    "book_internet_dau_mau",
+    "book_saas_cac_payback",
+    "book_saas_churn",
+    "book_saas_nrr",
+    "book_semiconductor_asp",
+    "book_semiconductor_utilization",
+    "book_shipping_tce",
+    "book_telecom_arpu",
+    "book_telecom_churn",
 ];
 
 static SOURCE_LOCK: Mutex<()> = Mutex::const_new(());
@@ -61,6 +139,20 @@ pub struct IndustrySourceRegistry {
     pub realty_income: IndustrySourceConfig,
     pub ebay: IndustrySourceConfig,
     pub moutai: IndustrySourceConfig,
+    pub delta: IndustrySourceConfig,
+    pub costco: IndustrySourceConfig,
+    pub moderna: IndustrySourceConfig,
+    pub petrobras: IndustrySourceConfig,
+    pub barrick: IndustrySourceConfig,
+    pub siemens: IndustrySourceConfig,
+    pub meta: IndustrySourceConfig,
+    pub spotify: IndustrySourceConfig,
+    pub snowflake: IndustrySourceConfig,
+    pub similarweb: IndustrySourceConfig,
+    pub zoom: IndustrySourceConfig,
+    pub smic: IndustrySourceConfig,
+    pub verizon: IndustrySourceConfig,
+    pub frontline: IndustrySourceConfig,
 }
 
 impl Default for IndustrySourceRegistry {
@@ -91,7 +183,37 @@ impl Default for IndustrySourceRegistry {
                 sha256: EBAY_SHA256.into(),
                 bytes: EBAY_BYTES,
             },
+            delta: IndustrySourceConfig {
+                url: DELTA_URL.into(),
+                sha256: DELTA_SHA256.into(),
+                bytes: DELTA_BYTES,
+            },
+            costco: IndustrySourceConfig {
+                url: COSTCO_URL.into(),
+                sha256: COSTCO_SHA256.into(),
+                bytes: COSTCO_BYTES,
+            },
+            moderna: source(MODERNA_URL, MODERNA_SHA256, MODERNA_BYTES),
+            petrobras: source(PETROBRAS_URL, PETROBRAS_SHA256, PETROBRAS_BYTES),
+            barrick: source(BARRICK_URL, BARRICK_SHA256, BARRICK_BYTES),
+            siemens: source(SIEMENS_URL, SIEMENS_SHA256, SIEMENS_BYTES),
+            meta: source(META_URL, META_SHA256, META_BYTES),
+            spotify: source(SPOTIFY_URL, SPOTIFY_SHA256, SPOTIFY_BYTES),
+            snowflake: source(SNOWFLAKE_URL, SNOWFLAKE_SHA256, SNOWFLAKE_BYTES),
+            similarweb: source(SIMILARWEB_URL, SIMILARWEB_SHA256, SIMILARWEB_BYTES),
+            zoom: source(ZOOM_URL, ZOOM_SHA256, ZOOM_BYTES),
+            smic: source(SMIC_URL, SMIC_SHA256, SMIC_BYTES),
+            verizon: source(VERIZON_URL, VERIZON_SHA256, VERIZON_BYTES),
+            frontline: source(FRONTLINE_URL, FRONTLINE_SHA256, FRONTLINE_BYTES),
         }
+    }
+}
+
+fn source(url: &str, sha256: &str, bytes: usize) -> IndustrySourceConfig {
+    IndustrySourceConfig {
+        url: url.into(),
+        sha256: sha256.into(),
+        bytes,
     }
 }
 
@@ -131,6 +253,20 @@ struct IndustryCases {
     realty_income: IndustryCase,
     ebay: IndustryCase,
     moutai: IndustryCase,
+    delta: IndustryCase,
+    costco: IndustryCase,
+    moderna: IndustryCase,
+    petrobras: IndustryCase,
+    barrick: IndustryCase,
+    siemens: IndustryCase,
+    meta: IndustryCase,
+    spotify: IndustryCase,
+    snowflake: IndustryCase,
+    similarweb: IndustryCase,
+    zoom: IndustryCase,
+    smic: IndustryCase,
+    verizon: IndustryCase,
+    frontline: IndustryCase,
 }
 
 #[derive(Clone, Copy)]
@@ -153,10 +289,49 @@ enum CaseKey {
     RealtyIncome,
     Ebay,
     Moutai,
+    Delta,
+    Costco,
+    Moderna,
+    Petrobras,
+    Barrick,
+    Siemens,
+    Meta,
+    Spotify,
+    Snowflake,
+    Similarweb,
+    Zoom,
+    Smic,
+    Verizon,
+    Frontline,
 }
 
 pub fn is_supported(id: &str) -> bool {
     SUPPORTED_IDS.contains(&id)
+}
+
+/// The immutable issuer ticker expected by the fixed historical case.
+pub fn fixed_symbol(id: &str) -> Option<&'static str> {
+    Some(match definition(id)?.case {
+        CaseKey::PingAn => "2318.HK",
+        CaseKey::Shopify => "SHOP",
+        CaseKey::RealtyIncome => "O",
+        CaseKey::Ebay => "EBAY",
+        CaseKey::Moutai => "600519",
+        CaseKey::Delta => "DAL",
+        CaseKey::Costco => "COST",
+        CaseKey::Moderna => "MRNA",
+        CaseKey::Petrobras => "PBR",
+        CaseKey::Barrick => "GOLD",
+        CaseKey::Siemens => "SIE.DE",
+        CaseKey::Meta => "META",
+        CaseKey::Spotify => "SPOT",
+        CaseKey::Snowflake => "SNOW",
+        CaseKey::Similarweb => "SMWB",
+        CaseKey::Zoom => "ZM",
+        CaseKey::Smic => "0981.HK",
+        CaseKey::Verizon => "VZ",
+        CaseKey::Frontline => "FRO",
+    })
 }
 
 pub fn configure_concept(concept: &mut crate::practice::PracticeConcept) {
@@ -186,8 +361,8 @@ pub fn configure_knowledge(entry: &mut crate::knowledge::KnowledgeEntry) {
 }
 
 fn definition(id: &str) -> Option<MetricDefinition> {
-    let outside_audit = "Management discussion facts on PDF pages 57-58 are outside EY's audit opinion covering the financial statements";
-    let shopify_unaudited = "Issuer earnings release metric; no audit assurance is asserted for MRR, GMV or non-GAAP free cash flow";
+    let outside_audit = "PDF第57–58页管理层讨论数据不在安永对财务报表出具的审计意见覆盖范围内";
+    let shopify_unaudited = "发行人业绩公告指标；不声称MRR、GMV或非GAAP自由现金流获得审计保证";
     Some(match id {
         "book_share_counts" => MetricDefinition {
             case: CaseKey::Moutai,
@@ -239,7 +414,7 @@ fn definition(id: &str) -> Option<MetricDefinition> {
             formula: "偿付能力充足率=实际资本/最低资本",
             inputs: &["available_capital", "required_capital"],
             audited: true,
-            audit_boundary: "Note 49(7), PDF page 336, is inside the audited financial statements covered by EY's opinion",
+            audit_boundary: "PDF第336页附注49(7)位于安永审计意见覆盖的已审计财务报表内",
             value_key: "solvency_adequacy_ratio",
             value_unit: "fraction",
             note: "原书的可用资本/监管资本要求在该披露中映射为实际资本/最低资本，仅适用于 Ping An P&C。",
@@ -294,10 +469,265 @@ fn definition(id: &str) -> Option<MetricDefinition> {
             formula: "面积入住率=已出租面积/可出租总面积",
             inputs: &["leased_area", "lettable_area"],
             audited: false,
-            audit_boundary: "The issuer labels the supplemental operating information unaudited",
+            audit_boundary: "发行人将该补充经营资料标注为未经审计",
             value_key: "occupied_area_ratio",
             value_unit: "fraction",
             note: "使用平方英尺面积比 335,777,818/339,361,416，不使用按物业数量计算的 98.7%。",
+        },
+        "book_airline_casm" => MetricDefinition {
+            case: CaseKey::Delta,
+            metric_entity: "Delta Air Lines consolidated operations, including regional carriers under capacity purchase agreements",
+            formula: "CASM=总运营成本/可用座英里×100美分/美元",
+            inputs: &["total_operating_expense", "available_seat_miles", "reported_casm"],
+            audited: false,
+            audit_boundary: "Form 10-K PDF第42页经营统计；不声称该经营指标获得单独鉴证",
+            value_key: "cost_per_available_seat_mile",
+            value_unit: "US cents per ASM",
+            note: "发行人报告的FY2024总CASM为19.30美分；不是剔除燃油等项目后的非GAAP CASM-Ex。",
+        },
+        "book_airline_load_factor" => MetricDefinition {
+            case: CaseKey::Delta,
+            metric_entity: "Delta Air Lines consolidated operations, including regional carriers under capacity purchase agreements",
+            formula: "客座率=收入客英里(RPM)/可用座英里(ASM)",
+            inputs: &["revenue_passenger_miles", "available_seat_miles", "reported_load_factor"],
+            audited: false,
+            audit_boundary: "Form 10-K PDF第42页经营统计；不声称该经营指标获得单独鉴证",
+            value_key: "passenger_load_factor",
+            value_unit: "fraction",
+            note: "FY2024合并客座率为85%；发行人说明合并口径包括容量购买协议下的区域承运人。",
+        },
+        "book_airline_rasm" => MetricDefinition {
+            case: CaseKey::Delta,
+            metric_entity: "Delta Air Lines consolidated operations, including regional carriers under capacity purchase agreements",
+            formula: "RASM=总运营收入/可用座英里×100美分/美元",
+            inputs: &["total_operating_revenue", "available_seat_miles", "reported_trasm"],
+            audited: false,
+            audit_boundary: "Form 10-K PDF第42页经营统计；不声称该经营指标获得单独鉴证",
+            value_key: "total_revenue_per_available_seat_mile",
+            value_unit: "US cents per ASM",
+            note: "使用发行人报告的总运营收入与ASM复算21.374%左右，并与表内展示TRASM 21.37美分交叉核对；不是仅含旅客收入的PRASM。",
+        },
+        "book_bank_cet1_ratio" => MetricDefinition {
+            case: CaseKey::PingAn,
+            metric_entity: "Ping An Bank",
+            formula: "CET1资本充足率=核心一级资本/风险加权资产；本案例采用发行人报告值",
+            inputs: &["core_tier_1_capital_adequacy_ratio"],
+            audited: false,
+            audit_boundary: "PDF第4页五年经营摘要；不同于偿付能力资本所引用的已审计财务报表附注",
+            value_key: "cet1_capital_adequacy_ratio",
+            value_unit: "fraction",
+            note: "Ping An Bank FY2024核心一级资本充足率为9.12%；不把集团或保险子公司的资本口径混入银行指标。",
+        },
+        "book_bank_provision_coverage" => MetricDefinition {
+            case: CaseKey::PingAn,
+            metric_entity: "Ping An Bank",
+            formula: "拨备覆盖率=贷款减值准备/不良贷款；本案例采用发行人报告值",
+            inputs: &["provision_coverage_ratio"],
+            audited: false,
+            audit_boundary: "PDF第4页五年经营摘要；不同于偿付能力资本所引用的已审计财务报表附注",
+            value_key: "provision_coverage_ratio",
+            value_unit: "fraction",
+            note: "Ping An Bank FY2024拨备覆盖率为250.71%。",
+        },
+        "book_insurance_combined_ratio" => MetricDefinition {
+            case: CaseKey::PingAn,
+            metric_entity: "Ping An Property & Casualty Insurance Company of China, Ltd.",
+            formula: "综合成本率=赔付率+费用率；本案例采用发行人报告值",
+            inputs: &["property_casualty_combined_ratio"],
+            audited: false,
+            audit_boundary: "PDF第4页五年经营摘要；不声称该经营比率获得单独审计保证",
+            value_key: "combined_ratio",
+            value_unit: "fraction",
+            note: "FY2024财产险综合成本率为98.3%；不是寿险或集团合并口径。",
+        },
+        "book_insurance_nbv" => MetricDefinition {
+            case: CaseKey::PingAn,
+            metric_entity: "Ping An Life and Health insurance business",
+            formula: "NBV=发行人精算假设下报告期新业务价值；本案例采用发行人报告值",
+            inputs: &["life_health_new_business_value"],
+            audited: false,
+            audit_boundary: "PDF第4页五年经营摘要；发行人注明2024年假设变更且本案例不将该指标视为已审计GAAP金额",
+            value_key: "new_business_value",
+            value_unit: "CNY millions",
+            note: "采用发行人按2024年更新后的长期投资回报率和风险贴现率披露的28,534百万元；不与同页为同比可比而按2023年假设重算的40,024百万元混用。",
+        },
+        "book_reit_affo" => MetricDefinition {
+            case: CaseKey::RealtyIncome,
+            metric_entity: "Realty Income Corporation common stockholders",
+            formula: "AFFO=Normalized FFO加减发行人列示的经常性和非现金调整；本案例采用发行人报告值",
+            inputs: &["affo_available_to_common_stockholders"],
+            audited: false,
+            audit_boundary: "发行人将补充AFFO调节表标注为未经审计",
+            value_key: "affo_available_to_common_stockholders",
+            value_unit: "USD thousands",
+            note: "FY2024归属于普通股股东的AFFO为3,621,437千美元；不使用稀释后AFFO或每股AFFO。",
+        },
+        "book_reit_cap_rate" => MetricDefinition {
+            case: CaseKey::RealtyIncome,
+            metric_entity: "Realty Income occupied properties disposed during FY2024",
+            formula: "净现金资本化率=年化当月合同现金NOI/净出售所得；本案例采用发行人报告值",
+            inputs: &["disposition_net_cash_cap_rate"],
+            audited: false,
+            audit_boundary: "发行人在未经审计补充资料中将净现金资本化率列为补充经营指标",
+            value_key: "net_cash_capitalization_rate",
+            value_unit: "fraction",
+            note: "7.2%仅对应FY2024已出租处置物业，不代表期末整个组合、收购或市场资本化率。",
+        },
+        "book_reit_ffo" => MetricDefinition {
+            case: CaseKey::RealtyIncome,
+            metric_entity: "Realty Income Corporation common stockholders",
+            formula: "FFO=普通股股东净利润+房地产折旧摊销+减值-房地产出售收益等NAREIT调整；本案例采用发行人报告值",
+            inputs: &["ffo_available_to_common_stockholders"],
+            audited: false,
+            audit_boundary: "发行人将补充FFO调节表标注为未经审计",
+            value_key: "ffo_available_to_common_stockholders",
+            value_unit: "USD thousands",
+            note: "FY2024归属于普通股股东的FFO为3,467,659千美元；不与Normalized FFO、稀释后FFO或每股FFO混用。",
+        },
+        "book_retail_same_store_sales_growth" => MetricDefinition {
+            case: CaseKey::Costco,
+            metric_entity: "Costco Wholesale Corporation total company comparable locations",
+            formula: "同店销售增长=可比门店本期销售/上年同期销售-1；本案例采用发行人报告值",
+            inputs: &["total_company_comparable_sales_growth"],
+            audited: false,
+            audit_boundary: "发行人业绩公告补充经营指标；不声称获得审计保证",
+            value_key: "same_store_sales_growth",
+            value_unit: "fraction",
+            note: "FY2024 52周Total Company可比销售增长为5.3%，对应可比地点与可比零售周；未采用剔除汽油价格和汇率影响后的5.9%调整值。",
+        },
+        "book_biopharma_cash_runway" => MetricDefinition {
+            case: CaseKey::Moderna,
+            metric_entity: "Moderna, Inc.及合并子公司",
+            formula: "现金跑道月数=期末现金、现金等价物及投资/(年度经营现金净流出/12)",
+            inputs: &["cash_and_investments", "annual_operating_cash_burn"],
+            audited: true,
+            audit_boundary: "年报PDF物理第122–123页流动性分析引用经审计财务报表金额；跑道月数为本案例推导值",
+            value_key: "cash_runway_months",
+            value_unit: "months",
+            note: "以2024年实际经营现金净流出作静态月均燃烧率；未预测收入、资本开支或2025年降本，因此不是管理层持续经营预测。",
+        },
+        "book_energy_lifting_cost" => MetricDefinition {
+            case: CaseKey::Petrobras,
+            metric_entity: "Petróleo Brasileiro S.A.巴西勘探与生产业务",
+            formula: "Lifting Cost=发行人报告的每桶油当量开采成本（不含政府分成及租赁）",
+            inputs: &["reported_lifting_cost"], audited: false,
+            audit_boundary: "管理报告PDF物理第78页经营指标；不声称获得财务报表审计保证",
+            value_key: "lifting_cost", value_unit: "USD per boe",
+            note: "2024年巴西口径为6.05美元/boe，明确不含政府分成及租赁，不能与含租赁或全成本口径直接比较。",
+        },
+        "book_energy_reserve_life" => MetricDefinition {
+            case: CaseKey::Petrobras,
+            metric_entity: "Petróleo Brasileiro S.A.按SEC口径的油气业务",
+            formula: "储量寿命=已探明储量/年度产量；本案例采用发行人报告R/P",
+            inputs: &["reported_reserve_life"], audited: false,
+            audit_boundary: "管理报告PDF物理第79页经营指标；发行人称至少90%的SEC已探明储量接受独立评价",
+            value_key: "reserve_life", value_unit: "years",
+            note: "13.2年对应2024-12-31按SEC口径的已探明储量与产量关系，不是所有资源量或预测寿命。",
+        },
+        "book_gold_aisc" => MetricDefinition {
+            case: CaseKey::Barrick,
+            metric_entity: "Barrick Gold Corporation应占黄金业务",
+            formula: "AISC=发行人报告的应占黄金全部维持成本/售出盎司",
+            inputs: &["reported_gold_aisc"], audited: false,
+            audit_boundary: "年度报告PDF物理第30页非GAAP经营指标；不声称获得独立审计保证",
+            value_key: "gold_aisc", value_unit: "USD per ounce",
+            note: "2024年1,350美元/盎司是Barrick应占黄金AISC，定义及调节以发行人非GAAP注释为准。",
+        },
+        "book_industrial_backlog" => MetricDefinition {
+            case: CaseKey::Siemens, metric_entity: "Siemens AG持续经营业务",
+            formula: "Backlog=报告期末尚未转化为收入的订单积压；本案例采用发行人报告值",
+            inputs: &["order_backlog"], audited: false,
+            audit_boundary: "年度报告PDF物理第15页管理层经营指标；不声称订单积压获得单独审计保证",
+            value_key: "order_backlog", value_unit: "EUR billions",
+            note: "截至2024-09-30订单积压1130亿欧元；不是当年新订单，也不是合同负债。",
+        },
+        "book_industrial_book_to_bill" => MetricDefinition {
+            case: CaseKey::Siemens, metric_entity: "Siemens AG持续经营业务",
+            formula: "Book-to-Bill=订单/收入",
+            inputs: &["orders", "revenue"], audited: false,
+            audit_boundary: "年度报告PDF物理第15页管理层经营指标；订单不等同已审计收入",
+            value_key: "book_to_bill", value_unit: "ratio",
+            note: "FY2024订单840.56亿欧元除以收入约759.30亿欧元，复算约1.107，与发行人展示1.11一致。",
+        },
+        "book_internet_arpu" => MetricDefinition {
+            case: CaseKey::Spotify, metric_entity: "Spotify Premium用户",
+            formula: "Premium ARPU=发行人披露的Q3每用户平均收入",
+            inputs: &["premium_arpu"], audited: false,
+            audit_boundary: "Q3 2020股东信第4页经营指标，相关中期财务报表未经审计",
+            value_key: "premium_arpu", value_unit: "EUR per Premium user per month",
+            note: "4.19欧元是Q3 2020 Premium ARPU；发行人说明同比下降10%，且汇率及产品、地区组合会影响口径。它不是广告支持用户收入，也不是季度总额。",
+        },
+        "book_internet_dau_mau" => MetricDefinition {
+            case: CaseKey::Meta, metric_entity: "Meta Family of Apps全球用户",
+            formula: "DAP/MAP=每日活跃人数/月活跃人数",
+            inputs: &["family_dap", "family_map"], audited: false,
+            audit_boundary: "Q3 2023业绩演示PDF物理第10–11页估计用户指标；不声称获得审计保证",
+            value_key: "daily_monthly_active_ratio", value_unit: "fraction",
+            note: "2023年9月Family DAP 31.4亿、MAP 39.6亿；发行人展示比率为取整后的79%。",
+        },
+        "book_saas_cac_payback" => MetricDefinition {
+            case: CaseKey::Similarweb, metric_entity: "Similarweb Ltd.客户获取活动",
+            formula: "CAC回收期区间=发行人披露的当前21–22个月；分别保留下限与上限",
+            inputs: &["cac_payback_lower_bound", "cac_payback_upper_bound"], audited: false,
+            audit_boundary: "Q3 2024投资者演示PDF物理第22页非GAAP推导区间；不声称获得审计保证",
+            value_key: "cac_payback_lower_bound", value_unit: "months lower bound",
+            note: "发行人披露当前CAC回收期为21–22个月；结果同时保留下限与上限，不把21个月、22个月或区间中点说成精确回收期。",
+        },
+        "book_saas_churn" => MetricDefinition {
+            case: CaseKey::Zoom, metric_entity: "Zoom Video Communications, Inc. Online客户",
+            formula: "月均流失率=发行人报告Online Average Monthly Churn",
+            inputs: &["online_monthly_churn"], audited: false,
+            audit_boundary: "FY2025 Q1准备稿PDF物理第5页经营指标；不声称获得审计保证",
+            value_key: "monthly_customer_churn", value_unit: "fraction per month",
+            note: "3.2%仅对应Zoom Online自助客户；报告说明收紧未付款宽限期使部分流失提前。",
+        },
+        "book_saas_nrr" => MetricDefinition {
+            case: CaseKey::Snowflake, metric_entity: "Snowflake使用容量合同的客户群组",
+            formula: "NRR=同一客户群第二年产品收入/第一年产品收入；本案例采用发行人报告值",
+            inputs: &["net_revenue_retention"], audited: false,
+            audit_boundary: "FY2024 Q4投资者演示PDF物理第21页经营指标；不声称获得审计保证",
+            value_key: "net_revenue_retention", value_unit: "fraction",
+            note: "FY2024 Q4 NRR为131%，基于Snowflake容量合同客户群及其披露的两年测量定义。",
+        },
+        "book_semiconductor_asp" => MetricDefinition {
+            case: CaseKey::Smic, metric_entity: "中芯国际晶圆代工业务",
+            formula: "隐含每片晶圆收入=总收入×晶圆服务收入占比/8英寸标准逻辑等效晶圆出货量",
+            inputs: &["revenue", "wafer_revenue_share", "wafer_shipments"], audited: false,
+            audit_boundary: "Q4 2024业绩公告PDF物理第5页未经审计季度经营数据",
+            value_key: "implied_revenue_per_equivalent_wafer", value_unit: "USD per 8-inch-equivalent wafer",
+            note: "这是按披露收入结构推导的等效晶圆平均收入，不是单颗芯片售价；产品组合与8/12英寸换算会影响结果。",
+        },
+        "book_semiconductor_utilization" => MetricDefinition {
+            case: CaseKey::Smic, metric_entity: "中芯国际全部晶圆厂",
+            formula: "产能利用率=总晶圆产出/估算季度总产能；本案例采用发行人报告值",
+            inputs: &["utilization_rate"], audited: false,
+            audit_boundary: "Q4 2024业绩公告PDF物理第5页未经审计经营指标",
+            value_key: "capacity_utilization", value_unit: "fraction",
+            note: "Q4 2024利用率85.5%，分母是发行人估算季度总产能，不是期末月产能乘三。",
+        },
+        "book_shipping_tce" => MetricDefinition {
+            case: CaseKey::Frontline, metric_entity: "Frontline plc VLCC现货船队",
+            formula: "TCE=航次收入扣航次费用后/可用营运天数；本案例采用发行人报告日均值",
+            inputs: &["vlcc_spot_tce"], audited: false,
+            audit_boundary: "Q2 2024投资者演示经营指标，发行人明确标注为非IFRS",
+            value_key: "vlcc_spot_tce", value_unit: "USD per day",
+            note: "49,600美元/天是Q2 2024 VLCC现货TCE；不代表Suezmax、LR2/Aframax或未来已锁定费率。",
+        },
+        "book_telecom_arpu" => MetricDefinition {
+            case: CaseKey::Verizon, metric_entity: "Verizon Consumer无线零售预付费连接",
+            formula: "ARPU=预付费服务收入/平均预付费连接数；本案例采用发行人报告值",
+            inputs: &["prepaid_arpu"], audited: false,
+            audit_boundary: "Q1 2024补充经营统计PDF物理第7页，未经审计",
+            value_key: "prepaid_arpu", value_unit: "USD per connection per month",
+            note: "31.17美元是Consumer预付费每连接ARPU，包含SafeLink；不是后付费每账户ARPA。",
+        },
+        "book_telecom_churn" => MetricDefinition {
+            case: CaseKey::Verizon, metric_entity: "Verizon Consumer无线零售预付费连接",
+            formula: "月流失率=当期断开连接数/平均连接数；本案例采用发行人报告值",
+            inputs: &["prepaid_churn"], audited: false,
+            audit_boundary: "Q1 2024补充经营统计PDF物理第6页，未经审计",
+            value_key: "prepaid_monthly_churn", value_unit: "fraction per month",
+            note: "4.26%是Consumer预付费连接月流失率，包含SafeLink；与后付费手机流失率口径不同。",
         },
         _ => return None,
     })
@@ -322,6 +752,50 @@ fn validate_cases(cases: &IndustryCases) -> Result<(), String> {
         (
             &cases.moutai,
             (MOUTAI_URL, MOUTAI_SHA256, MOUTAI_BYTES, "600519"),
+        ),
+        (&cases.delta, (DELTA_URL, DELTA_SHA256, DELTA_BYTES, "DAL")),
+        (
+            &cases.costco,
+            (COSTCO_URL, COSTCO_SHA256, COSTCO_BYTES, "COST"),
+        ),
+        (
+            &cases.moderna,
+            (MODERNA_URL, MODERNA_SHA256, MODERNA_BYTES, "MRNA"),
+        ),
+        (
+            &cases.petrobras,
+            (PETROBRAS_URL, PETROBRAS_SHA256, PETROBRAS_BYTES, "PBR"),
+        ),
+        (
+            &cases.barrick,
+            (BARRICK_URL, BARRICK_SHA256, BARRICK_BYTES, "GOLD"),
+        ),
+        (
+            &cases.siemens,
+            (SIEMENS_URL, SIEMENS_SHA256, SIEMENS_BYTES, "SIE.DE"),
+        ),
+        (&cases.meta, (META_URL, META_SHA256, META_BYTES, "META")),
+        (
+            &cases.spotify,
+            (SPOTIFY_URL, SPOTIFY_SHA256, SPOTIFY_BYTES, "SPOT"),
+        ),
+        (
+            &cases.snowflake,
+            (SNOWFLAKE_URL, SNOWFLAKE_SHA256, SNOWFLAKE_BYTES, "SNOW"),
+        ),
+        (
+            &cases.similarweb,
+            (SIMILARWEB_URL, SIMILARWEB_SHA256, SIMILARWEB_BYTES, "SMWB"),
+        ),
+        (&cases.zoom, (ZOOM_URL, ZOOM_SHA256, ZOOM_BYTES, "ZM")),
+        (&cases.smic, (SMIC_URL, SMIC_SHA256, SMIC_BYTES, "0981.HK")),
+        (
+            &cases.verizon,
+            (VERIZON_URL, VERIZON_SHA256, VERIZON_BYTES, "VZ"),
+        ),
+        (
+            &cases.frontline,
+            (FRONTLINE_URL, FRONTLINE_SHA256, FRONTLINE_BYTES, "FRO"),
         ),
         (&cases.ebay, (EBAY_URL, EBAY_SHA256, EBAY_BYTES, "EBAY")),
         (
@@ -383,6 +857,20 @@ fn select_case(cases: &IndustryCases, key: CaseKey) -> &IndustryCase {
         CaseKey::RealtyIncome => &cases.realty_income,
         CaseKey::Ebay => &cases.ebay,
         CaseKey::Moutai => &cases.moutai,
+        CaseKey::Delta => &cases.delta,
+        CaseKey::Costco => &cases.costco,
+        CaseKey::Moderna => &cases.moderna,
+        CaseKey::Petrobras => &cases.petrobras,
+        CaseKey::Barrick => &cases.barrick,
+        CaseKey::Siemens => &cases.siemens,
+        CaseKey::Meta => &cases.meta,
+        CaseKey::Spotify => &cases.spotify,
+        CaseKey::Snowflake => &cases.snowflake,
+        CaseKey::Similarweb => &cases.similarweb,
+        CaseKey::Zoom => &cases.zoom,
+        CaseKey::Smic => &cases.smic,
+        CaseKey::Verizon => &cases.verizon,
+        CaseKey::Frontline => &cases.frontline,
     }
 }
 
@@ -393,6 +881,20 @@ fn select_source(registry: &IndustrySourceRegistry, key: CaseKey) -> &IndustrySo
         CaseKey::RealtyIncome => &registry.realty_income,
         CaseKey::Ebay => &registry.ebay,
         CaseKey::Moutai => &registry.moutai,
+        CaseKey::Delta => &registry.delta,
+        CaseKey::Costco => &registry.costco,
+        CaseKey::Moderna => &registry.moderna,
+        CaseKey::Petrobras => &registry.petrobras,
+        CaseKey::Barrick => &registry.barrick,
+        CaseKey::Siemens => &registry.siemens,
+        CaseKey::Meta => &registry.meta,
+        CaseKey::Spotify => &registry.spotify,
+        CaseKey::Snowflake => &registry.snowflake,
+        CaseKey::Similarweb => &registry.similarweb,
+        CaseKey::Zoom => &registry.zoom,
+        CaseKey::Smic => &registry.smic,
+        CaseKey::Verizon => &registry.verizon,
+        CaseKey::Frontline => &registry.frontline,
     }
 }
 
@@ -496,6 +998,44 @@ fn calculate(id: &str, case: &IndustryCase) -> Result<f64, String> {
         "book_platform_gmv" => n("gross_merchandise_value"),
         "book_platform_take_rate" => ratio(n("platform_revenue")?, n("gross_merchandise_value")?),
         "book_reit_occupancy" => ratio(n("leased_area")?, n("lettable_area")?),
+        "book_airline_casm" => {
+            Ok(ratio(n("total_operating_expense")?, n("available_seat_miles")?)? * 100.0)
+        }
+        "book_airline_load_factor" => {
+            ratio(n("revenue_passenger_miles")?, n("available_seat_miles")?)
+        }
+        "book_airline_rasm" => {
+            Ok(ratio(n("total_operating_revenue")?, n("available_seat_miles")?)? * 100.0)
+        }
+        "book_bank_cet1_ratio" => n("core_tier_1_capital_adequacy_ratio"),
+        "book_bank_provision_coverage" => n("provision_coverage_ratio"),
+        "book_insurance_combined_ratio" => n("property_casualty_combined_ratio"),
+        "book_insurance_nbv" => n("life_health_new_business_value"),
+        "book_reit_affo" => n("affo_available_to_common_stockholders"),
+        "book_reit_cap_rate" => n("disposition_net_cash_cap_rate"),
+        "book_reit_ffo" => n("ffo_available_to_common_stockholders"),
+        "book_retail_same_store_sales_growth" => n("total_company_comparable_sales_growth"),
+        "book_biopharma_cash_runway" => {
+            Ok(ratio(n("cash_and_investments")?, n("annual_operating_cash_burn")?)? * 12.0)
+        }
+        "book_energy_lifting_cost" => n("reported_lifting_cost"),
+        "book_energy_reserve_life" => n("reported_reserve_life"),
+        "book_gold_aisc" => n("reported_gold_aisc"),
+        "book_industrial_backlog" => n("order_backlog"),
+        "book_industrial_book_to_bill" => ratio(n("orders")?, n("revenue")?),
+        "book_internet_arpu" => n("premium_arpu"),
+        "book_internet_dau_mau" => ratio(n("family_dap")?, n("family_map")?),
+        "book_saas_cac_payback" => n("cac_payback_lower_bound"),
+        "book_saas_churn" => n("online_monthly_churn"),
+        "book_saas_nrr" => n("net_revenue_retention"),
+        "book_semiconductor_asp" => Ok(ratio(
+            n("revenue")? * n("wafer_revenue_share")? * 1_000.0,
+            n("wafer_shipments")?,
+        )?),
+        "book_semiconductor_utilization" => n("utilization_rate"),
+        "book_shipping_tce" => n("vlcc_spot_tce"),
+        "book_telecom_arpu" => n("prepaid_arpu"),
+        "book_telecom_churn" => n("prepaid_churn"),
         _ => Err(format!("unsupported industry case concept: {id}")),
     }
 }
@@ -540,6 +1080,58 @@ fn formula_symbol_mapping(id: &str) -> Value {
             "leased_area": "leased_area (issuer label: occupied square feet)",
             "lettable_area": "lettable_area (issuer label: total portfolio square feet)"
         }),
+        "book_airline_casm" => {
+            json!({"total_operating_expense": "total_operating_expense", "available_seat_miles": "available_seat_miles"})
+        }
+        "book_airline_load_factor" => {
+            json!({"revenue_passenger_miles": "revenue_passenger_miles", "available_seat_miles": "available_seat_miles"})
+        }
+        "book_airline_rasm" => {
+            json!({"total_operating_revenue": "total_operating_revenue", "available_seat_miles": "available_seat_miles"})
+        }
+        "book_bank_cet1_ratio" => {
+            json!({"reported_cet1_ratio": "core_tier_1_capital_adequacy_ratio"})
+        }
+        "book_bank_provision_coverage" => {
+            json!({"reported_provision_coverage": "provision_coverage_ratio"})
+        }
+        "book_insurance_combined_ratio" => {
+            json!({"reported_combined_ratio": "property_casualty_combined_ratio"})
+        }
+        "book_insurance_nbv" => json!({"reported_nbv": "life_health_new_business_value"}),
+        "book_reit_affo" => json!({"reported_affo": "affo_available_to_common_stockholders"}),
+        "book_reit_cap_rate" => json!({"reported_cap_rate": "disposition_net_cash_cap_rate"}),
+        "book_reit_ffo" => json!({"reported_ffo": "ffo_available_to_common_stockholders"}),
+        "book_retail_same_store_sales_growth" => {
+            json!({"reported_same_store_sales_growth": "total_company_comparable_sales_growth"})
+        }
+        "book_biopharma_cash_runway" => {
+            json!({"cash_balance": "cash_and_investments", "monthly_cash_burn": "annual_operating_cash_burn / 12"})
+        }
+        "book_energy_lifting_cost" => json!({"reported_lifting_cost": "reported_lifting_cost"}),
+        "book_energy_reserve_life" => json!({"reported_reserve_life": "reported_reserve_life"}),
+        "book_gold_aisc" => json!({"reported_gold_aisc": "reported_gold_aisc"}),
+        "book_industrial_backlog" => json!({"reported_order_backlog": "order_backlog"}),
+        "book_industrial_book_to_bill" => {
+            json!({"new_orders": "orders", "recognized_revenue": "revenue"})
+        }
+        "book_internet_arpu" => json!({"reported_premium_arpu": "premium_arpu"}),
+        "book_internet_dau_mau" => {
+            json!({"daily_active_people": "family_dap", "monthly_active_people": "family_map"})
+        }
+        "book_saas_cac_payback" => json!({
+            "reported_range_lower_bound": "cac_payback_lower_bound",
+            "reported_range_upper_bound": "cac_payback_upper_bound"
+        }),
+        "book_saas_churn" => json!({"reported_online_monthly_churn": "online_monthly_churn"}),
+        "book_saas_nrr" => json!({"reported_nrr": "net_revenue_retention"}),
+        "book_semiconductor_asp" => {
+            json!({"wafer_revenue": "revenue * wafer_revenue_share", "equivalent_wafer_shipments": "wafer_shipments"})
+        }
+        "book_semiconductor_utilization" => json!({"reported_utilization": "utilization_rate"}),
+        "book_shipping_tce" => json!({"reported_vlcc_spot_tce": "vlcc_spot_tce"}),
+        "book_telecom_arpu" => json!({"reported_prepaid_arpu": "prepaid_arpu"}),
+        "book_telecom_churn" => json!({"reported_prepaid_churn": "prepaid_churn"}),
         _ => json!({}),
     }
 }
@@ -585,6 +1177,13 @@ pub async fn evaluate(
             "note": format!("Calculated from reviewed reported facts using {}", definition.formula)
         }),
     );
+    let mut values = json!({definition.value_key: value});
+    let mut units = json!({definition.value_key: definition.value_unit});
+    if id == "book_saas_cac_payback" {
+        let upper = case.facts["cac_payback_upper_bound"].value;
+        values["cac_payback_upper_bound"] = json!(upper);
+        units["cac_payback_upper_bound"] = json!("months upper bound");
+    }
     pdf_pages.sort_unstable();
     pdf_pages.dedup();
     Ok(json!({
@@ -593,8 +1192,8 @@ pub async fn evaluate(
         "provenance": "verified_original_issuer_disclosure",
         "status": "computed",
         "reason": Value::Null,
-        "values": {definition.value_key: value},
-        "units": {definition.value_key: definition.value_unit},
+        "values": values,
+        "units": units,
         "series": [],
         "notes": [
             "这是固定发行人与固定报告期的历史披露案例，不是当前行情、全市场行业数据库或任意股票查询。",
@@ -666,6 +1265,20 @@ mod tests {
             &mut registry.realty_income,
             &mut registry.ebay,
             &mut registry.moutai,
+            &mut registry.delta,
+            &mut registry.costco,
+            &mut registry.moderna,
+            &mut registry.petrobras,
+            &mut registry.barrick,
+            &mut registry.siemens,
+            &mut registry.meta,
+            &mut registry.spotify,
+            &mut registry.snowflake,
+            &mut registry.similarweb,
+            &mut registry.zoom,
+            &mut registry.smic,
+            &mut registry.verizon,
+            &mut registry.frontline,
         ] {
             let bytes = format!("%PDF fixture {}", source.url).into_bytes();
             source.bytes = bytes.len();
@@ -676,6 +1289,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::approx_constant)] // 3.14 is Meta's reported DAP literal, not an approximation of PI.
     async fn supported_cases_match_independent_disclosure_values() {
         let root = std::env::temp_dir().join(format!("axiom-industry-{}", uuid::Uuid::new_v4()));
         let registry = seeded_registry(&root);
@@ -723,6 +1337,85 @@ mod tests {
                 "occupied_area_ratio",
                 335_777_818.0 / 339_361_416.0,
             ),
+            (
+                "book_airline_casm",
+                "cost_per_available_seat_mile",
+                55_648.0 / 288_394.0 * 100.0,
+            ),
+            (
+                "book_airline_load_factor",
+                "passenger_load_factor",
+                246_145.0 / 288_394.0,
+            ),
+            (
+                "book_airline_rasm",
+                "total_revenue_per_available_seat_mile",
+                61_643.0 / 288_394.0 * 100.0,
+            ),
+            (
+                "book_bank_cet1_ratio",
+                "cet1_capital_adequacy_ratio",
+                0.0912,
+            ),
+            (
+                "book_bank_provision_coverage",
+                "provision_coverage_ratio",
+                2.5071,
+            ),
+            ("book_insurance_combined_ratio", "combined_ratio", 0.983),
+            ("book_insurance_nbv", "new_business_value", 28_534.0),
+            (
+                "book_reit_affo",
+                "affo_available_to_common_stockholders",
+                3_621_437.0,
+            ),
+            ("book_reit_cap_rate", "net_cash_capitalization_rate", 0.072),
+            (
+                "book_reit_ffo",
+                "ffo_available_to_common_stockholders",
+                3_467_659.0,
+            ),
+            (
+                "book_retail_same_store_sales_growth",
+                "same_store_sales_growth",
+                0.053,
+            ),
+            (
+                "book_biopharma_cash_runway",
+                "cash_runway_months",
+                9_519.0 / 3_004.0 * 12.0,
+            ),
+            ("book_energy_lifting_cost", "lifting_cost", 6.05),
+            ("book_energy_reserve_life", "reserve_life", 13.2),
+            ("book_gold_aisc", "gold_aisc", 1_350.0),
+            ("book_industrial_backlog", "order_backlog", 113.0),
+            (
+                "book_industrial_book_to_bill",
+                "book_to_bill",
+                84_056.0 / 75_930.0,
+            ),
+            ("book_internet_arpu", "premium_arpu", 4.19),
+            (
+                "book_internet_dau_mau",
+                "daily_monthly_active_ratio",
+                3.14 / 3.96,
+            ),
+            ("book_saas_cac_payback", "cac_payback_lower_bound", 21.0),
+            ("book_saas_churn", "monthly_customer_churn", 0.032),
+            ("book_saas_nrr", "net_revenue_retention", 1.31),
+            (
+                "book_semiconductor_asp",
+                "implied_revenue_per_equivalent_wafer",
+                2_207_281.0 * 0.925 * 1_000.0 / 1_991_761.0,
+            ),
+            (
+                "book_semiconductor_utilization",
+                "capacity_utilization",
+                0.855,
+            ),
+            ("book_shipping_tce", "vlcc_spot_tce", 49_600.0),
+            ("book_telecom_arpu", "prepaid_arpu", 31.17),
+            ("book_telecom_churn", "prepaid_monthly_churn", 0.0426),
         ];
         for (id, key, literal) in expected {
             let result = evaluate(id, &root, &registry).await.unwrap();
@@ -752,12 +1445,7 @@ mod tests {
         );
         assert_eq!(take_rate["industry_case"]["issuer"]["ticker"], "EBAY");
         assert_eq!(take_rate["industry_case"]["pdf_pages"], json!([44]));
-        assert_eq!(
-            evaluate("book_reit_ffo", &root, &registry)
-                .await
-                .unwrap_err(),
-            "unsupported industry case concept: book_reit_ffo"
-        );
+        assert!(evaluate("not_a_concept", &root, &registry).await.is_err());
         let _ = std::fs::remove_dir_all(root);
     }
 
@@ -795,7 +1483,7 @@ mod tests {
         assert!(SUPPORTED_IDS
             .iter()
             .all(|id| is_supported(id) && definition(id).is_some()));
-        assert!(!is_supported("book_reit_ffo"));
+        assert!(is_supported("book_gold_aisc"));
         assert!(ratio(1.0, 0.0).is_err());
         assert!(calculate("unknown", &cases().unwrap().ping_an).is_err());
 

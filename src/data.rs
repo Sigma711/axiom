@@ -14,10 +14,14 @@ use async_trait::async_trait;
 use chrono::{DateTime, Datelike, Duration, NaiveDate, TimeZone, Timelike, Utc, Weekday};
 use rand::{Rng, SeedableRng};
 use rand_distr::{Distribution, Normal};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufReader, Write};
 use std::path::PathBuf;
+
+const YAHOO_CHART_PRIMARY: &str = "https://query1.finance.yahoo.com/v8/finance/chart";
+const YAHOO_CHART_FALLBACK: &str = "https://query2.finance.yahoo.com/v8/finance/chart";
+const YAHOO_RELAY_DEFAULT: &str = "https://sigma711.top/axiom/api/provider/yahoo-chart";
 
 /// 数据源 trait —— sync 接口,用于回测
 pub trait DataFeed: Send + Sync {
@@ -325,6 +329,7 @@ pub struct StockAdjustmentEvidence {
     pub provider: &'static str,
     pub endpoint: String,
     pub fetched_at: DateTime<Utc>,
+    pub retrieval: &'static str,
     pub scope: &'static str,
     pub event: StockSplitEvent,
     pub issuer_confirmation_url: &'static str,
@@ -778,18 +783,170 @@ fn parse_binance_depth_snapshot(raw: &serde_json::Value) -> Result<BinanceDepthS
 pub struct HttpFeed {
     pub base_url: String,
     pub us_stock_adjustment_url: String,
+    pub us_stock_adjustment_fallback_url: String,
+    pub us_stock_relay_url: Option<String>,
     pub bitcoin_esplora_url: String,
     pub bitcoin_mempool_url: String,
     pub csv: CsvFeed,
     client: reqwest::Client,
 }
 
+struct YahooRequestFailure {
+    error: anyhow::Error,
+    retryable: bool,
+}
+
+async fn request_yahoo_chart_json(
+    client: &reqwest::Client,
+    endpoint: &str,
+    query: &[(&str, String)],
+) -> std::result::Result<(serde_json::Value, String), YahooRequestFailure> {
+    let response = client
+        .get(endpoint)
+        .header(
+            reqwest::header::USER_AGENT,
+            "AXIOM educational market reader/1.0",
+        )
+        .query(query)
+        .timeout(std::time::Duration::from_secs(3))
+        .send()
+        .await
+        .map_err(|error| YahooRequestFailure {
+            error: anyhow::Error::new(error).context("Yahoo chart request failed"),
+            retryable: true,
+        })?;
+    let selected_endpoint = response.url().to_string();
+    let status = response.status();
+    if !status.is_success() {
+        return Err(YahooRequestFailure {
+            error: anyhow::anyhow!("Yahoo chart returned HTTP {status}"),
+            // A 429 is host-specific rate limiting: immediately try the
+            // alternate host instead of amplifying it with a tight retry.
+            retryable: status.is_server_error(),
+        });
+    }
+    let raw = response.json().await.map_err(|error| YahooRequestFailure {
+        error: anyhow::Error::new(error).context("invalid Yahoo chart JSON"),
+        retryable: false,
+    })?;
+    Ok((raw, selected_endpoint))
+}
+
+#[derive(Deserialize)]
+struct YahooRelayEnvelope {
+    provider: String,
+    retrieval: String,
+    source_url: String,
+    payload: serde_json::Value,
+}
+
+fn validated_yahoo_relay_url(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        return None;
+    }
+    let parsed = reqwest::Url::parse(value).ok()?;
+    let loopback_http = parsed.scheme() == "http"
+        && matches!(parsed.host_str(), Some("127.0.0.1" | "localhost" | "::1"));
+    (parsed.username().is_empty()
+        && parsed.password().is_none()
+        && parsed.fragment().is_none()
+        && (parsed.scheme() == "https" || loopback_http))
+        .then(|| parsed.to_string())
+}
+
+fn configured_yahoo_relay_url() -> Option<String> {
+    match std::env::var("AXIOM_YAHOO_RELAY_URL") {
+        Ok(value) => validated_yahoo_relay_url(&value),
+        Err(_) => Some(YAHOO_RELAY_DEFAULT.to_owned()),
+    }
+}
+
+fn validate_yahoo_relay_source_url(
+    source_url: &str,
+    symbol: &str,
+    period1: &str,
+    period2: &str,
+) -> Result<String> {
+    let parsed = reqwest::Url::parse(source_url).context("relay source URL is invalid")?;
+    let expected_path = format!("/v8/finance/chart/{}", symbol.replace('.', "-"));
+    anyhow::ensure!(
+        parsed.scheme() == "https"
+            && parsed.host_str() == Some("query2.finance.yahoo.com")
+            && parsed.port().is_none()
+            && parsed.username().is_empty()
+            && parsed.password().is_none()
+            && parsed.path() == expected_path
+            && parsed.fragment().is_none(),
+        "relay source must be the exact restricted Yahoo query2 chart endpoint"
+    );
+    let pairs: Vec<_> = parsed.query_pairs().collect();
+    anyhow::ensure!(
+        pairs.len() == 5,
+        "relay source query must contain exactly five fields"
+    );
+    let mut query = std::collections::HashMap::new();
+    for (key, value) in pairs {
+        anyhow::ensure!(
+            query.insert(key.into_owned(), value.into_owned()).is_none(),
+            "relay source query fields must be unique"
+        );
+    }
+    anyhow::ensure!(
+        query.get("period1").map(String::as_str) == Some(period1)
+            && query.get("period2").map(String::as_str) == Some(period2)
+            && query.get("interval").map(String::as_str) == Some("1d")
+            && query.get("includePrePost").map(String::as_str) == Some("false")
+            && query.get("events").map(String::as_str) == Some("div,splits"),
+        "relay source query does not match the requested daily chart"
+    );
+    Ok(parsed.to_string())
+}
+
+async fn request_yahoo_relay_json(
+    client: &reqwest::Client,
+    relay_url: &str,
+    symbol: &str,
+    period1: &str,
+    period2: &str,
+) -> Result<(serde_json::Value, String)> {
+    let response = client
+        .get(relay_url)
+        .header(
+            reqwest::header::USER_AGENT,
+            "AXIOM educational market reader/1.0",
+        )
+        .query(&[
+            ("symbol", symbol),
+            ("period1", period1),
+            ("period2", period2),
+        ])
+        .timeout(std::time::Duration::from_secs(15))
+        .send()
+        .await
+        .context("restricted Yahoo relay request failed")?
+        .error_for_status()
+        .context("restricted Yahoo relay returned HTTP error")?;
+    let envelope: YahooRelayEnvelope = response
+        .json()
+        .await
+        .context("restricted Yahoo relay returned invalid JSON")?;
+    anyhow::ensure!(
+        envelope.provider == "yahoo" && envelope.retrieval == "restricted_server_relay",
+        "restricted Yahoo relay metadata is invalid"
+    );
+    let source_url =
+        validate_yahoo_relay_source_url(&envelope.source_url, symbol, period1, period2)?;
+    Ok((envelope.payload, source_url))
+}
+
 impl HttpFeed {
     pub fn new(cache_dir: impl Into<PathBuf>) -> Self {
         Self {
             base_url: "https://data-api.binance.vision".to_string(),
-            us_stock_adjustment_url: "https://query1.finance.yahoo.com/v8/finance/chart"
-                .to_string(),
+            us_stock_adjustment_url: YAHOO_CHART_PRIMARY.to_string(),
+            us_stock_adjustment_fallback_url: YAHOO_CHART_FALLBACK.to_string(),
+            us_stock_relay_url: configured_yahoo_relay_url(),
             bitcoin_esplora_url: "https://blockstream.info".to_string(),
             bitcoin_mempool_url: "https://mempool.space".to_string(),
             csv: CsvFeed::new(cache_dir),
@@ -801,36 +958,70 @@ impl HttpFeed {
     }
 
     pub async fn fetch_aapl_split_adjustment_evidence(&self) -> Result<StockAdjustmentEvidence> {
-        let endpoint = format!(
-            "{}/AAPL",
-            self.us_stock_adjustment_url.trim_end_matches('/')
-        );
-        let response = self
-            .client
-            .get(&endpoint)
-            .header(
-                reqwest::header::USER_AGENT,
-                "AXIOM educational market reader/1.0",
+        let endpoints = [
+            self.us_stock_adjustment_url.as_str(),
+            self.us_stock_adjustment_fallback_url.as_str(),
+        ];
+        let query = [
+            ("period1", "1595808000".to_owned()),
+            ("period2", "1601510400".to_owned()),
+            ("interval", "1d".to_owned()),
+            ("includePrePost", "false".to_owned()),
+            ("events", "div,splits".to_owned()),
+        ];
+        let mut errors = Vec::new();
+        for base in endpoints {
+            let endpoint = format!("{}/AAPL", base.trim_end_matches('/'));
+            for attempt in 1..=2 {
+                let (raw, selected_endpoint) =
+                    match request_yahoo_chart_json(&self.client, &endpoint, &query).await {
+                        Ok(value) => value,
+                        Err(failure) => {
+                            errors
+                                .push(format!("attempt {attempt} {endpoint}: {:#}", failure.error));
+                            if failure.retryable && attempt == 1 {
+                                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                                continue;
+                            }
+                            break;
+                        }
+                    };
+                match parse_aapl_split_adjustment_evidence(&raw, selected_endpoint, Utc::now()) {
+                    Ok(evidence) => return Ok(evidence),
+                    Err(error) => {
+                        // A syntactically valid but semantically unusable
+                        // provider response is not transient. Try the other
+                        // same-schema host without repeating this response.
+                        errors.push(format!("{endpoint}: {error:#}"));
+                        break;
+                    }
+                }
+            }
+        }
+        if let Some(relay_url) = self.us_stock_relay_url.as_deref() {
+            match request_yahoo_relay_json(
+                &self.client,
+                relay_url,
+                "AAPL",
+                "1595808000",
+                "1601510400",
             )
-            .query(&[
-                ("period1", "1595808000"),
-                ("period2", "1601510400"),
-                ("interval", "1d"),
-                ("includePrePost", "false"),
-                ("events", "div,splits"),
-            ])
-            .timeout(std::time::Duration::from_secs(15))
-            .send()
             .await
-            .context("AAPL adjustment evidence request failed")?
-            .error_for_status()
-            .context("AAPL adjustment evidence returned HTTP error")?;
-        let selected_endpoint = response.url().to_string();
-        let raw: serde_json::Value = response
-            .json()
-            .await
-            .context("invalid AAPL adjustment evidence JSON")?;
-        parse_aapl_split_adjustment_evidence(&raw, selected_endpoint, Utc::now())
+            {
+                Ok((raw, source_url)) => {
+                    let mut evidence =
+                        parse_aapl_split_adjustment_evidence(&raw, source_url, Utc::now())?;
+                    evidence.provider = "yahoo_via_restricted_relay";
+                    evidence.retrieval = "restricted_server_relay";
+                    return Ok(evidence);
+                }
+                Err(error) => errors.push(format!("restricted relay: {error:#}")),
+            }
+        }
+        anyhow::bail!(
+            "AAPL adjustment evidence Yahoo endpoints and relay failed closed: {}",
+            errors.join(" | ")
+        )
     }
 
     async fn fetch_bitcoin_blocks_from(
@@ -1552,8 +1743,18 @@ fn parse_aapl_split_adjustment_evidence(
         result
             .pointer("/meta/symbol")
             .and_then(serde_json::Value::as_str)
-            == Some("AAPL"),
-        "AAPL adjustment response symbol does not match"
+            == Some("AAPL")
+            && result
+                .pointer("/meta/currency")
+                .and_then(serde_json::Value::as_str)
+                == Some("USD")
+            && matches!(
+                result
+                    .pointer("/meta/instrumentType")
+                    .and_then(serde_json::Value::as_str),
+                Some("EQUITY" | "ETF")
+            ),
+        "AAPL adjustment response identity does not match"
     );
     let times = result["timestamp"]
         .as_array()
@@ -1665,14 +1866,19 @@ fn parse_aapl_split_adjustment_evidence(
     let provider = reqwest::Url::parse(&endpoint)
         .ok()
         .and_then(|url| {
-            (url.scheme() == "https" && url.host_str() == Some("query1.finance.yahoo.com"))
-                .then_some("yahoo")
+            (url.scheme() == "https"
+                && matches!(
+                    url.host_str(),
+                    Some("query1.finance.yahoo.com" | "query2.finance.yahoo.com")
+                ))
+            .then_some("yahoo")
         })
         .unwrap_or("configured_endpoint");
     Ok(StockAdjustmentEvidence {
         provider,
         endpoint,
         fetched_at,
+        retrieval: "live_provider_response",
         scope: "aapl_2020_4_for_1_split_historical_window",
         event,
         issuer_confirmation_url:
@@ -2368,14 +2574,18 @@ async fn fetch_us_stock_nasdaq_at(
 }
 
 async fn fetch_us_stock_snapshot(
+    feed: &HttpFeed,
     symbol: &str,
     since: DateTime<Utc>,
     limit: usize,
 ) -> Result<MarketSnapshot> {
-    let client = reqwest::Client::new();
     fetch_us_stock_snapshot_at(
-        &client,
-        "https://query1.finance.yahoo.com/v8/finance/chart",
+        &feed.client,
+        YahooStockSources {
+            primary: &feed.us_stock_adjustment_url,
+            fallback: &feed.us_stock_adjustment_fallback_url,
+            relay: feed.us_stock_relay_url.as_deref(),
+        },
         "https://api.nasdaq.com/api/quote",
         symbol,
         since,
@@ -2384,67 +2594,202 @@ async fn fetch_us_stock_snapshot(
     .await
 }
 
+fn market_snapshot_from_yahoo(
+    raw: &serde_json::Value,
+    selected_endpoint: &str,
+    provider: &str,
+    symbol: &str,
+    since: DateTime<Utc>,
+    limit: usize,
+) -> Result<MarketSnapshot> {
+    let result = raw
+        .pointer("/chart/result/0")
+        .context("Yahoo chart response has no result")?;
+    let expected_symbol = symbol.replace('.', "-");
+    anyhow::ensure!(
+        raw.pointer("/chart/error")
+            .is_some_and(serde_json::Value::is_null)
+            && result
+                .pointer("/meta/symbol")
+                .and_then(serde_json::Value::as_str)
+                == Some(expected_symbol.as_str())
+            && result
+                .pointer("/meta/currency")
+                .and_then(serde_json::Value::as_str)
+                == Some("USD")
+            && matches!(
+                result
+                    .pointer("/meta/instrumentType")
+                    .and_then(serde_json::Value::as_str),
+                Some("EQUITY" | "ETF")
+            ),
+        "Yahoo chart response identity does not match"
+    );
+    let mut bars = parse_yahoo_bars(raw)?;
+    bars.retain(|bar| bar.timestamp >= since);
+    if bars.len() > limit {
+        bars = bars.split_off(bars.len() - limit);
+    }
+    anyhow::ensure!(!bars.is_empty(), "Yahoo returned no daily rows");
+    let coverage = yahoo_stock_split_coverage(raw, &bars);
+    Ok(MarketSnapshot::new(
+        bars,
+        provider,
+        selected_endpoint,
+        "provider_adjustment_unverified",
+    )
+    .with_stock_split_coverage(coverage))
+}
+
+async fn fetch_yahoo_stock_snapshot_at(
+    client: &reqwest::Client,
+    yahoo_endpoints: [&str; 2],
+    symbol: &str,
+    since: DateTime<Utc>,
+    period1: i64,
+    period2: i64,
+    limit: usize,
+) -> Result<MarketSnapshot> {
+    let query = [
+        ("period1", period1.to_string()),
+        ("period2", period2.to_string()),
+        ("interval", "1d".to_owned()),
+        ("includePrePost", "false".to_owned()),
+        ("events", "div,splits".to_owned()),
+    ];
+    let mut errors = Vec::new();
+    for yahoo_endpoint in yahoo_endpoints {
+        let endpoint = format!("{yahoo_endpoint}/{}", symbol.replace('.', "-"));
+        for attempt in 1..=2 {
+            let (raw, selected_endpoint) =
+                match request_yahoo_chart_json(client, &endpoint, &query).await {
+                    Ok(value) => value,
+                    Err(failure) => {
+                        errors.push(format!("attempt {attempt} {endpoint}: {:#}", failure.error));
+                        if failure.retryable && attempt == 1 {
+                            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                            continue;
+                        }
+                        break;
+                    }
+                };
+            let provider = reqwest::Url::parse(&selected_endpoint)
+                .ok()
+                .and_then(|url| {
+                    matches!(
+                        url.host_str(),
+                        Some("query1.finance.yahoo.com" | "query2.finance.yahoo.com")
+                    )
+                    .then_some("yahoo")
+                })
+                .unwrap_or("configured_yahoo_endpoint");
+            match market_snapshot_from_yahoo(
+                &raw,
+                &selected_endpoint,
+                provider,
+                symbol,
+                since,
+                limit,
+            ) {
+                Ok(snapshot) => return Ok(snapshot),
+                Err(error) => {
+                    errors.push(format!("{endpoint}: {error:#}"));
+                    break;
+                }
+            }
+        }
+    }
+    anyhow::bail!("Yahoo market endpoints failed: {}", errors.join(" | "))
+}
+
+struct YahooStockSources<'a> {
+    primary: &'a str,
+    fallback: &'a str,
+    relay: Option<&'a str>,
+}
+
+fn valid_us_chart_symbol(symbol: &str) -> bool {
+    symbol.len() <= 30
+        && symbol
+            .as_bytes()
+            .first()
+            .is_some_and(u8::is_ascii_uppercase)
+        && symbol.bytes().all(|byte| {
+            byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'.' || byte == b'-'
+        })
+        && !symbol.split(['.', '-']).any(str::is_empty)
+}
+
 async fn fetch_us_stock_snapshot_at(
     client: &reqwest::Client,
-    yahoo_endpoint: &str,
+    yahoo: YahooStockSources<'_>,
     nasdaq_endpoint: &str,
     symbol: &str,
     since: DateTime<Utc>,
     limit: usize,
 ) -> Result<MarketSnapshot> {
     anyhow::ensure!(
-        !symbol.is_empty()
-            && symbol.len() <= 12
-            && symbol.bytes().all(|byte| byte.is_ascii_uppercase()
-                || byte.is_ascii_digit()
-                || byte == b'.'
-                || byte == b'-'),
-        "US symbol must contain uppercase letters, digits, dot or dash"
+        valid_us_chart_symbol(symbol),
+        "US symbol must start with an uppercase letter and contain at most 30 uppercase letters, digits, dots or dashes with nonempty segments"
     );
-    let primary = async {
-        let raw: serde_json::Value = client
-            .get(format!("{yahoo_endpoint}/{}", symbol.replace('.', "-")))
-            .header(
-                reqwest::header::USER_AGENT,
-                "AXIOM educational market reader/1.0",
-            )
-            .query(&[
-                ("period1", since.timestamp().to_string()),
-                ("period2", Utc::now().timestamp().to_string()),
-                ("interval", "1d".to_owned()),
-                ("includePrePost", "false".to_owned()),
-                ("events", "div,splits".to_owned()),
-            ])
-            .timeout(std::time::Duration::from_secs(15))
-            .send()
-            .await
-            .context("US market request failed")?
-            .error_for_status()
-            .context("US market returned HTTP error")?
-            .json()
-            .await
-            .context("invalid US market JSON")?;
-        let mut bars = parse_yahoo_bars(&raw)?;
-        bars.retain(|bar| bar.timestamp >= since);
-        if bars.len() > limit {
-            bars = bars.split_off(bars.len() - limit);
-        }
-        Ok::<(Vec<Bar>, StockSplitCoverage), anyhow::Error>((
-            bars.clone(),
-            yahoo_stock_split_coverage(&raw, &bars),
-        ))
-    }
-    .await;
-    match primary {
-        Ok((bars, coverage)) if !bars.is_empty() => Ok(MarketSnapshot::new(
-            bars,
-            "yahoo",
-            yahoo_endpoint,
-            "provider_adjustment_unverified",
+    let period1 = Utc
+        .from_utc_datetime(
+            &since
+                .date_naive()
+                .and_hms_opt(0, 0, 0)
+                .expect("a UTC date always has a midnight"),
         )
-        .with_stock_split_coverage(coverage)),
-        Ok(_) | Err(_) => {
-            fetch_us_stock_nasdaq_at(client, nasdaq_endpoint, symbol, since, limit).await
+        .timestamp();
+    let period2 = Utc::now().timestamp();
+    match fetch_yahoo_stock_snapshot_at(
+        client,
+        [yahoo.primary, yahoo.fallback],
+        symbol,
+        since,
+        period1,
+        period2,
+        limit,
+    )
+    .await
+    {
+        Ok(snapshot) => Ok(snapshot),
+        Err(direct_error) => {
+            if let Some(relay_url) = yahoo.relay {
+                let period1 = period1.to_string();
+                let period2 = period2.to_string();
+                match request_yahoo_relay_json(client, relay_url, symbol, &period1, &period2)
+                    .await
+                    .and_then(|(raw, source_url)| {
+                        market_snapshot_from_yahoo(
+                            &raw,
+                            &source_url,
+                            "yahoo_via_restricted_relay",
+                            symbol,
+                            since,
+                            limit,
+                        )
+                    }) {
+                    Ok(snapshot) => return Ok(snapshot),
+                    Err(relay_error) => {
+                        return fetch_us_stock_nasdaq_at(
+                            client,
+                            nasdaq_endpoint,
+                            symbol,
+                            since,
+                            limit,
+                        )
+                        .await
+                        .with_context(|| {
+                            format!(
+                                "Yahoo direct and restricted relay failed: {direct_error:#}; {relay_error:#}"
+                            )
+                        });
+                    }
+                }
+            }
+            fetch_us_stock_nasdaq_at(client, nasdaq_endpoint, symbol, since, limit)
+                .await
+                .with_context(|| format!("Yahoo direct endpoints failed: {direct_error:#}"))
         }
     }
 }
@@ -2605,7 +2950,7 @@ pub async fn fetch_public_market_snapshot(
     match source {
         "binance" => feed.fetch_historical_snapshot(symbol, since, limit).await,
         "a_share" => fetch_a_share_snapshot(symbol, since, limit).await,
-        "us_stock" => fetch_us_stock_snapshot(symbol, since, limit).await,
+        "us_stock" => fetch_us_stock_snapshot(feed, symbol, since, limit).await,
         _ => unreachable!("source is validated above"),
     }
 }
@@ -2640,14 +2985,47 @@ mod depth_snapshot_tests {
 
 #[cfg(test)]
 mod deployment_endpoint_tests {
-    use super::HttpFeed;
+    use super::{valid_us_chart_symbol, validated_yahoo_relay_url, HttpFeed};
 
     #[test]
     fn default_http_feed_uses_the_public_binance_data_endpoint() {
+        let feed = HttpFeed::new("target/test-market-cache");
+        assert_eq!(feed.base_url, "https://data-api.binance.vision");
         assert_eq!(
-            HttpFeed::new("target/test-market-cache").base_url,
-            "https://data-api.binance.vision"
+            feed.us_stock_adjustment_url,
+            "https://query1.finance.yahoo.com/v8/finance/chart"
         );
+        assert_eq!(
+            feed.us_stock_adjustment_fallback_url,
+            "https://query2.finance.yahoo.com/v8/finance/chart"
+        );
+        assert_eq!(
+            validated_yahoo_relay_url("https://relay.example/api/provider/yahoo-chart").as_deref(),
+            Some("https://relay.example/api/provider/yahoo-chart")
+        );
+        assert_eq!(
+            validated_yahoo_relay_url("http://127.0.0.1:18083/api/provider/yahoo-chart").as_deref(),
+            Some("http://127.0.0.1:18083/api/provider/yahoo-chart")
+        );
+        assert!(validated_yahoo_relay_url("").is_none());
+        assert!(validated_yahoo_relay_url("http://relay.example/yahoo").is_none());
+        assert!(validated_yahoo_relay_url("https://user@relay.example/yahoo").is_none());
+        assert!(valid_us_chart_symbol("AAPL"));
+        assert!(valid_us_chart_symbol("BRK.B"));
+        assert!(valid_us_chart_symbol("BRK-B"));
+        assert!(valid_us_chart_symbol("A12345678901234567890123456789"));
+        for invalid in [
+            "",
+            "1AAPL",
+            "aapl",
+            ".AAPL",
+            "AAPL.",
+            "BRK..B",
+            "AAPL/USD",
+            "A123456789012345678901234567890",
+        ] {
+            assert!(!valid_us_chart_symbol(invalid), "{invalid}");
+        }
     }
 }
 
@@ -2718,6 +3096,67 @@ mod public_market_source_tests {
         }))
     }
 
+    async fn unavailable_yahoo_fixture() -> axum::http::StatusCode {
+        axum::http::StatusCode::SERVICE_UNAVAILABLE
+    }
+
+    async fn aapl_split_yahoo_fixture() -> Json<serde_json::Value> {
+        Json(serde_json::json!({
+            "chart": {"result": [{
+                "meta": {"symbol": "AAPL", "currency": "USD", "instrumentType": "EQUITY"},
+                "timestamp": [1598621400_i64, 1598880600_i64],
+                "events": {"splits": {"1598880600": {
+                    "date": 1598880600_i64,
+                    "numerator": 4.0,
+                    "denominator": 1.0,
+                    "splitRatio": "4:1"
+                }}},
+                "indicators": {
+                    "quote": [{
+                        "open": [126.01, 127.58],
+                        "high": [126.44, 131.0],
+                        "low": [124.58, 126.0],
+                        "close": [124.81, 129.04],
+                        "volume": [187630000.0, 225702700.0]
+                    }],
+                    "adjclose": [{"adjclose": [121.28, 125.39]}]
+                }
+            }], "error": null}
+        }))
+    }
+
+    async fn yahoo_relay_fixture(
+        Query(query): Query<HashMap<String, String>>,
+    ) -> Json<serde_json::Value> {
+        let symbol = query.get("symbol").unwrap();
+        let mut source = reqwest::Url::parse(&format!(
+            "https://query2.finance.yahoo.com/v8/finance/chart/{symbol}"
+        ))
+        .unwrap();
+        source
+            .query_pairs_mut()
+            .append_pair("period1", query.get("period1").unwrap())
+            .append_pair("period2", query.get("period2").unwrap())
+            .append_pair("interval", "1d")
+            .append_pair("includePrePost", "false")
+            .append_pair("events", "div,splits");
+        Json(serde_json::json!({
+            "provider": "yahoo",
+            "retrieval": "restricted_server_relay",
+            "source_url": source.to_string(),
+            "payload": aapl_split_yahoo_fixture().await.0
+        }))
+    }
+
+    async fn invalid_yahoo_relay_fixture() -> Json<serde_json::Value> {
+        Json(serde_json::json!({
+            "provider": "yahoo",
+            "retrieval": "restricted_server_relay",
+            "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/WRONG?period1=1&period2=2&interval=1d&includePrePost=false&events=div%2Csplits",
+            "payload": aapl_split_yahoo_fixture().await.0
+        }))
+    }
+
     async fn nasdaq_fallback_fixture() -> Json<serde_json::Value> {
         Json(serde_json::json!({
             "data": {"tradesTable": {"rows": [{
@@ -2755,6 +3194,10 @@ mod public_market_source_tests {
                     .route("/tencent", get(current_tencent_fixture))
                     .route("/tencent-unavailable", get(unavailable_tencent_fixture))
                     .route("/yahoo/*symbol", get(empty_yahoo_fixture))
+                    .route("/yahoo-unavailable/*symbol", get(unavailable_yahoo_fixture))
+                    .route("/yahoo-split/*symbol", get(aapl_split_yahoo_fixture))
+                    .route("/yahoo-relay", get(yahoo_relay_fixture))
+                    .route("/yahoo-relay-invalid", get(invalid_yahoo_relay_fixture))
                     .route("/nasdaq/*symbol", get(nasdaq_fallback_fixture))
                     .route("/api/v3/klines", get(configured_crypto_fixture))
                     .route("/nasdaq-etf/*symbol", get(nasdaq_etf_fixture)),
@@ -2932,6 +3375,66 @@ mod public_market_source_tests {
         );
         assert_eq!(snapshot.provenance.endpoint, "local historical CSV cache");
         std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[tokio::test]
+    async fn aapl_adjustment_uses_the_successful_fallback_request_url() {
+        let (base, server) = provider_fixture_server().await;
+        let directory =
+            std::env::temp_dir().join(format!("axiom-yahoo-fallback-{}", uuid::Uuid::new_v4()));
+        let mut feed = HttpFeed::new(&directory);
+        feed.us_stock_adjustment_url = format!("{base}/yahoo-unavailable");
+        feed.us_stock_adjustment_fallback_url = format!("{base}/yahoo-split");
+        let evidence = feed.fetch_aapl_split_adjustment_evidence().await.unwrap();
+        let selected = reqwest::Url::parse(&evidence.endpoint).unwrap();
+        assert_eq!(selected.path(), "/yahoo-split/AAPL");
+        assert!(selected
+            .query_pairs()
+            .any(|(key, value)| key == "events" && value == "div,splits"));
+        assert_eq!(evidence.provider, "configured_endpoint");
+        assert_eq!(evidence.event.split_ratio, "4:1");
+        server.abort();
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[tokio::test]
+    async fn aapl_adjustment_accepts_only_a_matching_restricted_relay_source() {
+        let (base, server) = provider_fixture_server().await;
+        let directory =
+            std::env::temp_dir().join(format!("axiom-yahoo-relay-{}", uuid::Uuid::new_v4()));
+        let mut feed = HttpFeed::new(&directory);
+        feed.us_stock_adjustment_url = format!("{base}/yahoo-unavailable");
+        feed.us_stock_adjustment_fallback_url = format!("{base}/yahoo-unavailable");
+        feed.us_stock_relay_url = Some(format!("{base}/yahoo-relay"));
+        let evidence = feed.fetch_aapl_split_adjustment_evidence().await.unwrap();
+        assert_eq!(evidence.provider, "yahoo_via_restricted_relay");
+        assert_eq!(evidence.retrieval, "restricted_server_relay");
+        let source = reqwest::Url::parse(&evidence.endpoint).unwrap();
+        assert_eq!(source.host_str(), Some("query2.finance.yahoo.com"));
+        assert_eq!(source.path(), "/v8/finance/chart/AAPL");
+
+        feed.us_stock_relay_url = Some(format!("{base}/yahoo-relay-invalid"));
+        assert!(feed.fetch_aapl_split_adjustment_evidence().await.is_err());
+        server.abort();
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[tokio::test]
+    async fn aapl_adjustment_fails_closed_when_both_yahoo_endpoints_fail() {
+        let (base, server) = provider_fixture_server().await;
+        let directory =
+            std::env::temp_dir().join(format!("axiom-yahoo-closed-{}", uuid::Uuid::new_v4()));
+        let mut feed = HttpFeed::new(&directory);
+        feed.us_stock_adjustment_url = format!("{base}/yahoo-unavailable");
+        feed.us_stock_adjustment_fallback_url = format!("{base}/yahoo-unavailable");
+        feed.us_stock_relay_url = None;
+        let error = feed
+            .fetch_aapl_split_adjustment_evidence()
+            .await
+            .expect_err("two failed provider requests must not fabricate split evidence");
+        assert!(error.to_string().contains("HTTP"));
+        server.abort();
+        let _ = std::fs::remove_dir_all(directory);
     }
 
     #[tokio::test]
@@ -3144,7 +3647,11 @@ mod public_market_source_tests {
 
         let us_stock_snapshot = fetch_us_stock_snapshot_at(
             &client,
-            &format!("{base}/yahoo"),
+            YahooStockSources {
+                primary: &format!("{base}/yahoo"),
+                fallback: &format!("{base}/yahoo"),
+                relay: None,
+            },
             &format!("{base}/nasdaq"),
             "AAPL",
             since,
@@ -3162,9 +3669,165 @@ mod public_market_source_tests {
         assert!(selected
             .query_pairs()
             .any(|(key, value)| key == "assetclass" && value == "stocks"));
+        assert!(matches!(
+            us_stock_snapshot.stock_split_coverage,
+            StockSplitCoverage::Unverified { .. }
+        ));
+        assert!(guard_stock_backtest_window(
+            "us_stock",
+            &us_stock_snapshot.stock_split_coverage,
+            &us_stock_snapshot.bars
+        )
+        .is_err());
         let us_stock = us_stock_snapshot.bars;
         assert_eq!(us_stock.len(), 1);
         assert_eq!(us_stock[0].close, 10.5);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn public_us_stock_snapshot_uses_the_feed_transport_configuration() {
+        let (base, server) = provider_fixture_server().await;
+        let directory =
+            std::env::temp_dir().join(format!("axiom-yahoo-public-{}", uuid::Uuid::new_v4()));
+        let mut feed = HttpFeed::new(&directory);
+        feed.us_stock_adjustment_url = format!("{base}/yahoo-unavailable");
+        feed.us_stock_adjustment_fallback_url = format!("{base}/yahoo-split");
+        feed.us_stock_relay_url = None;
+        let since = Utc.with_ymd_and_hms(2020, 8, 27, 0, 0, 0).unwrap();
+        let snapshot = fetch_public_market_snapshot(&feed, "us_stock", "AAPL", since, 1)
+            .await
+            .unwrap();
+        assert_eq!(snapshot.bars.len(), 1);
+        assert_eq!(snapshot.provenance.provider, "configured_yahoo_endpoint");
+        assert!(matches!(
+            snapshot.stock_split_coverage,
+            StockSplitCoverage::CrossesWindow { .. }
+        ));
+        server.abort();
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[tokio::test]
+    async fn us_stock_daily_request_floors_provider_window_but_filters_at_exact_since() {
+        let (base, server) = provider_fixture_server().await;
+        let client = reqwest::Client::new();
+        let since = Utc.with_ymd_and_hms(2020, 8, 28, 17, 0, 0).unwrap();
+        let snapshot = fetch_us_stock_snapshot_at(
+            &client,
+            YahooStockSources {
+                primary: &format!("{base}/yahoo-unavailable"),
+                fallback: &format!("{base}/yahoo-split"),
+                relay: None,
+            },
+            &format!("{base}/nasdaq"),
+            "AAPL",
+            since,
+            5,
+        )
+        .await
+        .unwrap();
+        let selected = reqwest::Url::parse(&snapshot.provenance.endpoint).unwrap();
+        let query: std::collections::HashMap<_, _> = selected.query_pairs().collect();
+        assert_eq!(
+            query.get("period1").map(|value| value.as_ref()),
+            Some("1598572800")
+        );
+        assert_eq!(snapshot.bars.len(), 1);
+        assert_eq!(
+            snapshot.bars[0].timestamp,
+            Utc.with_ymd_and_hms(2020, 8, 31, 0, 0, 0).unwrap()
+        );
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn us_stock_uses_secondary_yahoo_with_its_actual_request_url() {
+        let (base, server) = provider_fixture_server().await;
+        let client = reqwest::Client::new();
+        let since = Utc.with_ymd_and_hms(2020, 8, 27, 0, 0, 0).unwrap();
+        let snapshot = fetch_us_stock_snapshot_at(
+            &client,
+            YahooStockSources {
+                primary: &format!("{base}/yahoo-unavailable"),
+                fallback: &format!("{base}/yahoo-split"),
+                relay: None,
+            },
+            &format!("{base}/nasdaq"),
+            "AAPL",
+            since,
+            5,
+        )
+        .await
+        .unwrap();
+        let selected = reqwest::Url::parse(&snapshot.provenance.endpoint).unwrap();
+        assert_eq!(selected.path(), "/yahoo-split/AAPL");
+        assert!(selected
+            .query_pairs()
+            .any(|(key, value)| key == "events" && value == "div,splits"));
+        assert_eq!(snapshot.provenance.provider, "configured_yahoo_endpoint");
+        assert!(matches!(
+            snapshot.stock_split_coverage,
+            StockSplitCoverage::CrossesWindow { .. }
+        ));
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn us_stock_relay_preserves_original_yahoo_source_and_split_coverage() {
+        let (base, server) = provider_fixture_server().await;
+        let client = reqwest::Client::new();
+        let since = Utc.with_ymd_and_hms(2020, 8, 27, 0, 0, 0).unwrap();
+        let snapshot = fetch_us_stock_snapshot_at(
+            &client,
+            YahooStockSources {
+                primary: &format!("{base}/yahoo-unavailable"),
+                fallback: &format!("{base}/yahoo-unavailable"),
+                relay: Some(&format!("{base}/yahoo-relay")),
+            },
+            &format!("{base}/nasdaq"),
+            "AAPL",
+            since,
+            1,
+        )
+        .await
+        .unwrap();
+        assert_eq!(snapshot.provenance.provider, "yahoo_via_restricted_relay");
+        assert_eq!(snapshot.bars.len(), 1);
+        let source = reqwest::Url::parse(&snapshot.provenance.endpoint).unwrap();
+        assert_eq!(source.host_str(), Some("query2.finance.yahoo.com"));
+        assert_eq!(source.path(), "/v8/finance/chart/AAPL");
+        assert!(matches!(
+            snapshot.stock_split_coverage,
+            StockSplitCoverage::CrossesWindow { .. }
+        ));
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn invalid_relay_source_falls_back_to_unverified_nasdaq_rows() {
+        let (base, server) = provider_fixture_server().await;
+        let client = reqwest::Client::new();
+        let since = Utc.with_ymd_and_hms(2020, 8, 27, 0, 0, 0).unwrap();
+        let snapshot = fetch_us_stock_snapshot_at(
+            &client,
+            YahooStockSources {
+                primary: &format!("{base}/yahoo-unavailable"),
+                fallback: &format!("{base}/yahoo-unavailable"),
+                relay: Some(&format!("{base}/yahoo-relay-invalid")),
+            },
+            &format!("{base}/nasdaq"),
+            "AAPL",
+            since,
+            5,
+        )
+        .await
+        .unwrap();
+        assert_eq!(snapshot.provenance.provider, "nasdaq");
+        assert!(matches!(
+            snapshot.stock_split_coverage,
+            StockSplitCoverage::Unverified { .. }
+        ));
         server.abort();
     }
 
@@ -3175,7 +3838,11 @@ mod public_market_source_tests {
         let since = Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap();
         let snapshot = fetch_us_stock_snapshot_at(
             &client,
-            &format!("{base}/yahoo"),
+            YahooStockSources {
+                primary: &format!("{base}/yahoo"),
+                fallback: &format!("{base}/yahoo"),
+                relay: None,
+            },
             &format!("{base}/nasdaq-etf"),
             "SPY",
             since,

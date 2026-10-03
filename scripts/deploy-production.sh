@@ -49,6 +49,7 @@ ssh root@sigma711.top "chmod 755 '$release/axiom' && ln -sfn '$release' /srv/axi
 python3 - <<'PYVERIFY'
 import json
 import math
+import csv
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -134,7 +135,7 @@ for concept, expected in (("book_free_float", 543137592 / 1252270215), ("book_fl
     print("Moutai fixed float case", concept, "verified", flush=True)
 
 markets = (("binance", "BTCUSDT", 200), ("a_share", "600519", 1000), ("us_stock", "AAPL", 1000))
-allowed = {"binance": {"binance_spot"}, "a_share": {"eastmoney", "tencent"}, "us_stock": {"yahoo", "nasdaq"}}
+allowed = {"binance": {"binance_spot"}, "a_share": {"eastmoney", "tencent"}, "us_stock": {"yahoo", "yahoo_via_restricted_relay", "nasdaq"}}
 for source, symbol, minimum in markets:
     snapshot = read_json("/api/data", {"source": source, "symbol": symbol, "limit": 5})
     provenance = snapshot["market_provenance"]
@@ -195,5 +196,81 @@ for source, symbol, minimum in markets:
     match = read_json("/api/symbols", {"source": source, "q": symbol, "limit": 5})
     assert any(item["symbol"] == symbol for item in match["items"]), (source, symbol, match)
     print(source, "catalog", catalog["universe_count"], catalog["status"], flush=True)
+
+# The release must exercise every company-disclosure entry, not just the old
+# four-issuer smoke sample. Numeric truth is independently checked in make ci.
+catalog = read_json("/api/practice", {})
+plans = {entry["id"]: entry["plan"] for entry in catalog["concepts"]}
+with Path("docs/concept-audit.csv").open() as stream:
+    disclosure_ids = [row["id"] for row in csv.DictReader(stream)
+                      if row["dependency_group"] == "2_company_disclosure"]
+assert len(disclosure_ids) == len(set(disclosure_ids)) == 105
+golden = {
+    "beneish_m": ("beneish_m", -2.294943021712222),
+    "piotroski": ("piotroski_f_score", 7),
+    "book_dcf": ("dcf_value_per_share", 125.12238523309892),
+    "book_cape": ("cape", 53.214146004905224),
+    "book_nav_discount": ("nav_premium_discount", -0.0852760736196319),
+    "earnings_surprise": ("earnings_surprise", 0.15957446808510645),
+    "short_interest": ("days_to_cover", 6.680184152966909),
+}
+disclosure_evidence = []
+for concept in disclosure_ids:
+    plan = plans[concept]
+    assert plan["source_policy"] == "real_required" and plan["modules"] == ["data"]
+    symbol = plan.get("fixed_symbol", "AAPL")
+    source = plan.get("fixed_source", "us_stock")
+    body = {"concept_id": concept, "module": "data", "source": source, "symbol": symbol, "inputs": {}}
+    request = urllib.request.Request(base + "/api/practice", data=json.dumps(body).encode(),
+                                     headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(request, timeout=180) as response:
+        result = json.load(response)
+    assert result["concept_id"] == concept and result["symbol"] == symbol
+    assert result["source"] == source and result["bars"] == [] and result["inputs"] == {}
+    assert result["status"] == ("partial" if concept == "short_interest" else "computed"), (concept, result)
+    assert result["values"] and all(isinstance(value, (int, float)) and math.isfinite(value)
+                                     for value in result["values"].values()), (concept, result["values"])
+    case = result.get("industry_case", result.get("filing_case"))
+    assert case and case["verification"]["matched_sha256"] == case["sha256"]
+    assert case["verification"]["matched_bytes"] == case["bytes"]
+    assert case["published"] and case["period"]["start"] and case["period"]["end"], (concept, case)
+    assert case["period"]["start"] <= case["period"]["end"], (concept, case["period"])
+    assert all(result["units"].get(key) for key in result["values"]), (concept, result["units"])
+    assert result["notes"] and result["provenance"]
+    if "industry_facts" in result:
+        issuer = case["issuer"]
+        assert issuer["reporting_entity"] and issuer["metric_entity"] and issuer["ticker"] == symbol
+        facts = result["industry_facts"]
+        calculation = facts["calculation"]
+        assert calculation["formula"] and calculation["result_key"] in result["values"]
+        assert facts["currency"] and facts["scale"] and facts["definitions"]
+        fields = {fact["key"]: fact for fact in facts["reported_facts"]}
+        assert calculation["operands"] and all(key in fields and key in facts["field_provenance"]
+                                               for key in calculation["operands"])
+        for fact in fields.values():
+            assert fact["label"] and fact["unit"] and math.isfinite(fact["value"])
+            if fact.get("kind") == "assumption":
+                assert fact.get("source_url") is None and fact.get("pdf_page") is None
+            else:
+                assert (fact.get("source_url") or case["url"]).startswith("https://")
+                assert fact.get("as_of") or case["period"]["end"]
+        if concept == "short_interest":
+            assert result["reason"] and "short_interest_ratio" not in result["values"]
+    else:
+        assert case["issuer"] and case["scope"] and case["ticker"] == symbol
+        assert result["facts"]["units"] and result["facts"]["calculation_boundaries"]
+    for document in case.get("sources", []):
+        assert document["verification"]["matched_sha256"] == document["sha256"]
+        assert document["verification"]["matched_bytes"] == document["bytes"]
+    if concept in golden:
+        key, expected = golden[concept]
+        assert math.isclose(result["values"][key], expected, rel_tol=1e-10, abs_tol=1e-10), (concept, result["values"])
+    disclosure_evidence.append({"concept_id": concept, "status": result["status"],
+                                "values": result["values"], "case": case})
+Path("target/deploy-disclosure-evidence.json").write_text(json.dumps({
+    "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+    "verified_at": datetime.now().isoformat(), "cases": disclosure_evidence,
+}, ensure_ascii=False, indent=2))
+print("105 historical company-disclosure practices, source fingerprints and representative independent results verified", flush=True)
 PYVERIFY
 trap - ERR

@@ -33,6 +33,62 @@ async function mockApi(page: Page) {
 
 test.beforeEach(async ({ page }) => { await mockApi(page); });
 
+test('multi-source disclosure facts keep their own links, dates and assumption labels in both themes', async ({ page }) => {
+  // Presentation-only fixture: actual source calculations are verified separately.
+  const recording = JSON.parse(await readFile('e2e/fixtures/industry-cases.json', 'utf8'));
+  const concept = recording.concepts.find((item: {id: string}) => item.id === 'book_saas_rule_of_40');
+  const result = recording.results[concept.id];
+  concept.id = 'book_dcf';
+  concept.name = '现金流折现（DCF）';
+  result.concept_id = concept.id;
+  result.values = { dcf_per_share: 41.522 };
+  result.units = { dcf_per_share: 'USD/share' };
+  result.notes = ['单阶段股权现金流模型；增长率与折现率为教学假设。'];
+  result.industry_case.label = '现金流估值';
+  result.industry_facts.reported_facts = [
+    { key: 'cashflow', label: '历史自由现金流', value: 1597, unit: 'USD millions', pdf_page: 7, source_url: 'https://issuer.example/annual.pdf', published: '2025-02-11' },
+    { key: 'growth', label: '预测增长率', value: .04, unit: 'fraction', pdf_page: 0, kind: 'assumption' },
+    { key: 'discount', label: '股权折现率', value: .08, unit: 'fraction', pdf_page: 0, kind: 'assumption' },
+    { key: 'shares', label: '案例股数', value: 1000, unit: 'million shares', pdf_page: 0, kind: 'assumption' },
+    { key: 'price', label: '估值日收盘价', value: 100, unit: 'USD/share', pdf_page: 0, source_url: 'https://exchange.example/prices.csv', source_format: 'CSV', as_of: '2025-02-12' },
+  ];
+  result.industry_facts.calculation = { formula: '每股估值 = 1,597 × 1.04 ÷ (0.08 − 0.04) ÷ 1,000 = 41.522 美元', result_key: 'dcf_per_share', operands: ['cashflow', 'growth', 'discount', 'shares'], symbol_mapping: { cashflow: '历史自由现金流', growth: '预测增长率', discount: '股权折现率', shares: '案例股数' } };
+  result.industry_facts.definitions.metric = '下一年股权自由现金流按永续增长模型折现；未再扣有息负债。';
+  result.industry_facts.field_provenance = { dcf_per_share: { kind: 'derived', note: '模型估算' }, cashflow: { kind: 'reported', pdf_page: 7, note: '历史披露' }, price: { kind: 'reported', note: '历史收盘价' } };
+  result.industry_case.sources = [{
+    id: 'market-price', url: 'https://exchange.example/prices.csv', format: 'CSV', published: '2025-02-12', bytes: 80, sha256: 'c'.repeat(64),
+    verification: { status: 'verified_then_cached', verified_at: '2026-10-03T00:00:00Z', requested_url: 'https://exchange.example/prices.csv', matched_bytes: 80, matched_sha256: 'c'.repeat(64) },
+  }];
+  await page.route('**/api/practice', route => route.fulfill({ json: route.request().method() === 'GET' ? { concepts: [concept], total: 1, modules: ['data'] } : result }));
+  await page.goto('/data?concept=book_dcf&source=issuer_disclosure');
+  const panel = page.getByLabel('概念实践');
+  await panel.getByRole('button', { name: '运行实践' }).click();
+  const visual = panel.locator('.ax-industry-case');
+  for (const theme of ['dark', 'light']) {
+    await expect(visual.locator('[data-industry-fact="cashflow"] a')).toHaveAttribute('href', 'https://issuer.example/annual.pdf#page=7');
+    await expect(visual.locator('[data-industry-fact="price"] a')).toHaveAttribute('href', 'https://exchange.example/prices.csv');
+    await expect(visual.locator('[data-industry-fact="growth"]')).toContainText('模型假设');
+    await expect(visual.locator('[data-industry-fact="growth"] a')).toHaveCount(0);
+    await expect(visual).toContainText('发布于 2025-02-11');
+    await expect(visual).toContainText('数据时点 2025-02-12');
+    await expect(visual).not.toContainText('PDF 第 0 页');
+    const source = visual.locator('details').filter({ hasText: '来源：market-price · CSV' });
+    await source.locator('summary').click();
+    await expect(source.getByRole('link', { name: '查看原文 ↗' })).toHaveAttribute('href', 'https://exchange.example/prices.csv');
+    await expect(source).toContainText('字节数与指纹完全匹配');
+    await expect(source).toContainText('cccccccccccccccc');
+    await source.locator('summary').click();
+    expect(await visual.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+    await visual.evaluate(node => node.scrollIntoView({ block: 'start' }));
+    expect(await visual.evaluate(node => node.getBoundingClientRect().top >= (document.querySelector('.ax-tabs')?.getBoundingClientRect().bottom || 0))).toBe(true);
+    await expect(visual).toHaveScreenshot(`disclosure-multi-source-${theme}.png`);
+    if (theme === 'dark') await page.getByLabel('切换到浅色模式').click();
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await visual.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await expect(visual).toHaveScreenshot('disclosure-multi-source-mobile.png');
+});
+
 test('historical split practice uses the fixed stock source and shows a readable split diagram in both themes', async ({ page }) => {
   const concept = { id: 'book_adjustment', name: '复权价格', category: '原书财务计算', input_kind: 'stock_action_case', inputs: [], notes: '历史拆股只演示事件比例。', plan: { markets: ['us_equity'], modules: ['data'], required_datasets: ['dated_corporate_actions', 'provider_quote_and_adjusted_close'], source_policy: 'real_required', fixed_source: 'us_stock', fixed_symbol: 'AAPL', goal: '使用有日期的历史拆股事件。' } };
   await page.route('**/api/practice', route => {
@@ -1445,6 +1501,8 @@ test('Moutai share structure distinguishes unrestricted shares from free float a
   await expect(visual.locator('[data-industry-fact="unrestricted_shares"]')).toContainText('1,252,270,215 股');
   await expect(visual).toContainText('无限售条件流通股份不等于自由流通股');
   await expect(visual.locator('[data-industry-fact] a').first()).toHaveAttribute('href', 'https://static.cninfo.com.cn/finalpage/2026-04-17/1225114741.PDF#page=47');
+  await visual.evaluate(node => node.scrollIntoView({ block: 'start' }));
+  expect(await visual.evaluate(node => node.getBoundingClientRect().top)).toBeGreaterThan(await page.locator('.ax-tabs').evaluate(node => node.getBoundingClientRect().bottom));
   await expect(visual).toHaveScreenshot('moutai-share-structure-dark.png');
   await page.getByLabel('切换到浅色模式').click();
   await expect(visual).toHaveScreenshot('moutai-share-structure-light.png');

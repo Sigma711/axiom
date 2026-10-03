@@ -15,6 +15,8 @@ pub struct AppState {
     pub feed: Arc<HttpFeed>,
     pub filing_source: crate::filing_case::FilingSourceConfig,
     pub industry_sources: crate::industry_case::IndustrySourceRegistry,
+    pub ownership_sources: crate::disclosure_ownership::OwnershipSourceRegistry,
+    pub valuation_sources: crate::disclosure_valuation::ValuationSourceRegistry,
     pub a_share_float_sources: crate::a_share_float::AShareFloatSourceRegistry,
 }
 
@@ -45,6 +47,8 @@ impl AppState {
             feed,
             filing_source: crate::filing_case::FilingSourceConfig::default(),
             industry_sources: crate::industry_case::IndustrySourceRegistry::default(),
+            ownership_sources: crate::disclosure_ownership::OwnershipSourceRegistry::default(),
+            valuation_sources: crate::disclosure_valuation::ValuationSourceRegistry::default(),
             a_share_float_sources: crate::a_share_float::AShareFloatSourceRegistry::default(),
         }
     }
@@ -68,6 +72,22 @@ impl AppState {
         sources: crate::a_share_float::AShareFloatSourceRegistry,
     ) -> Self {
         self.a_share_float_sources = sources;
+        self
+    }
+
+    pub fn with_ownership_sources(
+        mut self,
+        sources: crate::disclosure_ownership::OwnershipSourceRegistry,
+    ) -> Self {
+        self.ownership_sources = sources;
+        self
+    }
+
+    pub fn with_valuation_sources(
+        mut self,
+        sources: crate::disclosure_valuation::ValuationSourceRegistry,
+    ) -> Self {
+        self.valuation_sources = sources;
         self
     }
 }

@@ -54,6 +54,121 @@ const fixture = (): PracticeResult => ({
 });
 
 describe('IndustryCaseVisual', () => {
+  it('explains the computed factors without recomputing them or hiding failed binary signals', () => {
+    const result = fixture();
+    result.values = { score: 7, dsri: 1.14, no_issuance: 0, missing: null };
+    result.units = { score: '0-9 score', dsri: 'factor', no_issuance: 'binary' };
+    result.industry_facts!.calculation.result_key = 'score';
+    result.industry_facts!.derived_metrics = [
+      { key: 'dsri', label: '应收指数（DSRI）', description: '本期应收占收入的比重，除以上期同一比重。' },
+      { key: 'no_issuance', label: '没有发行普通股', description: '回购造成的股数下降不能抵消当年实际发行。' },
+      { key: 'missing', label: '无数据', description: '不得画成零。' },
+    ];
+    const html = renderToStaticMarkup(<IndustryCaseVisual result={result} name="财务评分" />);
+    expect(html).toContain('计算拆解（2 项）');
+    expect(html).toContain('应收指数（DSRI）');
+    expect(html).toContain('1.14');
+    expect(html).toContain('未满足（0 分）');
+    expect(html).toContain('回购造成的股数下降不能抵消当年实际发行');
+    expect(html).not.toContain('无数据');
+  });
+  it('keeps the issuer-specific EBIT label instead of borrowing a bank revenue label for the same key', () => {
+    const result = fixture();
+    result.concept_id = 'book_ev_ebit';
+    result.industry_facts!.reported_facts = [{ key: 'operating_income', label: '2025 财年营业利润（EBIT）', value: 133050, unit: 'USD millions', pdf_page: 32 }];
+    result.industry_facts!.calculation.operands = ['operating_income'];
+    result.industry_facts!.calculation.symbol_mapping = { operating_income: '2025 财年营业利润（EBIT）' };
+    const html = renderToStaticMarkup(<IndustryCaseVisual result={result} name="EV/EBIT" />);
+    expect(html).toContain('2025 财年营业利润（EBIT）');
+    expect(html).not.toContain('营业收入');
+  });
+  it('links each fact to its own source and separates disclosed facts from valuation assumptions', () => {
+    const result = fixture();
+    result.industry_facts!.reported_facts = [
+      { key: 'cashflow', label: '历史自由现金流', value: 1597, unit: 'USD millions', pdf_page: 7, source_url: 'https://issuer.example/annual.pdf', published: '2025-02-11' },
+      { key: 'growth', label: '预测增长率', value: 0.04, unit: 'fraction', pdf_page: 0, kind: 'assumption' },
+      { key: 'price', label: '估值日收盘价', value: 100, unit: 'USD/share', pdf_page: 0, source_url: 'https://exchange.example/prices.csv', source_format: 'CSV', as_of: '2025-02-12' },
+    ];
+    result.industry_facts!.calculation.operands = ['cashflow', 'growth', 'price'];
+    result.industry_facts!.field_provenance.price = { kind: 'reported', note: '历史收盘价' };
+    const html = renderToStaticMarkup(<IndustryCaseVisual result={result} name="现金流估值" />);
+    expect(html).toContain('https://issuer.example/annual.pdf#page=7');
+    expect(html).toContain('https://exchange.example/prices.csv');
+    expect(html).not.toContain('prices.csv#page=0');
+    expect(html).not.toContain('PDF 第 0 页');
+    expect(html).toContain('模型假设');
+    expect(html).toContain('历史自由现金流');
+    expect(html).toContain('估值日收盘价');
+    expect(html).toContain('2025-02-12');
+    expect(html).toContain('2025-02-11');
+    expect(html).toContain('美元/股');
+    expect(html).not.toContain('PDF 第 0 页');
+  });
+  it('shows every verified original document separately rather than implying one fingerprint covers them all', () => {
+    const result = fixture();
+    result.industry_case!.sources = [{
+      id: 'market-price', url: 'https://exchange.example/prices.csv', format: 'CSV', published: '2025-02-12', bytes: 80, sha256: 'c'.repeat(64),
+      verification: { status: 'verified_then_cached', verified_at: '2026-10-01T00:00:00Z', requested_url: 'https://exchange.example/prices.csv', matched_bytes: 80, matched_sha256: 'c'.repeat(64) },
+    }];
+    const html = renderToStaticMarkup(<IndustryCaseVisual result={result} name="估值" />);
+    expect(html).toContain('https://exchange.example/prices.csv');
+    expect(html).toContain('cccccccccccccccc');
+    expect(html).toContain('CSV');
+    expect(html).toContain('2025-02-12');
+  });
+  it('identifies a canonical observation hash without presenting it as an original-file fingerprint', () => {
+    const result = fixture();
+    result.industry_case!.sources = [{ id: 'historical-price', title: '历史收盘记录', url: 'https://exchange.example/prices', format: 'JSON', published: '2025-02-12', bytes: 80, sha256: 'c'.repeat(64), verification_basis: 'canonical_observations', verification: { status: 'verified_then_cached', verified_at: '2026-10-03T00:00:00Z', requested_url: 'https://exchange.example/prices', matched_bytes: 80, matched_sha256: 'c'.repeat(64) } }];
+    const html = renderToStaticMarkup(<IndustryCaseVisual result={result} name="估值" />);
+    expect(html).toContain('指定日期与标的的记录指纹');
+    expect(html).toContain('规范化记录 80 字节');
+  });
+  it('describes a shareholder HTML source without inventing PDF pages or an industry classification', () => {
+    const result = fixture();
+    result.industry_case!.label = '股东披露';
+    result.industry_case!.format = 'HTML';
+    result.industry_case!.pdf_pages = [];
+    result.industry_facts!.reported_facts = [{ key: 'ownership', label: '持股数', value: 100, unit: 'shares', pdf_page: 0, source_section: '主要股东表' }];
+    const html = renderToStaticMarkup(<IndustryCaseVisual result={result} name="持股比例" />);
+    expect(html).toContain('股东披露');
+    expect(html).toContain('官方披露 HTML');
+    expect(html).toContain('主要股东表');
+    expect(html).not.toContain('官方披露 PDF');
+    expect(html).not.toContain('原文页：');
+    expect(html).not.toContain('历史行业披露');
+  });
+  it.each([
+    ['公司股东披露', '固定公司股东披露', '查看公司股东披露'],
+    ['预测汇总', '固定预测汇总', '查看预测汇总'],
+    ['分析师报告', '固定分析师报告', '查看分析师报告'],
+    ['市场空仓报告', '固定市场空仓报告', '查看市场空仓报告'],
+  ])('renders the real source category %s without claiming every document is an issuer original', (label, badge, link) => {
+    const result = fixture();
+    result.industry_case!.label = label;
+    const html = renderToStaticMarkup(<IndustryCaseVisual result={result} name="来源边界" />);
+    expect(html).toContain(badge);
+    expect(html).toContain(link);
+    expect(html).not.toContain('固定发行人原文');
+    expect(html).not.toContain('Shopify Inc. 官方披露');
+  });
+
+  it('labels mixed filing, market, macro, and assumption inputs as fixed historical sources', () => {
+    const result = fixture();
+    result.industry_case!.label = '财报与估值';
+    const html = renderToStaticMarkup(<IndustryCaseVisual result={result} name="现金流估值" />);
+    expect(html).toContain('财报与估值 · 固定历史来源');
+    expect(html).not.toContain('财报与估值 · 固定发行人原文');
+  });
+
+  it('discloses when an exact fingerprint-matched archived original replaced an unavailable source response', () => {
+    const result = fixture();
+    result.industry_case!.verification.status = 'verified_archived_original';
+    result.industry_case!.verification.retrieval_note = 'Nuveen 原站当前未返回已核验 PDF；本次使用字节数与 SHA-256 完全相同的已核验原文备份。';
+    const html = renderToStaticMarkup(<IndustryCaseVisual result={result} name="NAV 折价" />);
+    expect(html).toContain('已核验原文备份');
+    expect(html).toContain('Nuveen 原站当前未返回已核验 PDF');
+  });
+
   it('shows a fixed historical issuer case with auditable formula and source pages', () => {
     const html = renderToStaticMarkup(<IndustryCaseVisual result={fixture()} name="Rule of 40" />);
     expect(html).toContain('Shopify Inc.');
@@ -69,7 +184,7 @@ describe('IndustryCaseVisual', () => {
     expect(html).toContain('以上披露值代入公式，得到 Rule of 40');
     expect(html).toContain('8,880 百万美元');
     expect(html).toContain('原文披露 · PDF 第 1 页');
-    expect(html).toContain('2024 年营业收入；2023 年营业收入；2024 年非 GAAP 自由现金流');
+    expect(html).toContain('2024 营业收入；2023 营业收入；自由现金流');
     expect(html).toContain('披露值推导 · 仅由下列原文披露值按所示公式计算');
     expect(html).toContain('经营活动现金流减资本开支');
     expect(html).toContain('bbbbbbbbbbbbbbbb');
@@ -110,7 +225,7 @@ describe('IndustryCaseVisual', () => {
     result.industry_facts!.calculation.operands = ['platform_revenue', 'gross_merchandise_value'];
     result.industry_facts!.calculation.symbol_mapping = { platform_revenue: '平台净收入', gross_merchandise_value: 'GMV' };
     const html = renderToStaticMarkup(<IndustryCaseVisual result={result} name="平台变现率" />);
-    expect(html).toContain('2024 年平台净收入');
+    expect(html).toContain('平台净收入');
     expect(html).not.toContain('教学代理');
     expect(html).toContain('13.7718');
   });
