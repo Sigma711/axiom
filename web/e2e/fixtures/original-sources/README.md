@@ -8,6 +8,7 @@ always verify the snapshot byte length and SHA-256 before using its contents.
 | File | Public source | Bytes | SHA-256 |
 | --- | --- | ---: | --- |
 | `../../../../data/verified-sources/zoom-q1-fy2025-prepared-remarks.pdf` | https://investors.zoom.us/static-files/70629942-ff77-4bed-91d6-422766c47e6b | 118862 | `79f0e6b5126a47869f196d07aa3ab3626c4a61cdbb46e17a79762ab264fbeaf4` |
+| `../../../../data/verified-sources/petrobras-2024-management-report.pdf` | https://transparencia.petrobras.com.br/documents/1357439/14971831/Relat%C3%B3rio%2Bde%2BGest%C3%A3o%2B-%2B2024.pdf/50685b26-3e9e-2ece-3035-33eebe338c73?download=true&t=1748554910000&version=1.0 | 6302154 | `04372d526d67247b9ad66098a58d85ca2bf00b534478575ead5f650a7a463122` |
 | `../../../../data/verified-sources/fred-cpi-2026-10-03.csv` | https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL | 2097 | `d4f940d3358dd45bb74e61cf0a4cfe06194b35050d34a6a122f23f86304577e3` |
 | `../../../../data/verified-sources/nuveen-proxy-2025.pdf` | https://documents.nuveen.com/Documents/Nuveen/Viewer.aspx?download=1&uniqueId=0779f60a-86ee-4128-87a3-1db9363e171e | 1438050 | `328251373d35c20d0450538dad87c1bf28ca6747393dbc7ddb72d57bb1ccfb19` |
 

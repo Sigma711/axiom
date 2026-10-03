@@ -44,6 +44,8 @@ pub const PETROBRAS_URL: &str = "https://transparencia.petrobras.com.br/document
 pub const PETROBRAS_SHA256: &str =
     "04372d526d67247b9ad66098a58d85ca2bf00b534478575ead5f650a7a463122";
 pub const PETROBRAS_BYTES: usize = 6_302_154;
+const PETROBRAS_ARCHIVED_ORIGINAL: &[u8] =
+    include_bytes!("../data/verified-sources/petrobras-2024-management-report.pdf");
 pub const BARRICK_URL: &str = "https://www.barrick.com/files/doc_financial/annual_reports/2024/Barrick_Annual_Report_2024.pdf";
 pub const BARRICK_SHA256: &str = "3cb6cf59458e8799650d1c219222f8c01e41b1fbda9351523ed6b602f3875b86";
 pub const BARRICK_BYTES: usize = 11_789_238;
@@ -915,16 +917,22 @@ async fn verified_source(
     let directory = cache_dir.join("industry-sources");
     let cached = directory.join(format!("{}.pdf", expected.sha256));
     let archived_marker = directory.join(format!("{}.archived-original", expected.sha256));
-    let is_zoom = expected.sha256 == ZOOM_SHA256 && expected.bytes == ZOOM_BYTES;
+    let archived_original = if expected.sha256 == ZOOM_SHA256 && expected.bytes == ZOOM_BYTES {
+        Some(ZOOM_ARCHIVED_ORIGINAL)
+    } else if expected.sha256 == PETROBRAS_SHA256 && expected.bytes == PETROBRAS_BYTES {
+        Some(PETROBRAS_ARCHIVED_ORIGINAL)
+    } else {
+        None
+    };
     if let Ok(bytes) = tokio::fs::read(&cached).await {
         if bytes.len() == expected.bytes && fingerprint(&bytes) == expected.sha256 {
             if archived_marker.exists() {
                 if tokio::fs::read(&archived_marker)
                     .await
                     .is_ok_and(|marker| marker == expected.sha256.as_bytes())
-                    && (!is_zoom
-                        || (bytes.len() == ZOOM_ARCHIVED_ORIGINAL.len()
-                            && fingerprint(&bytes) == ZOOM_SHA256))
+                    && archived_original.is_none_or(|archived| {
+                        bytes.len() == archived.len() && fingerprint(&bytes) == expected.sha256
+                    })
                 {
                     return Ok("verified_archived_original");
                 }
@@ -949,14 +957,14 @@ async fn verified_source(
             .map_err(|error| format!("industry source request failed: {error}"))?
             .error_for_status()
             .map_err(|error| format!("industry source returned an error: {error}"))?;
-        if !is_zoom
+        if archived_original.is_none()
             && response
                 .content_length()
                 .is_some_and(|size| size != expected.bytes as u64)
         {
             return Err("industry source Content-Length differs from the reviewed document".into());
         }
-        if is_zoom
+        if archived_original.is_some()
             && response
                 .content_length()
                 .is_some_and(|size| size > 20_000_000)
@@ -967,9 +975,13 @@ async fn verified_source(
         let mut stream = response.bytes_stream();
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.map_err(|error| format!("industry source body failed: {error}"))?;
-            let limit = if is_zoom { 20_000_000 } else { expected.bytes };
+            let limit = if archived_original.is_some() {
+                20_000_000
+            } else {
+                expected.bytes
+            };
             if bytes.len().saturating_add(chunk.len()) > limit {
-                return Err(if is_zoom {
+                return Err(if archived_original.is_some() {
                     "industry source body exceeds safety limit".into()
                 } else {
                     "industry source body exceeds the reviewed document size".into()
@@ -977,8 +989,8 @@ async fn verified_source(
             }
             bytes.extend_from_slice(&chunk);
         }
-        if is_zoom && !bytes.starts_with(b"%PDF-") {
-            return Err("Zoom original endpoint did not return a PDF".into());
+        if archived_original.is_some() && !bytes.starts_with(b"%PDF-") {
+            return Err("archived industry original endpoint did not return a PDF".into());
         }
         if bytes.len() != expected.bytes || fingerprint(&bytes) != expected.sha256 {
             return Err(
@@ -990,24 +1002,19 @@ async fn verified_source(
     let (bytes, status, archived) = match download.await {
         Ok(bytes) => (bytes, "verified_then_cached", false),
         Err(error)
-            if is_zoom
+            if archived_original.is_some()
                 && (error.starts_with("industry source request failed")
                     || error.starts_with("industry source returned an error")
                     || error.starts_with("industry source body failed")
-                    || error == "Zoom original endpoint did not return a PDF") =>
+                    || error == "archived industry original endpoint did not return a PDF") =>
         {
-            if ZOOM_ARCHIVED_ORIGINAL.len() != expected.bytes
-                || fingerprint(ZOOM_ARCHIVED_ORIGINAL) != expected.sha256
-            {
+            let archived = archived_original.unwrap();
+            if archived.len() != expected.bytes || fingerprint(archived) != expected.sha256 {
                 return Err(format!(
-                    "archived Zoom original differs from reviewed evidence after live failure: {error}"
+                    "archived industry original differs from reviewed evidence after live failure: {error}"
                 ));
             }
-            (
-                ZOOM_ARCHIVED_ORIGINAL.to_vec(),
-                "verified_archived_original",
-                true,
-            )
+            (archived.to_vec(), "verified_archived_original", true)
         }
         Err(error) => return Err(error),
     };
@@ -1217,9 +1224,13 @@ pub async fn evaluate(
     let case = select_case(cases, definition.case);
     let source = select_source(registry, definition.case);
     let cache_status = verified_source(cache_dir, source).await?;
-    let retrieval_note = (cache_status == "verified_archived_original").then_some(
-        "Zoom 原站请求未返回已核验 PDF；本案例使用字节数与 SHA-256 完全相同的已核验原文备份。",
-    );
+    let retrieval_note = if cache_status != "verified_archived_original" {
+        None
+    } else if source.sha256 == PETROBRAS_SHA256 {
+        Some("Petrobras 原站请求未返回已核验 PDF；本案例使用字节数与 SHA-256 完全相同的已核验原文备份。")
+    } else {
+        Some("Zoom 原站请求未返回已核验 PDF；本案例使用字节数与 SHA-256 完全相同的已核验原文备份。")
+    };
     let value = calculate(id, case)?;
     let mut reported_facts = Vec::new();
     let mut field_provenance = Map::new();

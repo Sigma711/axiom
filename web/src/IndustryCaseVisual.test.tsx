@@ -189,6 +189,28 @@ describe('IndustryCaseVisual', () => {
     expect(html).not.toContain('reported_online_monthly_churn');
   });
 
+  it('explains derived monthly cash burn and wafer revenue without internal field names', () => {
+    const result = fixture();
+    result.industry_facts!.calculation.symbol_mapping = {
+      monthly_cash_burn: 'annual_operating_cash_burn / 12',
+      wafer_revenue: 'revenue * wafer_revenue_share',
+    };
+    const html = renderToStaticMarkup(<IndustryCaseVisual result={result} name="经营指标" />);
+    expect(html).toContain('经营现金消耗 ÷ 12（月均）');
+    expect(html).toContain('总营收 × 晶圆营收占比');
+    expect(html).not.toContain('monthly_cash_burn');
+    expect(html).not.toContain('wafer_revenue');
+  });
+
+  it('distinguishes an undated forecast from its collection deadline in plain Chinese', () => {
+    const result = fixture();
+    result.industry_case!.published = 'undated PDF; collection window ended 2026-02-12';
+    result.industry_facts!.reported_facts[0].published = result.industry_case!.published;
+    const html = renderToStaticMarkup(<IndustryCaseVisual result={result} name="一致预期" />);
+    expect(html).toContain('发布日期未注明；预测收集截至 2026-02-12');
+    expect(html).not.toContain('发布于 undated');
+  });
+
   it('shows a fixed historical issuer case with auditable formula and source pages', () => {
     const html = renderToStaticMarkup(<IndustryCaseVisual result={fixture()} name="Rule of 40" />);
     expect(html).toContain('Shopify Inc.');

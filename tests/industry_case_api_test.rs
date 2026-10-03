@@ -3,8 +3,8 @@ use axiom::{
     app_state::AppState,
     config::default_config,
     industry_case::{
-        fixed_symbol, IndustrySourceConfig, IndustrySourceRegistry, SUPPORTED_IDS, ZOOM_BYTES,
-        ZOOM_SHA256,
+        fixed_symbol, IndustrySourceConfig, IndustrySourceRegistry, PETROBRAS_BYTES,
+        PETROBRAS_SHA256, SUPPORTED_IDS, ZOOM_BYTES, ZOOM_SHA256,
     },
 };
 use axum::{
@@ -21,6 +21,8 @@ use tower::ServiceExt;
 
 const ZOOM_PDF: &[u8] =
     include_bytes!("../data/verified-sources/zoom-q1-fy2025-prepared-remarks.pdf");
+const PETROBRAS_PDF: &[u8] =
+    include_bytes!("../data/verified-sources/petrobras-2024-management-report.pdf");
 
 async fn post(app: &Router, body: Value) -> (StatusCode, Value) {
     let response = app
@@ -68,6 +70,75 @@ async fn zoom_app(url: String, root: &std::path::Path) -> Router {
 
 fn zoom_request() -> Value {
     json!({"concept_id":"book_saas_churn","module":"data","source":"issuer_disclosure","symbol":"ZM","inputs":{}})
+}
+
+fn petrobras_request() -> Value {
+    json!({"concept_id":"book_energy_lifting_cost","module":"data","source":"issuer_disclosure","symbol":"PBR","inputs":{}})
+}
+
+async fn petrobras_app(url: String, root: &std::path::Path) -> Router {
+    let mut registry = IndustrySourceRegistry::default();
+    registry.petrobras.url = url;
+    api::router(Arc::new(
+        AppState::new(default_config(), root.to_path_buf()).with_industry_sources(registry),
+    ))
+}
+
+#[tokio::test]
+async fn petrobras_http_failure_uses_the_exact_archived_original_and_preserves_warm_provenance() {
+    assert_eq!(PETROBRAS_PDF.len(), PETROBRAS_BYTES);
+    assert_eq!(
+        format!("{:x}", Sha256::digest(PETROBRAS_PDF)),
+        PETROBRAS_SHA256
+    );
+    let root = std::env::temp_dir().join(format!(
+        "axiom-petrobras-archive-api-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let app = petrobras_app(
+        serve_once("403 Forbidden", "text/html", b"access denied".to_vec()).await,
+        &root,
+    )
+    .await;
+    let (status, result) = post(&app, petrobras_request()).await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    assert_eq!(result["values"]["lifting_cost"], 6.05);
+    assert_eq!(
+        result["industry_case"]["verification"]["status"],
+        "verified_archived_original"
+    );
+    assert!(result["industry_case"]["verification"]["retrieval_note"]
+        .as_str()
+        .unwrap()
+        .contains("Petrobras 原站请求未返回已核验 PDF"));
+    let (_, warm) = post(&app, petrobras_request()).await;
+    assert_eq!(
+        warm["industry_case"]["verification"]["status"],
+        "verified_archived_original"
+    );
+    let _ = tokio::fs::remove_dir_all(root).await;
+}
+
+#[tokio::test]
+async fn petrobras_changed_and_oversized_pdfs_fail_closed_without_archived_fallback() {
+    for (name, body) in [
+        ("changed", b"%PDF-1.7\nchanged Petrobras document".to_vec()),
+        ("oversized", {
+            let mut body = b"%PDF-1.7\n".to_vec();
+            body.resize(20_000_001, b'x');
+            body
+        }),
+    ] {
+        let root =
+            std::env::temp_dir().join(format!("axiom-petrobras-{name}-{}", uuid::Uuid::new_v4()));
+        let app = petrobras_app(serve_once("200 OK", "application/pdf", body).await, &root).await;
+        let (status, result) = post(&app, petrobras_request()).await;
+        assert_eq!(status, StatusCode::BAD_GATEWAY, "{name}: {result}");
+        assert!(!root
+            .join(format!("industry-sources/{PETROBRAS_SHA256}.pdf"))
+            .exists());
+        let _ = tokio::fs::remove_dir_all(root).await;
+    }
 }
 
 #[tokio::test]

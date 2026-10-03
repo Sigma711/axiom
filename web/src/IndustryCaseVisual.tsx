@@ -91,6 +91,8 @@ const factLabels: Record<string, string> = {
 };
 
 const symbolMeanings: Record<string, string> = {
+  monthly_cash_burn: '经营现金消耗 ÷ 12（月均）',
+  wafer_revenue: '总营收 × 晶圆营收占比',
   restricted_shares_residual: '限售股份余额 = 期末总股本 − 期末无限售条件流通股份',
   closing_total_shares: '期末总股本 = 期初总股本 − 注销股份',
   net_interest_income: '净利息收入', average_earning_assets: '平均生息资产',
@@ -124,6 +126,9 @@ const entityLabels: Record<string, string> = {
 };
 
 const entityName = (name: string) => entityLabels[name] || name;
+const publicationLabel = (value: string) => value.startsWith('undated PDF; collection window ended ')
+  ? `发布日期未注明；预测收集截至 ${value.slice('undated PDF; collection window ended '.length)}`
+  : `发布于 ${value}`;
 
 const format = (value: number, unit?: string) => {
   const adjusted = unit === 'fraction' || unit?.startsWith('fraction ') ? value * 100 : value;
@@ -162,7 +167,7 @@ export function IndustryCaseVisual({ result, name }: { result: PracticeResult; n
     <header>
       <span className="ax-filing-badge">{sourceBadge}</span>
       <h4>{entityName(source.issuer.name)}（{source.issuer.ticker}）· {source.period.label.replace(/^As of /, '截至 ')}</h4>
-      <p>{source.period.start === source.period.end ? source.period.end : `${source.period.start} 至 ${source.period.end}`} · 发布于 {source.published}</p>
+      <p>{source.period.start === source.period.end ? source.period.end : `${source.period.start} 至 ${source.period.end}`} · {publicationLabel(source.published)}</p>
       <p>报告主体：{entityName(source.issuer.reporting_entity)} · 指标主体：{entityName(source.issuer.metric_entity)}</p>
       <p>{auditBoundary} <strong>{source.audited ? '审计范围内' : result.concept_id === 'book_share_counts' ? '未声明审计保证' : '未经审计'}</strong>。这是固定历史案例，不是当前行情或当前所选股票的指标。</p>
     </header>
@@ -197,7 +202,7 @@ export function IndustryCaseVisual({ result, name }: { result: PracticeResult; n
             <header><strong>{factName(fact.key, fact.label)}</strong>{fact.kind === 'assumption' ? <span>模型假设</span> : <a href={`${fact.source_url || source.url}${(fact.pdf_page ?? 0) > 0 ? `#page=${fact.pdf_page}` : ''}`} target="_blank" rel="noopener noreferrer">{(fact.pdf_page ?? 0) > 0 ? `PDF 第 ${fact.pdf_page} 页` : fact.source_section || `${fact.source_format || '原文'} 来源`} ↗</a>}</header>
             {(fact.published || fact.retrieved_on || fact.as_of) && <p className="ax-industry-provenance">{[
               fact.as_of && `数据时点 ${fact.as_of}`,
-              fact.published && `发布于 ${fact.published}`,
+              fact.published && publicationLabel(fact.published),
               fact.retrieved_on && `资料获取于 ${fact.retrieved_on}`,
             ].filter(Boolean).join(' · ')}</p>}
             <div className="ax-filing-bar year-1"><span aria-hidden="true" style={{ width: `${Math.abs(fact.value) / maximum * 100}%` }} /><p>{format(fact.value, fact.unit)} {unitLabels[fact.unit] || fact.unit}</p></div>
@@ -210,6 +215,6 @@ export function IndustryCaseVisual({ result, name }: { result: PracticeResult; n
     <details className="ax-industry-definitions"><summary>口径定义</summary><p><strong>案例边界</strong>：固定发行人与报告期；不会根据调用方当前选择的标的或数据集外推。</p><p><strong>指标定义</strong>：{facts.definitions.metric}</p></details>
     {result.notes.map((note, index) => <p className="ax-practice-note" key={index}>{note}</p>)}
     <details><summary>核对原文与文件指纹</summary><a href={source.url} target="_blank" rel="noopener noreferrer">{sourceLinkLabel} ↗</a><p>{source.pdf_pages.length > 0 && `原文页：${source.pdf_pages.join('、')} · `}内嵌审阅文件 {format(source.bytes)} 字节</p><p>内嵌 SHA-256 <code>{source.sha256}</code></p><a href={source.verification.requested_url} target="_blank" rel="noopener noreferrer">实际核验地址 ↗</a><p>实际匹配文件 {format(source.verification.matched_bytes)} 字节 · SHA-256 <code>{source.verification.matched_sha256}</code></p><p>{verificationLabels[source.verification.status] || source.verification.status} · {fingerprintMatches ? '字节数与指纹完全匹配' : '字节数或指纹不匹配'} · 核验时间 {source.verification.verified_at}</p>{source.verification.retrieval_note && <p className="ax-industry-provenance">{source.verification.retrieval_note}</p>}</details>
-    {source.sources?.map(document => <details key={document.id}><summary>来源：{document.title || document.id} · {document.format}</summary><a href={document.url} target="_blank" rel="noopener noreferrer">查看原文 ↗</a><p>{[document.published && `发布于 ${document.published}`, document.retrieved_on && `资料获取于 ${document.retrieved_on}`, `${document.verification_basis?.startsWith('canonical') ? '规范化记录 ' : ''}${format(document.bytes)} 字节`].filter(Boolean).join(' · ')}</p>{document.verification_basis?.startsWith('canonical') && <p>指定日期与标的的记录指纹；接口中其他日期和元数据不参与此核验。</p>}<p>SHA-256 <code>{document.sha256}</code></p><a href={document.verification.requested_url} target="_blank" rel="noopener noreferrer">实际核验地址 ↗</a><p>{verificationLabels[document.verification.status] || document.verification.status} · {document.sha256 === document.verification.matched_sha256 && document.bytes === document.verification.matched_bytes ? '字节数与指纹完全匹配' : '字节数或指纹不匹配'} · 核验时间 {document.verification.verified_at}</p>{document.verification.retrieval_note && <p className="ax-industry-provenance">{document.verification.retrieval_note}</p>}</details>)}
+    {source.sources?.map(document => <details key={document.id}><summary>来源：{document.title || document.id} · {document.format}</summary><a href={document.url} target="_blank" rel="noopener noreferrer">查看原文 ↗</a><p>{[document.published && publicationLabel(document.published), document.retrieved_on && `资料获取于 ${document.retrieved_on}`, `${document.verification_basis?.startsWith('canonical') ? '规范化记录 ' : ''}${format(document.bytes)} 字节`].filter(Boolean).join(' · ')}</p>{document.verification_basis?.startsWith('canonical') && <p>指定日期与标的的记录指纹；接口中其他日期和元数据不参与此核验。</p>}<p>SHA-256 <code>{document.sha256}</code></p><a href={document.verification.requested_url} target="_blank" rel="noopener noreferrer">实际核验地址 ↗</a><p>{verificationLabels[document.verification.status] || document.verification.status} · {document.sha256 === document.verification.matched_sha256 && document.bytes === document.verification.matched_bytes ? '字节数与指纹完全匹配' : '字节数或指纹不匹配'} · 核验时间 {document.verification.verified_at}</p>{document.verification.retrieval_note && <p className="ax-industry-provenance">{document.verification.retrieval_note}</p>}</details>)}
   </section>;
 }

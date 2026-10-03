@@ -166,7 +166,7 @@ test('every historical industry case follows its verified original disclosure fr
     { symbol: 'DAL', url: 'https://s2.q4cdn.com/181345880/files/doc_financials/2024/q4/DAL-12-31-2024-10K-2-11-25-Filed.pdf', bytes: 897_733, hash: '61116b7fe79dd0c687d88c04ac376e4d09a6c3760163bbe9433f572bb2549afa' },
     { symbol: 'COST', url: 'https://s201.q4cdn.com/287523651/files/doc_news/Costco-Wholesale-Corporation-Reports-Fourth-Quarter-and-Fiscal-Year-2024-Operating-Results-2024.pdf', bytes: 138_152, hash: '590d2dc15e168ca52697a8d8b85b0f388cbea3eab8235b2ec8aa77ed4f173c57' },
     { symbol: 'MRNA', url: 'https://s29.q4cdn.com/435878511/files/doc_financials/2024/ar/MRNA010_AR_WEB_FULL.pdf', bytes: 3_098_566, hash: '2347835006ac22d5cd9b74683568893431149071740e81ff17603504ff70c1a5' },
-    { symbol: 'PBR', url: 'https://transparencia.petrobras.com.br/documents/1357439/14971831/Relat%C3%B3rio%2Bde%2BGest%C3%A3o%2B-%2B2024.pdf/50685b26-3e9e-2ece-3035-33eebe338c73?download=true&t=1748554910000&version=1.0', bytes: 6_302_154, hash: '04372d526d67247b9ad66098a58d85ca2bf00b534478575ead5f650a7a463122' },
+    { symbol: 'PBR', snapshot: '../data/verified-sources/petrobras-2024-management-report.pdf', url: 'https://transparencia.petrobras.com.br/documents/1357439/14971831/Relat%C3%B3rio%2Bde%2BGest%C3%A3o%2B-%2B2024.pdf/50685b26-3e9e-2ece-3035-33eebe338c73?download=true&t=1748554910000&version=1.0', bytes: 6_302_154, hash: '04372d526d67247b9ad66098a58d85ca2bf00b534478575ead5f650a7a463122' },
     { symbol: 'GOLD', url: 'https://www.barrick.com/files/doc_financial/annual_reports/2024/Barrick_Annual_Report_2024.pdf', bytes: 11_789_238, hash: '3cb6cf59458e8799650d1c219222f8c01e41b1fbda9351523ed6b602f3875b86' },
     { symbol: 'SIE.DE', url: 'https://assets.new.siemens.com/siemens/assets/api/uuid:344347ec-a1bd-44cb-aaaa-711d1b3ec1b8/Siemens-Annual-Report-2024.pdf', bytes: 4_671_939, hash: '75f568180a8d35287f970a4812817dcd2b5c690ec937bf80f17b6fe68f42521e' },
     { symbol: 'SPOT', url: 'https://investors.spotify.com/files/doc_financials/2020/q3/Shareholder-Letter-Q3-2020_FINAL.pdf', bytes: 1_172_171, hash: '82025cc49cce680c62ba9e5576881e6e84c867ba77f44a4f46d82f6c9ae81518' },
@@ -294,7 +294,7 @@ test('every historical industry case follows its verified original disclosure fr
     expect(result.industry_case.verification).toMatchObject({ status: expectedVerification.get(source.symbol), matched_sha256: source.hash, matched_bytes: source.bytes });
     if (result.industry_case.verification.status === 'verified_archived_original') {
       await expect(panel.locator('.ax-industry-case')).toContainText('已核验原文备份');
-      await expect(panel.locator('.ax-industry-case')).toContainText('Zoom 原站请求未返回已核验 PDF');
+      await expect(panel.locator('.ax-industry-case')).toContainText(`${source.symbol === 'PBR' ? 'Petrobras' : 'Zoom'} 原站请求未返回已核验 PDF`);
     }
     expect(Object.fromEntries(result.industry_facts.reported_facts.map((fact: { key: string; value: number }) => [fact.key, fact.value]))).toEqual(item.facts);
     expect(result.units[item.key]).toBeTruthy();
@@ -651,8 +651,12 @@ test('repainting practice fetches completed real bars and keeps confirmation aft
   await expect(page.locator('.ax-practice-result')).toContainText('t+2');
 });
 
-test('every rendered knowledge card opens one meaningful SVG illustration without retaining hidden charts', async ({ page }) => {
+test('every rendered knowledge card opens one meaningful illustration without retaining hidden charts', async ({ page }) => {
   test.setTimeout(180_000);
+  const warmed = await page.request.post('/api/practice', { data: {
+    concept_id: 'consensus', module: 'data', source: 'issuer_disclosure', symbol: 'AIR.PA', inputs: {},
+  } });
+  expect(warmed.ok()).toBe(true);
   await page.goto('/');
   const cards = page.locator('.ax-kb-card');
   await expect.poll(() => cards.count(), { timeout: 30_000 }).toBeGreaterThan(0);
@@ -660,10 +664,19 @@ test('every rendered knowledge card opens one meaningful SVG illustration withou
   expect(total).toBeGreaterThan(0);
   for (let index = 0; index < total; index += 1) {
     await cards.nth(index).locator('.ax-kb-details').click();
-    await expect(cards.nth(index).locator('.ax-knowledge-chart svg')).toBeVisible({ timeout: 30_000 });
+    const card = cards.nth(index);
+    await expect(card.locator('details[open]')).toBeVisible();
+    // A cached disclosure replaces the introductory SVG with its real facts
+    // and formula flow. Both are illustrations; arrival timing is irrelevant.
+    await expect(card.locator('details[open] svg, .ax-industry-formula-flow, .ax-stock-adjustment-flow, .ax-filing-case figure .ax-filing-bar').first()).toBeVisible({ timeout: 30_000 });
+    if (await card.getAttribute('data-concept-id') === 'consensus') {
+      await expect(card.locator('.ax-industry-formula-flow')).toBeVisible();
+      await expect(card.locator('.ax-industry-formula-flow')).toContainText('20名卖方分析师');
+    }
     if (process.env.CI) await expect(cards.nth(index).locator('.ax-code-link')).toHaveAttribute('href', /^https:\/\/github\.com\/Sigma711\/axiom\/blob\/[0-9a-f]{40}\/src\/.+#L[1-9]\d*-L[1-9]\d*$/);
   }
-  await expect(page.locator('.ax-knowledge-chart svg')).toHaveCount(1);
+  await expect(page.locator('.ax-kb-card details[open]')).toHaveCount(1);
+  await expect(page.locator('.ax-kb-card').filter({ hasNot: page.locator('details[open]') }).locator('svg, .ax-industry-case, .ax-stock-adjustment, .ax-filing-case')).toHaveCount(0);
 });
 
 test('browser switches among three live markets with matching symbols and valid candles', async ({ page }) => {
