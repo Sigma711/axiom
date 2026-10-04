@@ -8,6 +8,9 @@ export default defineConfig({
   preserveOutput: 'always',
   testMatch: realService ? /real\.spec\.ts/ : /app\.spec\.ts/,
   timeout: 30_000,
+  // Live checks share rate-limited public providers; serial requests keep a
+  // network burst from failing unrelated source-backed browser assertions.
+  workers: realService ? 1 : undefined,
   use: { baseURL: realService ? 'http://127.0.0.1:18080' : 'http://127.0.0.1:18181', viewport: { width: 1440, height: 1000 }, colorScheme: 'dark', timezoneId: 'UTC', locale: 'en-US' },
   webServer: realService
     ? { command: 'cd .. && make serve-test', url: 'http://127.0.0.1:18080', reuseExistingServer: false }
