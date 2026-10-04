@@ -241,14 +241,38 @@ for concept_id in sorted(breadth_ids | {"book_mcclellan_sum"}):
         assert result["provenance"] == "server_fetched_fixed_market_breadth_snapshot"
         assert result["market_breadth"]["universe"]["id"] == "dow_30_2024_11_08"
 
+members = breadth["source"]["members"]
+# Re-fetch the raw provider documents from the production network, where the
+# app itself runs. One bounded SSH batch avoids a second burst from the local
+# WSL IP being mistaken for a provider outage (Yahoo may return HTTP 429).
+provider_probe = """import json, time, urllib.error, urllib.request
+urls = """ + repr([member["endpoint"] for member in members]) + """
+documents = []
+for url in urls:
+    for attempt in range(5):
+        try:
+            request = urllib.request.Request(url, headers={"User-Agent": "AXIOM independent release verifier/1.0", "Accept": "application/json"})
+            with urllib.request.urlopen(request, timeout=45) as response:
+                documents.append(json.load(response))
+            break
+        except urllib.error.HTTPError as error:
+            if error.code != 429 or attempt == 4:
+                raise
+            time.sleep(min(2 ** attempt, 12))
+    time.sleep(0.4)
+print(json.dumps(documents))
+"""
+raw_documents = json.loads(subprocess.check_output(
+    ["ssh", "root@sigma711.top", "python3", "-"],
+    input=provider_probe.encode(), timeout=600,
+))
+assert len(raw_documents) == len(members) == 30
 member_rows = {}
-for member in breadth["source"]["members"]:
+for member, raw in zip(members, raw_documents):
     assert member["symbol"] in breadth["universe"]["symbols"]
     assert member["provider"] in {"yahoo", "yahoo_via_restricted_relay"}, member
     assert member["endpoint"].startswith("https://")
     assert member["price_basis"] and member["corporate_actions"] is not None
-    with urllib.request.urlopen(member["endpoint"], timeout=60) as response:
-        raw = json.load(response)
     chart = raw["chart"]["result"][0]
     assert chart["meta"]["symbol"] == member["symbol"]
     quote = chart["indicators"]["quote"][0]

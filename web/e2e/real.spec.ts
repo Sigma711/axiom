@@ -159,7 +159,7 @@ async function captureHistoricalCard(page: Page, visual: Locator, name: string) 
 test('every historical industry case follows its verified original disclosure from the knowledge card to practice', async ({ page, request }) => {
   test.setTimeout(900_000);
   const sources = [
-    { symbol: '2318.HK', url: 'https://pagroup.pingan.com/resource/pingan/IR-Docs/2025/pingan-ar24-report.pdf', bytes: 14_886_158, hash: '62a5bd793ef9a787cc95750d65e52803aa58fa424b01d94e754ea0120d5be8a3' },
+    { symbol: '2318.HK', snapshot: '../data/verified-sources/pingan-2024-annual-report.pdf', url: 'https://pagroup.pingan.com/resource/pingan/IR-Docs/2025/pingan-ar24-report.pdf', bytes: 14_886_158, hash: '62a5bd793ef9a787cc95750d65e52803aa58fa424b01d94e754ea0120d5be8a3' },
     { symbol: 'SHOP', url: 'https://s27.q4cdn.com/572064924/files/doc_financials/2024/q4/Q4-2024-Press-Release-Final.pdf', bytes: 86_468, hash: '4bf71232697a2270b2dbc38fc9609c11c27d545d6f4301fce3356fa60c6ef6de' },
     { symbol: 'O', url: 'https://www.realtyincome.com/sites/realty-income/files/2025-02/realty-income-q4-2024-supplemental-information.pdf', bytes: 17_522_920, hash: 'a0b3bf067c7b19ebde01ceaac3ecb172ed6a4c7084eeabe276ad1d4599c62a3f' },
     { symbol: 'EBAY', url: 'https://ebay.q4cdn.com/610426115/files/doc_financials/2024/q4/eBay-10-K-2024.pdf', bytes: 1_004_020, hash: '10530b8314c4dc49f9737b938f28ead7a70212885c35919fb361d145401f37fb' },
