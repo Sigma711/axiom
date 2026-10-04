@@ -1446,7 +1446,7 @@ test('R² performance practice sends an auditable equity path and matched benchm
   }
 });
 
-test('theme switch immediately gives body the active background token', async ({ page }) => {
+test('theme switch immediately gives the page the active background token', async ({ page }) => {
   await page.goto('/');
   await page.getByLabel('切换到浅色模式').click();
   const backgrounds = await page.evaluate(() => {
@@ -1454,11 +1454,63 @@ test('theme switch immediately gives body the active background token', async ({
     sample.style.backgroundColor = 'var(--bg)';
     document.body.append(sample);
     const active = getComputedStyle(sample).backgroundColor;
+    const root = getComputedStyle(document.documentElement).backgroundColor;
     const body = getComputedStyle(document.body).backgroundColor;
     sample.remove();
-    return { active, body };
+    return { active, root, body };
   });
-  expect(backgrounds.body).toBe(backgrounds.active);
+  expect(backgrounds.root).toBe(backgrounds.active);
+  expect(backgrounds.body).toBe('rgba(0, 0, 0, 0)');
+});
+test('Bauhaus grid and quiet geometry cover long pages in both themes and responsive widths', async ({ page }) => {
+  for (const width of [320, 390, 1440]) for (const theme of ['light', 'dark'] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/learn');
+    await page.evaluate(value => localStorage.setItem('axiom-theme', value), theme);
+    await page.reload();
+    await page.evaluate(() => {
+      const spacer = document.createElement('div');
+      spacer.style.height = '2200px';
+      spacer.setAttribute('aria-hidden', 'true');
+      document.querySelector('.ax-main')?.append(spacer);
+      window.scrollTo(0, document.documentElement.scrollHeight);
+    });
+    const background = await page.evaluate(() => {
+      const body = getComputedStyle(document.body);
+      const root = getComputedStyle(document.documentElement);
+      const app = document.querySelector('.ax-app')!;
+      const ring = getComputedStyle(app, '::before');
+      const grid = getComputedStyle(app, '::after');
+      return {
+        bodyHeight: document.body.getBoundingClientRect().height,
+        documentHeight: document.documentElement.scrollHeight,
+        scrollY,
+        scrollWidth: document.documentElement.scrollWidth,
+        viewportWidth: innerWidth,
+        bodyColor: body.backgroundColor,
+        rootColor: root.backgroundColor,
+        grid: grid.backgroundImage,
+        gridSize: grid.backgroundSize,
+        gridColor: grid.backgroundColor,
+        gridPosition: grid.position,
+        ringBorder: ring.borderTopColor,
+        ringStack: Number(ring.zIndex),
+        gridStack: Number(grid.zIndex),
+        ringOpacity: Number(ring.opacity),
+      };
+    });
+    expect(background.scrollY).toBeGreaterThan(1000);
+    expect(background.bodyHeight).toBeGreaterThanOrEqual(background.documentHeight - 1);
+    expect(background.bodyColor).toBe('rgba(0, 0, 0, 0)');
+    expect(background.rootColor).not.toBe('rgba(0, 0, 0, 0)');
+    expect(background.grid).toContain('linear-gradient');
+    expect(background.gridSize).toContain(width <= 700 ? '24px' : '32px');
+    expect(background.gridColor).toContain('0.72');
+    expect(background.gridPosition).toBe('fixed');
+    expect(background.ringStack).toBeLessThan(background.gridStack);
+    expect(background.ringOpacity).toBe(1);
+    expect(background.scrollWidth).toBeLessThanOrEqual(background.viewportWidth);
+  }
 });
 test('Bitcoin address practice renders a script-address set from the mocked confirmed first page', async ({ page }) => {
   const concept = { id: 'book_sending_receiving', name: '发送与接收', category: 'Bitcoin', input_kind: 'market_bars', inputs: [], notes: '从输入和非 OP_RETURN 输出脚本提取地址。', plan: { markets: ['crypto'], modules: ['data'], required_datasets: ['confirmed_bitcoin_first_page'], source_policy: 'real_required', goal: '地址集合不推断身份。' } };

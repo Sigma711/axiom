@@ -699,15 +699,13 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
   --muted: var(--text-dim);
 }
 
-html { background: var(--bg); color-scheme: light; }
+html { min-height: 100%; background: var(--bg); color-scheme: light; }
 [data-theme="dark"] { color-scheme: dark; }
 body {
   min-width: 320px;
-  background-color: var(--bg);
-  background-image:
-    linear-gradient(color-mix(in srgb, var(--text) 5%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--text) 5%, transparent) 1px, transparent 1px);
-  background-size: 32px 32px;
+  height: auto;
+  min-height: 100vh;
+  background: transparent;
   font-family: "Aptos", "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   line-height: 1.62;
 }
@@ -717,18 +715,30 @@ body {
   outline-offset: 3px;
 }
 
-.ax-app { min-height: 100vh; position: relative; overflow: clip; }
+.ax-app { min-height: 100vh; position: relative; overflow: clip; isolation: isolate; }
 .ax-app::before {
   content: "";
   position: fixed;
-  z-index: -1;
+  z-index: -2;
   top: 22rem;
   right: -8rem;
   width: 18rem;
   height: 18rem;
-  border: 3rem solid color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 3rem solid color-mix(in srgb, var(--accent) 60%, transparent);
   border-radius: 50%;
   pointer-events: none;
+}
+.ax-app::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: color-mix(in srgb, var(--bg) 72%, transparent);
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--text) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--text) 5%, transparent) 1px, transparent 1px);
+  background-size: 32px 32px;
 }
 
 /* Masthead: geometric mark, information label and strong baseline. */
@@ -933,7 +943,8 @@ body {
 .ax-footer::before { content: ""; position: absolute; top: -1.15rem; left: 8%; width: 2.3rem; height: 2.3rem; background: var(--accent-fill); border: 2px solid var(--border); border-radius: 50%; }
 
 @media (max-width: 700px) {
-  body { background-size: 24px 24px; }
+  .ax-app::after { background-size: 24px 24px; }
+  .ax-app::before { right: -6rem; width: 12rem; height: 12rem; border-width: 2rem; }
   .ax-header, .ax-tabs, .ax-main { padding-left: 1rem; padding-right: 1rem; }
   .ax-header { padding-top: .85rem; padding-bottom: .85rem; }
   .ax-header::after { right: 4.5rem; width: 2rem; opacity: .85; }
