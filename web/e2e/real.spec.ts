@@ -562,6 +562,8 @@ test('real Rust service supports the four-module learning journey', async ({ pag
   await expect(page.locator('.ax-paper-stats')).toContainText(/数据源\s*(?!—)\S+/);
   await Promise.all([page.waitForResponse(response => response.url().includes('/api/paper/stop') && response.ok()), page.getByRole('button', { name: /停止/ }).click()]);
   await expect(page.getByRole('button', { name: /启动/ })).toBeEnabled({ timeout: 8_000 });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
   await expect(page).toHaveScreenshot('real-four-module-journey.png', { fullPage: false, maxDiffPixelRatio: 0.03 });
   const pages = [{ label: 'data', tab: '数据探索' }, { label: 'backtest', tab: '回测' }, { label: 'paper', tab: '模拟盘' }, { label: 'compare', tab: '策略对比' }];
   const waitForChartResize = async () => {
