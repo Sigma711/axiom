@@ -113,27 +113,29 @@ export interface CustomStrategy {
 
 export type ChartType = 'candle' | 'heikin_ashi';
 export type SourceType = 'binance' | 'a_share' | 'us_stock';
-export type PracticeRouteSource = SourceType | 'issuer_disclosure';
+export type PracticeRouteSource = SourceType | 'issuer_disclosure' | 'market_breadth';
 
 export interface PracticeConcept {
   id: string;
   name: string;
   category: string;
-  input_kind: 'market_bars' | 'independent_inputs' | 'manual_annotation' | 'filing_case' | 'industry_case' | 'stock_action_case';
+  input_kind: 'market_bars' | 'independent_inputs' | 'manual_annotation' | 'filing_case' | 'industry_case' | 'stock_action_case' | 'market_breadth_case';
   inputs: Array<{ key: string; label: string; default: unknown }>;
   notes: string;
   plan?: {
-    markets: Array<'crypto' | 'cn_equity' | 'us_equity' | 'issuer_disclosure'>;
+    markets: Array<'crypto' | 'cn_equity' | 'us_equity' | 'issuer_disclosure' | 'market_breadth'>;
     modules: Array<'data' | 'backtest' | 'paper' | 'compare'>;
     required_datasets: string[];
     source_policy: 'real_required' | 'result_required' | 'evidence_required';
     goal: string;
-    fixed_source?: 'issuer_disclosure' | 'us_stock';
+    fixed_source?: 'issuer_disclosure' | 'us_stock' | 'market_breadth';
     fixed_symbol?: string;
   };
 }
 
 export interface PracticeResult {
+  market_breadth?: import('./MarketBreadthVisual').MarketBreadthSnapshot;
+  market_tick?: import('./MarketBreadthVisual').MarketTickSnapshot;
   concept_id: string;
   status: 'computed' | 'partial' | 'undefined' | 'insufficient_data';
   reason: string | null;

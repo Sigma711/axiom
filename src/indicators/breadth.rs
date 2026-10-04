@@ -1,7 +1,7 @@
 //! 市场宽度指标 —— PDF 第二十一章
 //!
-//! 本项目主要做单一币种交易,但市场宽度是技术分析中的重要维度。
-//! 提供基础计算函数,实际需要多币种数据可对接外部市场数据源。
+//! 这些纯函数服务于固定成分股截面的真实市场宽度案例；数据来源、
+//! 成分范围、交易日对齐和缺失规则由 `market_breadth` 的公开边界负责。
 
 /// 上涨下跌家数 (Advance/Decline) — 单根 K 线级别
 /// 返回 (+1, -1) 表示 涨/跌
@@ -13,6 +13,30 @@ pub fn advance_decline_one_bar(close: f64, prev_close: f64) -> i32 {
     } else {
         0
     }
+}
+
+/// Market advance/decline line: cumulative cross-sectional advances minus declines.
+///
+/// `advances[i]` and `declines[i]` must describe the same constituent universe and
+/// session. A length mismatch is rejected with an empty result rather than silently
+/// truncating two different calendars.
+pub fn market_advance_decline_line(
+    advances: &[f64],
+    declines: &[f64],
+    initial_value: f64,
+) -> Vec<f64> {
+    if advances.len() != declines.len() {
+        return Vec::new();
+    }
+    let mut value = initial_value;
+    advances
+        .iter()
+        .zip(declines)
+        .map(|(advances, declines)| {
+            value += advances - declines;
+            value
+        })
+        .collect()
 }
 
 /// 累积派发线 ADL (Accumulation/Distribution Line)
@@ -49,7 +73,7 @@ pub fn new_high_low_ratio(new_highs: f64, new_lows: f64) -> f64 {
 
 /// TRIN (Arms Index) = (上涨股数/下跌股数) / (上涨量/下跌量)
 /// PDF 第二十一章 8 节
-/// < 0.5 强势, > 2 弱势
+/// 数值需结合市场、时段与历史分布解释，不在公式层硬编码经验阈值。
 pub fn trin(advances: f64, declines: f64, up_volume: f64, down_volume: f64) -> f64 {
     if declines == 0.0 || down_volume == 0.0 {
         return 0.0;
@@ -119,6 +143,80 @@ pub fn bullish_percent_index(point_figure_buy_signals: f64, total_stocks: f64) -
         return 0.0;
     }
     point_figure_buy_signals / total_stocks * 100.0
+}
+
+/// Persistent Point & Figure signal using logarithmic percentage boxes.
+///
+/// A buy signal is set when an X column exceeds the previous X-column high;
+/// a sell signal is set when an O column falls below the previous O-column low.
+/// The returned state persists through reversals until the opposite breakout.
+pub fn point_and_figure_buy_signal(
+    closes: &[f64],
+    box_fraction: f64,
+    reversal_boxes: i64,
+) -> Option<bool> {
+    if closes.len() < 3
+        || !(0.0..1.0).contains(&box_fraction)
+        || reversal_boxes < 1
+        || closes
+            .iter()
+            .any(|price| !price.is_finite() || *price <= 0.0)
+    {
+        return None;
+    }
+    let step = (1.0 + box_fraction).ln();
+    let boxes: Vec<i64> = closes
+        .iter()
+        .map(|price| (price.ln() / step).floor() as i64)
+        .collect();
+    let mut direction = 0_i8;
+    let mut column_high = boxes[0];
+    let mut column_low = boxes[0];
+    let mut previous_x_high = None;
+    let mut previous_o_low = None;
+    let mut signal = None;
+    for &price_box in &boxes[1..] {
+        match direction {
+            0 if price_box > column_high => {
+                direction = 1;
+                column_high = price_box;
+            }
+            0 if price_box < column_low => {
+                direction = -1;
+                column_low = price_box;
+            }
+            1 if price_box > column_high => {
+                column_high = price_box;
+                if previous_x_high.is_some_and(|prior| column_high > prior) {
+                    signal = Some(true);
+                }
+            }
+            1 if price_box <= column_high - reversal_boxes => {
+                previous_x_high = Some(column_high);
+                direction = -1;
+                column_low = price_box;
+                if previous_o_low.is_some_and(|prior| column_low < prior) {
+                    signal = Some(false);
+                }
+            }
+            -1 if price_box < column_low => {
+                column_low = price_box;
+                if previous_o_low.is_some_and(|prior| column_low < prior) {
+                    signal = Some(false);
+                }
+            }
+            -1 if price_box >= column_low + reversal_boxes => {
+                previous_o_low = Some(column_low);
+                direction = 1;
+                column_high = price_box;
+                if previous_x_high.is_some_and(|prior| column_high > prior) {
+                    signal = Some(true);
+                }
+            }
+            _ => {}
+        }
+    }
+    signal
 }
 
 /// Tick Index: contemporaneous upticks minus downticks for each observation.

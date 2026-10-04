@@ -246,6 +246,11 @@ fn registry() -> &'static Registry {
                 crate::disclosure_ownership::configure_concept(&mut item);
                 crate::disclosure_valuation::configure_concept(&mut item);
                 crate::a_share_float::configure_concept(&mut item);
+                if crate::market_breadth::is_practice_supported(&item.id) {
+                    item.input_kind = "market_breadth_case".into();
+                    item.inputs.clear();
+                    item.notes = "服务器使用固定2024-11-08 Dow 30回溯篮子真实日线；TICK另用固定Binance三币同一UTC截面的聚合成交。拒绝手填数组、单股K线或币种K线冒充市场宽度。".into();
+                }
                 for input in &mut item.inputs {
                     if !input.label.chars().any(|c| ('一'..='鿿').contains(&c)) {
                         if let Some(label) = labels.get(&input.key) {

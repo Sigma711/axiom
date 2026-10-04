@@ -11,6 +11,11 @@ describe('practice route source', () => {
     expect(marketSourceFromPracticeRoute('issuer_disclosure')).toBeUndefined();
   });
 
+  it('uses the fixed market-breadth source for daily and intraday catalog plans', () => {
+    expect(practiceRouteSource({ ...plan('us_equity'), fixed_source: 'market_breadth' })).toBe('market_breadth');
+    expect(practiceRouteSource({ ...plan('crypto'), fixed_source: 'market_breadth' })).toBe('market_breadth');
+  });
+
   it.each([
     ['crypto', 'binance'],
     ['cn_equity', 'a_share'],

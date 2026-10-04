@@ -64,6 +64,25 @@ fn every_published_concept_resolves_to_an_actual_implementation_branch() {
                 if e.id == "book_nonstandard_bar" {
                     assert_eq!(location.kind, "function");
                     assert_eq!(location.code_ref, "src/book.rs::nonstandard_bar_ohlc4");
+                } else if e.id == "book_mcclellan_sum" {
+                    assert_eq!(location.kind, "function");
+                    assert_eq!(
+                        location.code_ref,
+                        "src/market_breadth.rs::calculate_mcclellan_summation"
+                    );
+                } else if let Some(symbol) = match e.id.as_str() {
+                    "ad_line" => Some("src/market_breadth.rs::calculate_ad_line"),
+                    "trin" => Some("src/market_breadth.rs::calculate_trin"),
+                    "mcclellan" => Some("src/market_breadth.rs::calculate_mcclellan"),
+                    "new_high_low" => Some("src/market_breadth.rs::calculate_new_high_low"),
+                    "breadth_thrust" => Some("src/market_breadth.rs::calculate_breadth_thrust"),
+                    "bullish_percent" => Some("src/market_breadth.rs::calculate_bullish_percent"),
+                    "up_down_volume" => Some("src/market_breadth.rs::calculate_up_down_volume"),
+                    "tick" => Some("src/market_tick.rs::calculate_crypto_tick"),
+                    _ => None,
+                } {
+                    assert_eq!(location.kind, "function", "{}", e.id);
+                    assert_eq!(location.code_ref, symbol, "{}", e.id);
                 } else if matches!(e.id.as_str(), "book_adjustment" | "book_pitfall_adjustment") {
                     assert_eq!(location.kind, "conditional");
                     assert_eq!(

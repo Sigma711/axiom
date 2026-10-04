@@ -462,6 +462,7 @@ test('original book renders real pages and navigates its own bookmarks in both t
   expect(await toc.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
   expect(await page.locator('.ax-book-toc').evaluate(node => node.clientHeight < window.innerHeight)).toBe(true);
   const chapter = toc.getByRole('button', { name: '第三部分 趋势、动量、波动与量价技术指标 第 33 页', exact: true });
+  await chapter.scrollIntoViewIfNeeded();
   const windowScroll = await page.evaluate(() => window.scrollY);
   await chapter.click();
   const sheet = page.locator('#pdf-page-33');
@@ -695,6 +696,12 @@ test('browser switches among three live markets with matching symbols and valid 
         && url.searchParams.get('source') === market.source
         && url.searchParams.get('symbol') === market.symbol;
     }, { timeout: 35_000 });
+    const patternPromise = page.waitForResponse(response => {
+      const url = new URL(response.url());
+      return url.pathname.endsWith('/api/patterns')
+        && url.searchParams.get('source') === market.source
+        && url.searchParams.get('symbol') === market.symbol;
+    }, { timeout: 35_000 });
     await page.getByRole('option', { name: market.label }).click();
     await expect(page.getByRole('button', { name: '交易对' })).toContainText(market.symbol);
     const response = await responsePromise;
@@ -714,7 +721,11 @@ test('browser switches among three live markets with matching symbols and valid 
     await expect(page.locator('.ax-chart svg.main-svg').first()).toBeVisible();
     await expect(page.locator('.ax-summary')).toContainText(market.symbol);
     await expect(page.getByLabel('成交与价格口径')).toHaveCount(1);
-    await expect(page.getByLabel('形态来源与价格口径')).toHaveCount(1);
+    const patternResponse = await patternPromise;
+    expect(patternResponse.ok(), await patternResponse.text()).toBe(true);
+    const detected = (await patternResponse.json()).patterns.filter((item: { pattern: string }) => item.pattern !== '无特殊形态');
+    await expect(page.getByRole('button', { name: '加载中...' })).toHaveCount(0);
+    await expect(page.getByLabel('形态来源与价格口径')).toHaveCount(detected.length ? 1 : 0);
     await assertExecutionDisclosure(page, payload);
   }
 });
@@ -2208,7 +2219,7 @@ test('Moutai free float independently reconciles issuer holders, CSI methodology
       expect(response.ok()).toBe(true);
       bytes = await response.body();
     } catch (error) {
-      if (!/ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|socket hang up/i.test(String(error))) throw error;
+      if (!/ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|socket hang up|Timeout\b/i.test(String(error))) throw error;
       // CI runners can be refused by the official host. The pinned original
       // still has to pass the byte count, SHA-256 and PDF fact checks below.
       bytes = await readFile(resolve(process.cwd(), '..', 'data', 'verified-sources', `${document.sha}.pdf`));

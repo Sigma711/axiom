@@ -117,6 +117,18 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
                 vec![format!("src/industry_case.rs::calculate::{}", c.id)]
             } else if crate::filing_case::is_supported(&c.id) {
                 vec![format!("src/filing_case.rs::metric::{}", c.id)]
+            } else if let Some(reference) = match c.id.as_str() {
+                "ad_line" => Some("src/market_breadth.rs::calculate_ad_line"),
+                "trin" => Some("src/market_breadth.rs::calculate_trin"),
+                "mcclellan" => Some("src/market_breadth.rs::calculate_mcclellan"),
+                "new_high_low" => Some("src/market_breadth.rs::calculate_new_high_low"),
+                "breadth_thrust" => Some("src/market_breadth.rs::calculate_breadth_thrust"),
+                "bullish_percent" => Some("src/market_breadth.rs::calculate_bullish_percent"),
+                "up_down_volume" => Some("src/market_breadth.rs::calculate_up_down_volume"),
+                "tick" => Some("src/market_tick.rs::calculate_crypto_tick"),
+                _ => None,
+            } {
+                vec![reference.to_owned()]
             } else if c.id == "volume_profile" {
                 vec!["src/book.rs::market_recent_trade_summary".to_string()]
             } else if c.id == "bid_ask_spread" {
@@ -135,7 +147,9 @@ fn concept_routes() -> &'static BTreeMap<String, String> {
         }
         for c in crate::book_technical::catalog() {
             let id = c.id.strip_prefix("book_").unwrap_or(&c.id);
-            let candidates = if c.id == "book_pitfall_order_imbalance" {
+            let candidates = if c.id == "book_mcclellan_sum" {
+                vec!["src/market_breadth.rs::calculate_mcclellan_summation".to_string()]
+            } else if c.id == "book_pitfall_order_imbalance" {
                 vec!["src/book.rs::market_binance_depth_summary".to_string()]
             } else if c.id == "book_net_volume" {
                 vec!["src/book.rs::market_recent_trade_summary".to_string()]

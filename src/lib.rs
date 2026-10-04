@@ -39,6 +39,8 @@ pub mod filing_case;
 pub mod indicators;
 pub mod industry_case;
 pub mod knowledge;
+pub mod market_breadth;
+pub mod market_tick;
 pub mod metrics;
 pub mod paper;
 pub mod portfolio;

@@ -13,7 +13,7 @@ export function FloatCaseVisual({ result, name }: { result: PracticeResult; name
   if (!item) return null;
   const ratio = result.values.book_free_float;
   const marketCap = result.values.book_float_market_cap;
-  return <section className="ax-filing-case ax-industry-case" aria-label={`${name} A股自由流通口径案例`}>
+  return <section className="ax-filing-case ax-industry-case ax-float-case" aria-label={`${name} A股自由流通口径案例`}>
     <header>
       <span className="ax-filing-badge">固定发行人 · 多来源交叉核验</span>
       <h4>{item.issuer.name}（{item.issuer.ticker}）· 截至 {item.as_of}</h4>

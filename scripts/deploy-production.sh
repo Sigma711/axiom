@@ -51,7 +51,7 @@ import json
 import math
 import csv
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import time
 import urllib.parse
@@ -61,6 +61,17 @@ base = "https://sigma711.top/axiom"
 def read_json(path, params):
     query = urllib.parse.urlencode(params)
     with urllib.request.urlopen(base + path + "?" + query, timeout=30) as response:
+        assert response.status == 200
+        return json.load(response)
+
+def post_json(path, payload, timeout=180):
+    request = urllib.request.Request(
+        base + path,
+        data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         assert response.status == 200
         return json.load(response)
 
@@ -183,6 +194,118 @@ for source, symbol, _ in markets:
     if source in ("a_share", "us_stock"):
         assert result["market_provenance"]["stock_split_coverage"]["status"] == "verified_no_split_in_window"
     print(source, symbol, "production backtest", "verified", flush=True)
+
+# Stage 3 market breadth must be real cross-sectional data. Validate the
+# aggregate contract, exercise every practice route, then independently pull
+# the member URLs and recompute the latest critical values without trusting
+# the API's own observations.
+breadth = read_json("/api/market-breadth/snapshot", {})
+breadth_ids = {
+    "ad_line", "breadth_thrust", "bullish_percent", "mcclellan",
+    "new_high_low", "tick", "trin", "up_down_volume",
+}
+assert breadth["schema_version"] == 1
+assert breadth["universe"]["id"] == "dow_30_2024_11_08"
+assert breadth["universe"]["constituents_as_of"] == "2024-11-08"
+assert breadth["universe"]["member_count"] == len(breadth["universe"]["symbols"]) == 30
+assert len(set(breadth["universe"]["symbols"])) == 30
+assert breadth["coverage"]["minimum_required"] == 27
+assert 27 <= breadth["coverage"]["latest_eligible_members"] <= 30
+assert len(breadth["source"]["members"]) == 30
+concepts = {item["id"]: item for item in breadth["concepts"]}
+assert set(concepts) == breadth_ids
+for concept_id, item in concepts.items():
+    assert item["status"] == "available", (concept_id, item)
+    assert item["unit"] and item["definition"] and item["inputs"] is not None
+    assert isinstance(item["latest"], (int, float)) and math.isfinite(item["latest"])
+
+for concept_id in sorted(breadth_ids | {"book_mcclellan_sum"}):
+    result = post_json("/api/practice", {
+        "concept_id": concept_id,
+        "module": "data",
+        "source": "market_breadth",
+        "inputs": {},
+    })
+    assert result["concept_id"] == concept_id and result["status"] == "computed"
+    assert result["symbol"] is None and result["source"] == "market_breadth"
+    assert result["input_kind"] == "market_breadth_case"
+    assert result["notes"] and result["units"]
+    value = result["values"][concept_id]
+    assert isinstance(value, (int, float)) and math.isfinite(value), (concept_id, result)
+    if concept_id == "tick":
+        assert result["source_markets"] == {"tick": "crypto_spot"}
+        assert result["provenance"] == "server_fetched_fixed_crypto_tick_snapshot"
+        assert "market_tick" in result and "market_breadth" not in result
+    else:
+        assert result["source_markets"] == {"daily": "us_equity"}
+        assert result["provenance"] == "server_fetched_fixed_market_breadth_snapshot"
+        assert result["market_breadth"]["universe"]["id"] == "dow_30_2024_11_08"
+
+member_rows = {}
+for member in breadth["source"]["members"]:
+    assert member["symbol"] in breadth["universe"]["symbols"]
+    assert member["provider"] in {"yahoo", "yahoo_via_restricted_relay"}, member
+    assert member["endpoint"].startswith("https://")
+    assert member["price_basis"] and member["corporate_actions"] is not None
+    with urllib.request.urlopen(member["endpoint"], timeout=60) as response:
+        raw = json.load(response)
+    chart = raw["chart"]["result"][0]
+    assert chart["meta"]["symbol"] == member["symbol"]
+    quote = chart["indicators"]["quote"][0]
+    rows = []
+    for timestamp, close, volume in zip(chart["timestamp"], quote["close"], quote["volume"]):
+        if close is None or volume is None:
+            continue
+        day = datetime.fromtimestamp(timestamp, timezone.utc).date().isoformat()
+        if day <= breadth["as_of"]:
+            rows.append((day, float(close), float(volume)))
+    assert len(rows) >= 2, (member["symbol"], len(rows))
+    rows = rows[-600:]
+    assert len(rows) <= 600 and rows[-1][0] <= breadth["as_of"]
+    assert all(rows[i][0] < rows[i + 1][0] for i in range(len(rows) - 1))
+    member_rows[member["symbol"]] = rows
+
+by_day = {}
+for symbol, rows in member_rows.items():
+    for previous, current in zip(rows, rows[1:]):
+        day, close, volume = current
+        direction = 1 if close > previous[1] else -1 if close < previous[1] else 0
+        by_day.setdefault(day, []).append((symbol, direction, volume))
+eligible = [(day, rows) for day, rows in sorted(by_day.items()) if len(rows) >= 27]
+assert eligible and eligible[-1][0] == breadth["as_of"]
+ad_line = sum(sum(direction for _, direction, _ in rows) for _, rows in eligible)
+latest_day, latest_rows = eligible[-1]
+advances = sum(direction > 0 for _, direction, _ in latest_rows)
+declines = sum(direction < 0 for _, direction, _ in latest_rows)
+unchanged = sum(direction == 0 for _, direction, _ in latest_rows)
+up_volume = sum(volume for _, direction, volume in latest_rows if direction > 0)
+down_volume = sum(volume for _, direction, volume in latest_rows if direction < 0)
+trin = (advances / declines) / (up_volume / down_volume)
+volume_ratio = up_volume / down_volume
+latest_observation = breadth["observations"][-1]
+assert latest_observation["date"] == latest_day
+assert (latest_observation["advances"], latest_observation["declines"], latest_observation["unchanged"]) == (advances, declines, unchanged)
+assert math.isclose(latest_observation["up_volume"], up_volume, rel_tol=1e-12)
+assert math.isclose(latest_observation["down_volume"], down_volume, rel_tol=1e-12)
+assert math.isclose(concepts["ad_line"]["latest"], ad_line, rel_tol=1e-12)
+assert math.isclose(concepts["trin"]["latest"], trin, rel_tol=1e-12)
+assert math.isclose(concepts["up_down_volume"]["latest"], volume_ratio, rel_tol=1e-12)
+
+tick_inputs = concepts["tick"]["inputs"]
+tick_net = 0
+for member in tick_inputs["members"]:
+    with urllib.request.urlopen(member["source_url"], timeout=30) as response:
+        trades = json.load(response)
+    eligible_trades = [trade for trade in trades if trade["T"] <= round(datetime.fromisoformat(tick_inputs["sample_at"].replace("Z", "+00:00")).timestamp() * 1000)]
+    assert len(eligible_trades) >= 2
+    previous, latest = eligible_trades[-2:]
+    direction = 1 if float(latest["p"]) > float(previous["p"]) else -1 if float(latest["p"]) < float(previous["p"]) else 0
+    assert member["direction"] == ("up" if direction > 0 else "down" if direction < 0 else "unchanged")
+    assert math.isclose(member["previous_price"], float(previous["p"]), rel_tol=1e-12)
+    assert math.isclose(member["latest_price"], float(latest["p"]), rel_tol=1e-12)
+    tick_net += direction
+assert tick_net == tick_inputs["net_tick"] == concepts["tick"]["latest"]
+print("8 market-breadth concepts, 9 practices, fixed universes and independent provider recomputation verified", flush=True)
 
 for source, symbol, minimum in markets:
     deadline = time.monotonic() + 120

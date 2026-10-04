@@ -171,6 +171,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/paper/ws", get(ws_paper))
         .route("/api/book/pdf", get(serve_book_pdf))
         .route("/api/knowledge", get(get_knowledge))
+        .route(
+            "/api/market-breadth/snapshot",
+            get(get_market_breadth_snapshot),
+        )
         .route("/api/practice", get(get_practice).post(post_practice))
         .route(
             "/api/knowledge/coverage",
@@ -183,6 +187,24 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/code/source", get(get_code_source))
         .route("/api/symbols", get(get_symbols))
         .with_state(state)
+}
+
+async fn get_market_breadth_snapshot(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<crate::market_breadth::MarketBreadthSnapshot>, ApiError> {
+    if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Live market breadth is disabled in offline mode".into(),
+        ));
+    }
+    let (daily, tick) = tokio::join!(
+        crate::market_breadth::fetch_live_snapshot(&state.feed),
+        crate::market_tick::fetch_crypto_tick(&state.feed),
+    );
+    daily
+        .map(|snapshot| Json(snapshot.attach_crypto_tick(tick)))
+        .map_err(|error| (StatusCode::BAD_GATEWAY, error))
 }
 
 // -----------------------------------------------------------------------------
@@ -1532,6 +1554,18 @@ pub fn locate_symbol_for_test(reference: &str) -> Option<usize> {
 }
 
 fn practice_plan(concept: &crate::practice::PracticeConcept) -> Value {
+    if crate::market_breadth::is_practice_supported(&concept.id) {
+        let tick = concept.id == "tick";
+        return json!({
+            "markets":if tick { json!(["crypto"]) } else { json!(["us_equity"]) },
+            "modules":["data"],
+            "required_datasets":if tick { json!(["binance_three_asset_common_cutoff_aggregate_trades"]) } else { json!(["fixed_2024_11_08_dow30_daily_ohlcv"]) },
+            "source_policy":"real_required",
+            "fixed_source":"market_breadth",
+            "universe":if tick { "fixed_binance_spot_btc_eth_bnb" } else { "fixed_dow30_2024_11_08" },
+            "goal":if tick { "使用固定Binance三币在同一UTC截止时点的真实聚合成交方向；这不是NYSE TICK。" } else { "使用固定历史Dow 30篮子的同日截面日线计算市场宽度；固定篮子回溯不冒充官方历史DJIA宽度。" }
+        });
+    }
     if concept.id == "book_adjustment" || concept.id == "book_pitfall_adjustment" {
         return json!({
             "markets":["us_equity"],
@@ -2336,6 +2370,118 @@ async fn post_pair_practice(
     Ok(Json(result))
 }
 
+async fn post_market_breadth_practice(
+    state: &AppState,
+    concept: &crate::practice::PracticeConcept,
+    req: &PracticeRequest,
+) -> Result<Json<Value>, ApiError> {
+    if req.source.as_deref() != Some("market_breadth")
+        || req.symbol.is_some()
+        || req.limit.is_some()
+        || req.second_symbol.is_some()
+        || req.bars.is_some()
+        || !req
+            .inputs
+            .as_object()
+            .is_some_and(serde_json::Map::is_empty)
+    {
+        return Err(validate::bad("market breadth practice is fixed to source=market_breadth, no single symbol, module=data, empty inputs, and no bars, limit, or second symbol"));
+    }
+    if std::env::var("AXIOM_OFFLINE").as_deref() == Ok("1") {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Live market breadth is disabled in offline mode".into(),
+        ));
+    }
+    if concept.id == "tick" {
+        let tick = crate::market_tick::fetch_crypto_tick(&state.feed)
+            .await
+            .map_err(|error| (StatusCode::BAD_GATEWAY, error))?;
+        return Ok(Json(json!({
+            "concept_id":"tick",
+            "status":"computed",
+            "reason":Value::Null,
+            "input_kind":"market_breadth_case",
+            "provenance":"server_fetched_fixed_crypto_tick_snapshot",
+            "context":"fixed_intraday_crypto_cross_section",
+            "module":"data",
+            "source":"market_breadth",
+            "symbol":Value::Null,
+            "source_markets":{"tick":"crypto_spot"},
+            "values":{"tick":tick.net_tick},
+            "units":{"tick":"issues"},
+            "series":[],
+            "notes":[tick.definition],
+            "inputs":{},
+            "bars":[],
+            "market_tick":tick
+        })));
+    }
+    let snapshot = crate::market_breadth::fetch_live_snapshot(&state.feed)
+        .await
+        .map_err(|error| (StatusCode::BAD_GATEWAY, error))?;
+    let (practice_id, unit, latest, triggered, series, reason, definition, inputs) = if concept.id
+        == "book_mcclellan_sum"
+    {
+        let mcclellan = snapshot
+            .concepts
+            .iter()
+            .find(|item| item.id == "mcclellan")
+            .expect("fixed snapshot contains mcclellan");
+        let summed = crate::market_breadth::calculate_mcclellan_summation(&mcclellan.series);
+        (
+                concept.id.as_str(),
+                "issues",
+                summed.last().map(|point| point.value),
+                None,
+                summed,
+                None,
+                "Cumulative sum of the real fixed-basket McClellan oscillator, based at zero at the first defined oscillator observation in this response window.",
+                json!({"source_concept":"mcclellan","initial_value":0.0}),
+            )
+    } else {
+        let item = snapshot
+            .concepts
+            .iter()
+            .find(|item| item.id == concept.id)
+            .expect("fixed snapshot contains every breadth concept");
+        (
+            item.id,
+            item.unit,
+            item.latest,
+            item.triggered,
+            item.series.clone(),
+            item.reason.clone(),
+            item.definition,
+            item.inputs.clone(),
+        )
+    };
+    let status = if latest.is_some() || triggered.is_some() {
+        "computed"
+    } else {
+        "undefined"
+    };
+    Ok(Json(json!({
+        "concept_id":concept.id,
+        "status":status,
+        "reason":reason,
+        "input_kind":"market_breadth_case",
+        "provenance":"server_fetched_fixed_market_breadth_snapshot",
+        "context":"fixed_historical_cross_section",
+        "module":"data",
+        "source":"market_breadth",
+        "symbol":Value::Null,
+        "source_markets":{"daily":"us_equity"},
+        "values":{(practice_id):latest,"triggered":triggered},
+        "units":{(practice_id):unit},
+        "series":[{"name":practice_id,"unit":unit,"points":series}],
+        "notes":[definition],
+        "inputs":inputs,
+        "bars":[],
+        "market_breadth":snapshot
+    })))
+}
+
 async fn post_practice(
     State(state): State<Arc<AppState>>,
     Json(req): Json<PracticeRequest>,
@@ -2356,6 +2502,9 @@ async fn post_practice(
         return Err(validate::bad(
             "practice module is not applicable to this concept",
         ));
+    }
+    if crate::market_breadth::is_practice_supported(&concept.id) {
+        return post_market_breadth_practice(&state, concept, &req).await;
     }
     if concept.input_kind == "market_bars" && req.inputs.get("period").is_some() {
         crate::practice::period(&req.inputs, "period").map_err(validate::bad)?;
