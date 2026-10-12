@@ -22,7 +22,7 @@
 .ax-alpha-catalog { min-width: 0; border: 2px solid var(--border); background: var(--bg-elev); }
 .ax-alpha-catalog-tools { display: grid; grid-template-columns: minmax(0, 1fr) 108px; gap: .55rem; padding: .7rem; border-bottom: 2px solid var(--border); background: var(--bg-card); }
 .ax-alpha-factor-list { max-height: 620px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; contain: content; }
-.ax-alpha-factor-list > button { display: grid; grid-template-columns: minmax(0, 1fr) auto; width: 100%; padding: .72rem; color: var(--text); background: transparent; border: 0; border-bottom: 1px solid var(--border); cursor: pointer; text-align: left; content-visibility: auto; contain-intrinsic-size: 88px; }
+.ax-alpha-factor-list > button { display: grid; grid-template-columns: minmax(0, 1fr) auto; width: 100%; padding: .72rem; color: var(--text); background: transparent; border: 0; border-bottom: 1px solid var(--border); cursor: pointer; text-align: left; }
 .ax-alpha-factor-list > button:hover, .ax-alpha-factor-list > button:focus-visible { background: color-mix(in srgb, var(--alpha-signal) 9%, var(--bg-card)); outline: 3px solid var(--alpha-signal); outline-offset: -3px; }
 .ax-alpha-factor-list > button.selected { background: color-mix(in srgb, var(--alpha-signal) 14%, var(--bg-card)); border-left: .45rem solid var(--alpha-signal); }
 .ax-alpha-factor-list span { font: 900 .9rem/1.3 var(--mono); }

@@ -36,6 +36,7 @@ test('Alpha research route runs a verified exercise with mocked real-data proven
   await expect(page.getByRole('button', { name: 'Alpha 研究', exact: true })).toHaveClass(/active/);
   await page.getByLabel('选择因子库').selectOption('qlib_alpha158');
   await expect(page.locator('[data-factor-card]')).toHaveCount(158);
+  await expect(page.locator('[data-factor-card]').first()).toHaveCSS('content-visibility', 'visible');
   await page.getByLabel('搜索因子').fill('ROC5');
   await expect(page.locator('[data-factor-card]')).toHaveCount(1);
   await page.locator('[data-factor-card]').click();
