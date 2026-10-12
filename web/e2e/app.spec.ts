@@ -1192,7 +1192,7 @@ test('every visible learning source reference is requested through the AST-backe
   });
   await page.goto('/learn/concepts');
   const cards = page.locator('.ax-module-card');
-  await expect(cards).toHaveCount(13);
+  await expect(cards).toHaveCount(14);
   for (let index = 0; index < await cards.count(); index += 1) {
     await cards.nth(index).click();
     await expect(page.getByRole('dialog')).toBeVisible();
