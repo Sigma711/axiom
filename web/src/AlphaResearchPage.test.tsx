@@ -95,6 +95,24 @@ describe('Alpha research learning flow', () => {
     expect(host.textContent).toContain('股数和成交金额单位不同');
   });
 
+  it('gives every Qlib factor family a concrete reading prompt and distinguishes worked examples', async () => {
+    const families = ['kmid', 'klen', 'roc5', 'ma5', 'std5', 'rank5', 'corr5', 'beta5', 'rsqr5', 'resi5', 'max5', 'min5', 'qtlu5', 'qtld5', 'rsv5', 'imax5', 'imin5', 'imxd5', 'cord5', 'cntp5', 'cntn5', 'cntd5', 'sump5', 'sumn5', 'sumd5', 'vma5', 'vstd5', 'wvma5', 'vsump5', 'vsumn5', 'vsumd5'];
+    const factors = families.map(id => ({ ...qlibFactors[0], id, name: id.toUpperCase(), formula: id === 'corr5' ? 'Corr(Ref($close, 1), Log($volume+1), 5)' : id === 'vma5' ? 'Mean($volume, 5)/$volume' : 'Mean($close, 5)/$close' }));
+    vi.mocked(alphaApi.catalog).mockResolvedValue({ collections: [catalog.collections[0], { ...catalog.collections[1], total: factors.length, factors }] });
+    await act(async () => root.render(<AlphaResearchPage />)); await flush();
+    await change(host.querySelector('[aria-label="选择因子库"]')!, 'qlib_alpha158');
+    for (const factor of factors) {
+      await act(async () => (Array.from(host.querySelectorAll<HTMLButtonElement>('[data-factor-card]')).find(card => card.querySelector('span')?.textContent === factor.name)!).click());
+      expect(host.querySelector('.ax-alpha-method h4')?.textContent).toContain(factor.name);
+      expect(host.textContent).toContain('它在问什么？');
+      expect(host.textContent).toContain('动手想一想');
+    }
+    expect(host.textContent).toContain('量增与量减的净差');
+    await act(async () => (Array.from(host.querySelectorAll<HTMLButtonElement>('[data-factor-card]')).find(card => card.querySelector('span')?.textContent === 'CORR5')!).click());
+    expect(host.textContent).toContain('先把两条序列按日期对齐');
+    expect(host.textContent).toContain('Ref / delay');
+  });
+
   it('ignores a stale research response after a newer request wins', async () => {
     let resolveFirst!: (value: AlphaResearchResult) => void;
     vi.mocked(alphaApi.research).mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve; })).mockResolvedValueOnce(resultFor(catalog.collections[0].factors[0], .73));

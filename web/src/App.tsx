@@ -347,19 +347,19 @@ const INDICATOR_OPTIONS = [
 ] as const;
 
 // ===================================================================
-// 学习中心: 4 个子标签
+// 学习中心
 // ===================================================================
 type LearnSub = 'knowledge' | 'alphas' | 'concepts' | 'build' | 'path' | 'book';
 const LEARN_SUBS: { id: LearnSub; label: string }[] = [
   { id: 'knowledge', label: '指标大全' },
-  { id: 'alphas', label: 'Alpha 研究' },
+  { id: 'alphas', label: '因子研究' },
   { id: 'concepts', label: '概念速览' },
   { id: 'build', label: '创建策略' },
   { id: 'book', label: '原书阅读' },
   { id: 'path', label: '学习路径' },
 ];
 
-function LearnCenter({ sub, onSubChange, onPractice }: { sub: LearnSub; onSubChange: (sub: LearnSub) => void; onPractice: (conceptId: string, module: PracticeModule, source: PracticeRouteSource) => void }) {
+function LearnCenter({ sub, onSubChange, onPractice, onOpenModule }: { sub: LearnSub; onSubChange: (sub: LearnSub) => void; onPractice: (conceptId: string, module: PracticeModule, source: PracticeRouteSource) => void; onOpenModule: (tab: 'backtest' | 'compare' | 'paper') => void }) {
 
   return (
     <section className="ax-section">
@@ -374,9 +374,9 @@ function LearnCenter({ sub, onSubChange, onPractice }: { sub: LearnSub; onSubCha
       </nav>
       {sub === 'knowledge' && <KnowledgeView onPractice={onPractice} />}
       {sub === 'alphas' && <AlphaResearchPage />}
-      {sub === 'concepts' && <ConceptsView />}
+      {sub === 'concepts' && <ConceptsView onSubChange={onSubChange} />}
       {sub === 'book' && <PdfBookReader />}
-      {sub === 'build' && <BuildView />}
+      {sub === 'build' && <BuildView onOpenFactors={() => onSubChange('alphas')} onOpenModule={onOpenModule} />}
       {sub === 'path' && <PathView onOpenAlphas={() => onSubChange('alphas')} />}
     </section>
   );
@@ -704,14 +704,21 @@ function PracticePanel({ module, symbol, source, limit, bars, contextInputs = {}
 
 // 概念速览
 const WORKFLOW_STAGES = [
-  { number: '01', group: '数据基础', title: '数据接入与治理', output: '可信 Bar 数据集', detail: '接入行情后，清洗、复权、时间对齐（并处理缺失、重复和交易日历）；记录版本，防止把未来数据带进研究。', code: 'src/data.rs · DataFeed' },
-  { number: '02', group: '研究', title: '特征、指标与假设', output: '可检验特征', detail: '从 OHLCV 计算指标与特征，并把“为什么有效”写成可证伪的研究假设。', code: 'src/indicators/*' },
-  { number: '03', group: '研究', title: '建模与信号', output: 'Signal', detail: '规则策略、因子模型或机器学习都只产出信号；标签、验证集和泄漏检查必须先于结果。', code: 'src/strategy.rs' },
-  { number: '04', group: '组合', title: '风控与仓位', output: 'Order 或拒绝', detail: '止损、止盈、仓位上限和资金约束共同决定信号能否变成订单。', code: 'src/risk.rs · src/portfolio.rs' },
-  { number: '05', group: '验证', title: '回测与稳健性', output: '可复现业绩', detail: '按时间滚动验证，计入手续费、滑点和执行延迟；检查样本外表现与极端行情。', code: 'src/engine.rs · src/metrics.rs' },
-  { number: '06', group: '运行', title: '模拟执行与上线', output: 'Fill / Equity', detail: '先模拟盘，再以受限权限接入真实执行；当前项目实现的是 SimulatedBroker。', code: 'src/broker.rs · src/paper.rs' },
-  { number: '07', group: '运营', title: '上线、监控与复盘', output: '下一轮假设', detail: '持续观察漂移、风险限额和成交质量，解释收益来源后再更新研究。', code: 'src/metrics.rs · src/workflows.rs' },
+  { number: '01', group: '数据', title: '市场数据', output: '可信 Bar 数据集', detail: '接入已收盘行情，核对来源、复权、时区、缺失值和版本；未完成 K 线不能进入策略。', code: 'src/data.rs · DataFeed' },
+  { number: '02', group: '范围', title: '研究标的池', output: '可追溯 Universe', detail: '明确市场、证券目录、筛选规则和历史成员，避免只用今天仍存续的赢家回看过去。', code: 'src/symbols.rs · search' },
+  { number: '03', group: '研究', title: '因子研究', output: '可检验因子', detail: '把假设写成指标或因子，检查数据可得时点，并研究它与前瞻收益的关系；相关性不等于可交易收益。', code: 'src/alpha_research.rs · src/indicators/*' },
+  { number: '04', group: '规则', title: '策略规则', output: 'Signal', detail: '明确入场、退出和信号生效时点；Strategy 只表达意图，不直接改变现金或持仓。', code: 'src/strategy.rs · Strategy' },
+  { number: '05', group: '组合', title: '仓位与风险门控', output: '候选 Order / 拒绝', detail: '组合先按目标仓位和资金生成候选订单，再由风险模块依据止损、止盈和限额批准或拒绝。', code: 'src/portfolio.rs · src/risk.rs' },
+  { number: '06', group: '执行', title: '执行与成交', output: 'Fill / Position / Equity', detail: '订单在下一可交易时点模拟成交，并应用数量、T+1、手续费与滑点等市场约束；成交再更新持仓和净值。', code: 'src/execution.rs · src/broker.rs · src/engine.rs' },
 ] as const;
+
+const LEARNING_ROADMAP: Array<{ id: Exclude<LearnSub, 'concepts'>; title: string; desc: string }> = [
+  { id: 'knowledge', title: '指标大全', desc: '查定义、公式、适用条件和实践入口。' },
+  { id: 'alphas', title: '因子研究', desc: '用真实日线检查因子值与前瞻收益。' },
+  { id: 'build', title: '创建策略', desc: '把假设写成信号、仓位、执行和验证规则。' },
+  { id: 'book', title: '原书阅读', desc: '回到原始材料核对概念与上下文。' },
+  { id: 'path', title: '学习路径', desc: '按九步路线连接概念、练习和源码。' },
+];
 
 type ConceptModule = typeof CONCEPT_CARDS[number];
 function ModuleSketch({ title }: { title: string }) {
@@ -719,7 +726,7 @@ function ModuleSketch({ title }: { title: string }) {
     <path d="M142 63H205M315 63H378" className="ax-module-line" markerEnd="url(#arrow-head)" />
     <defs><marker id="arrow-head" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" /></marker></defs>
     <rect x="12" y="28" width="130" height="70" rx="14" className="ax-module-input" /><text x="77" y="57" textAnchor="middle">输入</text><text x="77" y="78" textAnchor="middle" className="ax-module-code">市场 / 状态</text>
-    <rect x="205" y="20" width="110" height="86" rx="18" className="ax-module-core" /><text x="260" y="55" textAnchor="middle">{title}</text><text x="260" y="78" textAnchor="middle" className="ax-module-code">纯逻辑</text>
+    <rect x="205" y="20" width="110" height="86" rx="18" className="ax-module-core" /><text x="260" y="55" textAnchor="middle">{title}</text><text x="260" y="78" textAnchor="middle" className="ax-module-code">职责 / 状态</text>
     <rect x="378" y="28" width="130" height="70" rx="14" className="ax-module-output" /><text x="443" y="57" textAnchor="middle">输出</text><text x="443" y="78" textAnchor="middle" className="ax-module-code">下一步所需事实</text>
   </svg>;
 }
@@ -732,7 +739,7 @@ function ModuleSourceLink({ codeRef }: { codeRef: string }) {
   return url ? <a className="ax-btn primary" href={url} target="_blank" rel="noreferrer">打开精确 GitHub 源码 ↗</a> : <span className="ax-module-source-pending">正在定位构建时源码…</span>;
 }
 
-function ConceptsView() {
+function ConceptsView({ onSubChange }: { onSubChange: (sub: LearnSub) => void }) {
   const [selected, setSelected] = useState<ConceptModule | null>(null);
   useEffect(() => {
     if (!selected) return;
@@ -741,14 +748,16 @@ function ConceptsView() {
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [selected]);
   return <div className="ax-concepts">
-    <header className="ax-concepts-intro"><p className="ax-eyebrow">从数据到运营的闭环</p><h3>量化交易完整流程</h3><p className="ax-lead">这是一条研究与运行并行的闭环：每一步都有可检查的产物，任何模型都要经过数据、验证和风控。</p></header>
+    <header className="ax-concepts-intro"><p className="ax-eyebrow">从研究问题到可核对的成交</p><h3>量化研究与决策流程</h3><p className="ax-lead">先固定数据和研究范围，再把因子转成策略、仓位与受约束的执行。每一步都应留下可检查的输入、产物和假设。</p></header>
+    <nav className="ax-grid ax-learning-roadmap" aria-label="学习子页路线">{LEARNING_ROADMAP.map(item => <button type="button" className="ax-card ax-learning-roadmap-card" key={item.id} onClick={() => onSubChange(item.id)} aria-label={`前往${item.title}`}><h4>{item.title}</h4><p>{item.desc}</p></button>)}</nav>
     <section className="ax-workflow" aria-label="量化交易全流程">
-      <div className="ax-workflow-caption"><span>研究与决策管线</span><small>真实交易时序：收盘数据 t → 信号 t → 下一根可交易时点执行</small></div>
+      <div className="ax-workflow-caption"><span>研究与决策管线</span><small>市场数据 → 标的池 → 因子 → 策略 → 仓位与风险 → 执行</small></div>
       <ol className="ax-workflow-stages">{WORKFLOW_STAGES.map((stage, index) => <li key={stage.number} className="ax-workflow-stage">
         <span className="ax-stage-number">{stage.number}</span><span className="ax-stage-group">{stage.group}</span><h4>{stage.title}</h4><p>{stage.detail}</p><span className="ax-stage-output">{stage.output}</span><code>{stage.code}</code>{index < WORKFLOW_STAGES.length - 1 && <span className="ax-workflow-arrow" aria-hidden="true">→</span>}
       </li>)}</ol>
-      <div className="ax-ai-lane"><strong>机器学习与大模型</strong><span>ML 用于特征、标签、概率与漂移检测；LLM 用于资料检索、结构化和研究辅助。两者都只能进入研究管线，必须通过泄漏检查、回测和风控，不能直接下单。</span></div>
-      <div className="ax-event-loop"><span>事件循环</span><b>已收盘 K 线</b><i>→</i><b>Signal</b><i>→</i><b>下一时点 Order / Fill</b><i>→</i><b>盯市 Equity</b><i>↺</i><em>归因后更新假设</em></div>
+      <div className="ax-ai-lane"><strong>机器学习与大模型</strong><span>ML 可用于特征、标签和概率建模；LLM 可用于资料检索、结构化和研究辅助。它们的输出仍要经过可得时点、泄漏、样本外、成本和风险检查，不能直接下单。</span></div>
+      <div className="ax-event-loop"><span>研究验证循环</span><b>可证伪假设</b><i>→</i><b>因子证据</b><i>→</i><b>时间顺序回测</b><i>→</i><b>样本外 / 滚动检验</b><i>→</i><b>成本与流动性压力</b><i>↺</i><em>模拟盘观察后修正假设；这些是研究步骤，不代表系统已自动完成</em></div>
+      <div className="ax-event-loop"><span>实际事件顺序</span><b>已收盘 Bar</b><i>→</i><b>Signal</b><i>→</i><b>候选 Order（仓位 / 资金）</b><i>→</i><b>风控批准或拒绝</b><i>→</i><b>下一可交易时点模拟成交</b><i>→</i><em>持仓 / 净值</em></div>
     </section>
     <h3>代码模块</h3><p className="ax-lead">点开卡片了解模块的职责、输入输出，并查看对应代码。</p>
     <div className="ax-module-grid">{CONCEPT_CARDS.map(card => <button type="button" className="ax-module-card" key={card.title} onClick={() => setSelected(card)} aria-label={`${card.title}，查看模块说明`}><span className="ax-module-path">{card.path}</span><h4>{card.title}</h4><p>{card.desc}</p><code>{card.code}</code><span className="ax-module-more">查看模块说明 <b>→</b></span></button>)}</div>
@@ -757,23 +766,27 @@ function ConceptsView() {
 }
 const CONCEPT_CARDS = [
   { title: 'K线 (Bar)', desc: '一根柱子记录一段已完成时间内的开、高、低、收与成交量，是后续计算的统一事实。', code: 'Bar { timestamp, open, high, low, close, volume }', path: 'src/types.rs', codeRef: 'src/types.rs::Bar', constraint: '只把已收盘的 Bar 交给策略，避免把尚未知道的价格当作事实。' },
-  { title: '数据源 (DataFeed)', desc: '把合成、CSV 与 Binance HTTP 行情收敛为同一个数据接口，便于教学、回测和替换来源。', code: 'DataFeed / AsyncDataFeed', path: 'src/data.rs', codeRef: 'src/data.rs::DataFeed', constraint: '当前是 CSV 缓存与内存计算；持久化分析层会按查询量演进，不能把 HTTP 行情当成券商。' },
+  { title: '数据源 (DataFeed)', desc: '把 CSV、Binance 现货与股票日线行情规范为统一 Bar，供数据探索、研究和回测使用。', code: 'DataFeed / AsyncDataFeed', path: 'src/data.rs', codeRef: 'src/data.rs::DataFeed', constraint: '每次结果都要核对来源、时间范围、价格口径和收盘状态；行情源不是券商执行接口。' },
+  { title: '证券目录与标的池', desc: '证券目录负责分页、去重、缓存和检索；研究者再据此记录明确的入选、排除与历史成员规则。', code: 'symbols::search', path: 'src/symbols.rs', codeRef: 'src/symbols.rs::search', constraint: '目录搜索不是历史成分股数据库；回测标的池仍要单独处理退市和幸存者偏差。' },
+  { title: '技术指标', desc: '从已收盘价格和成交量计算均线、动量、波动等可复用特征；不同指标需要自己的预热窗口。', code: 'indicators::ma::sma', path: 'src/indicators/ma.rs', codeRef: 'src/indicators/ma.rs::sma', constraint: '指标只描述已知行情，不会自动产生买卖结论；预热期数据不足时不能捏造数值。' },
+  { title: '因子研究', desc: '按公开定义计算因子序列，并把同一标的的因子值与之后的收益对齐，形成可复查的研究诊断。', code: 'alpha_research::research', path: 'src/alpha_research.rs', codeRef: 'src/alpha_research.rs::research', constraint: '当前结果是单标的时间序列诊断；相关性不证明因果，也不等同于可交易的横截面收益。' },
   { title: '信号 (Signal)', desc: '策略对一根 K 线的可解释想法：买、卖或观望，以及强度、原因和目标仓位。', code: 'on_bar(&Bar) -> Signal', path: 'src/strategy.rs', codeRef: 'src/strategy.rs::Strategy', constraint: 'Signal 只表达意图，不触碰现金、持仓或外部下单。' },
-  { title: '风控门控', desc: '风险管理检查止损、止盈和仓位上限，必要时拒绝订单或触发强平。', code: 'RiskManager::allow_order', path: 'src/risk.rs', codeRef: 'src/risk.rs::RiskManager::allow_order', constraint: '风控不是收益预测器；它只处理明确的账户与市场约束。' },
-  { title: '组合与仓位', desc: '组合模块把允许的信号换成符合资金与目标仓位约束的订单。', code: 'Portfolio::on_signal', path: 'src/portfolio.rs', codeRef: 'src/portfolio.rs::Portfolio::on_signal', constraint: '重复买入、空仓卖出和低于最小交易量的订单都会被拒绝。' },
+  { title: '组合与仓位', desc: '组合模块先根据 Signal、现金、持仓和目标权重生成候选订单。', code: 'Portfolio::on_signal', path: 'src/portfolio.rs', codeRef: 'src/portfolio.rs::Portfolio::on_signal', constraint: '订单只是候选动作；成交后还要通过 Portfolio::on_fill 更新现金和持仓。' },
+  { title: '风控门控', desc: '风险管理检查候选订单、止损、止盈和仓位上限，必要时拒绝订单或触发强平。', code: 'RiskManager::allow_order', path: 'src/risk.rs', codeRef: 'src/risk.rs::RiskManager::allow_order', constraint: '风控不是收益预测器；它只处理明确的账户与风险约束。' },
+  { title: '市场执行约束', desc: '执行配置集中表达不同市场的数量单位、A股 T+1、日线成交限制和交易税费。', code: 'ExecutionProfile', path: 'src/execution.rs', codeRef: 'src/execution.rs::ExecutionProfile', constraint: '这些约束提高模拟诚实度，但不能替代真实交易所撮合、流动性和券商规则。' },
   { title: '订单与成交', desc: '订单是给 Broker 的明确指令；成交会带回实际价格、手续费与滑点，改变现金和持仓。', code: 'Broker::place_order -> Fill', path: 'src/broker.rs', codeRef: 'src/broker.rs::Broker', constraint: '当前真实实现为 SimulatedBroker；HttpFeed 是行情源，实盘 Broker adapter 尚未实现。' },
-  { title: '回测引擎', desc: '按事件顺序驱动数据、策略、风控、组合和成交，并保留 pending signal 来避免未来函数。', code: 'BacktestEngine::run', path: 'src/engine.rs', codeRef: 'src/engine.rs::BacktestEngine::run', constraint: '信号在 t 生成，在下一可交易时点执行；回测必须带成本和样本外验证。' },
+  { title: '回测引擎', desc: '按事件顺序驱动数据、策略、组合、风控和成交，并保留 pending signal 来避免同根 K 线偷看未来。', code: 'BacktestEngine::run', path: 'src/engine.rs', codeRef: 'src/engine.rs::BacktestEngine::run', constraint: '信号在 t 生成，在下一可交易时点执行；样本外和滚动区间需要研究者另行划分并比较。' },
   { title: '净值与指标', desc: '用净值曲线与交易记录计算收益、回撤、夏普、索提诺等，检验结果是否经得起风险调整。', code: 'compute_metrics(equity_curve, trades)', path: 'src/metrics.rs', codeRef: 'src/metrics.rs::compute_metrics', constraint: '单一收益数字不足以证明策略有效，必须同时看回撤、分布与交易成本。' },
   { title: '模拟盘生命周期', desc: '模拟盘把状态、待执行信号和行情循环组织为一段可观察的运行过程。', code: 'run_paper_loop', path: 'src/paper.rs', codeRef: 'src/paper.rs::run_paper_loop', constraint: '当前状态是单进程内存；进程重启不应被误解为已具备持久恢复。' },
   { title: '知识实践工作流', desc: '把书中概念转为有输入、结果与边界说明的教学实践，而不是未经验证的交易建议。', code: 'workflows::entries', path: 'src/workflows.rs', codeRef: 'src/workflows.rs::entries', constraint: '教学计算会说明使用市场数据还是可编辑例子，不把教学值伪装成行情结论。' },
 ] as const;
 
 // 创建策略
-function BuildView() {
+function BuildView({ onOpenFactors, onOpenModule }: { onOpenFactors: () => void; onOpenModule: (tab: 'backtest' | 'compare' | 'paper') => void }) {
   return (
     <div>
-      <h3>创建自己的策略 - 5 步教学</h3>
-      <p className="ax-lead">把一个交易想法写成策略，再检查数据、成本和风险。</p>
+      <h3>创建自己的策略 - 6 步</h3>
+      <p className="ax-lead">先写清研究合同，再把假设变成可执行规则，最后用时间顺序验证它是否经得起成本与风险。</p>
       <ol className="ax-path">
         {BUILD_STEPS.map((s, i) => (
           <li key={i}>
@@ -783,6 +796,9 @@ function BuildView() {
           </li>
         ))}
       </ol>
+      <p className="ax-lead">从现有双均线策略入手，先弄清信号在哪根 K 线形成、何时执行，再改自己的规则。</p>
+      <ModuleSourceLink codeRef="src/strategy.rs::SmaCrossStrategy" />
+      <div className="ax-path-alpha ax-build-practice"><div><strong>把步骤放进真实页面</strong><p>先检查因子证据，再分别验证单策略、横向比较和模拟运行。</p></div><div className="ax-build-actions"><button className="ax-btn" type="button" onClick={onOpenFactors}>进入因子研究</button><button className="ax-btn" type="button" onClick={() => onOpenModule('backtest')}>打开回测</button><button className="ax-btn" type="button" onClick={() => onOpenModule('compare')}>打开策略对比</button><button className="ax-btn" type="button" onClick={() => onOpenModule('paper')}>打开模拟盘</button></div></div>
       <h3 style={{ marginTop: '2rem' }}>常见陷阱</h3>
       <div className="ax-grid">
         {PITFALLS.map(p => (
@@ -796,19 +812,22 @@ function BuildView() {
   );
 }
 const BUILD_STEPS = [
-  { title: '形成可验证的市场假设', desc: '每个好策略背后都有一句可验证的话。', detail: '❌ "我觉得 BTC 要涨" — 不可验证\n✅ "BTC 在 20 日新高 + 成交量放大 → 接下来 5 天继续上涨概率 > 60%" — 可验证' },
-  { title: '选择指标来验证假设', desc: '用指标验证假设,不是凭感觉猜。', detail: '趋势 → SMA/EMA/MACD\n超跌 → RSI/KDJ/Bollinger\n量能 → OBV/CMF/MFI\n突破 → Donchian/Bollinger' },
-  { title: '定义无歧义信号', desc: '代码里写"价格跌很多"是行不通的。', detail: '✅ "RSI 从 < 30 反弹到 > 30 → BUY"\n✅ "SMA5 上穿 SMA20 → BUY"\n❌ "感觉要涨了"' },
-  { title: '写代码', desc: '打开 src/strategy.rs,复制最像的策略骨架。', detail: '参考 SmaCrossStrategy 或 RsiStrategy 的实现' },
-  { title: '测试和迭代', desc: '跑回测前问自己:样本外验证?参数来源?心理承受力?', detail: '夏普 > 1 合格,索提诺 > 1.5,最大回撤 < 20%,胜率 × 盈亏比 > 1' },
+  { title: '固定研究合同', desc: '先确定市场、标的池、频率、数据区间和可得时点，后续不要看到结果再改口径。', detail: '假设示例（不是内置数据）：A股沪深主板 · 日线 · 2018–2025 · 前复权口径 · 只使用当日收盘后可知的数据' },
+  { title: '提出可证伪假设与基准', desc: '一句话说明为什么可能有效、何时应失效，并选一个简单基准。', detail: '例：20 日突破且成交量放大后，未来 5 日收益优于同期买入持有；若样本外无差异，就否定假设' },
+  { title: '写成无歧义信号', desc: '明确入场、退出、空仓条件和信号生效时间；Strategy 只输出 Signal。', detail: '例：t 日收盘确认突破 → t+1 可交易时点执行；跌破 10 日低点或持有 5 日退出' },
+  { title: '补齐仓位、风险与执行', desc: '规定每笔风险、仓位上限、止损，以及手续费、滑点、数量单位和 T+1 等限制。', detail: '先由 Portfolio 生成候选订单，再由 RiskManager 审批，最后交给 SimulatedBroker 成交' },
+  { title: '实现并检查事件顺序', desc: '在 src/strategy.rs 参考现有策略骨架，逐根只读取当时已知的数据。', detail: '参考 SmaCrossStrategy 或 RsiStrategy；核对 Signal → 候选 Order → 风控 → Fill → Position / Equity' },
+  { title: '按时间验证，再进模拟盘', desc: '保留未参与调参的样本外区间，做滚动与成本压力测试，并和基准比较。', detail: '没有通用“合格线”；结合样本量、收益分布、回撤、参数敏感性和可承受风险判断，模拟盘用于发现运行问题，不等于实盘证明' },
 ];
 const PITFALLS = [
-  { title: '低 PE ≠ 便宜', desc: '周期股 PE 低可能是利润即将下滑。' },
-  { title: 'RSI 超买 ≠ 卖出', desc: '强趋势中 RSI 长期 > 70,反向交易会被反复止损。' },
-  { title: '金叉 ≠ 领先信号', desc: '金叉是滞后信号,等它发生时趋势已走了一段。' },
-  { title: '多个振荡器 ≠ 多重确认', desc: 'RSI/KDJ/Stochastic 本质都是动量指标。' },
-  { title: '主力净流入 ≠ 真现金流入', desc: '只是统计主动买入单,可拆单伪装。' },
-  { title: '放量 ≠ 看多', desc: '放量可发生在任何位置,需结合价格位置判断。' },
+  { title: '未来数据泄漏', desc: '例：用当天最高价决定当天开盘买入。检查：记录每个字段的可得时间，只用已收盘数据。' },
+  { title: '幸存者与选择偏差', desc: '例：用今天的指数成分回测十年前。检查：保存历史成员、退市样本和固定的筛选规则。' },
+  { title: '忽略交易成本', desc: '例：每笔毛利 0.10%，成本却有 0.15%。检查：提高费率和滑点做压力测试。' },
+  { title: '忽略成交与流动性', desc: '例：回测默认涨停板也能满额买入。检查：加入成交量占比、涨跌停、停牌、T+1 和数量单位。' },
+  { title: '反复调参过拟合', desc: '例：试几百组参数后只展示最好一组。检查：记录试验次数，优先简单规则并比较参数邻域。' },
+  { title: '样本外仍被污染', desc: '例：看过测试集后继续改规则。检查：封存最终区间，改动后启用新的样本或滚动窗口。' },
+  { title: '杠杆掩盖尾部风险', desc: '例：平均波动平稳，却在跳空日触发强平。检查：用极端跳空、相关性突变和保证金情景压测。' },
+  { title: '把模拟运行当成实盘', desc: '例：重启后丢失持仓并重复下单。检查：演练断线、重启、幂等下单和账户对账。' },
 ];
 
 // 学习路径
@@ -817,14 +836,14 @@ const LEARNING_PATH = [
   { title: '获取、校验与版本化行情', learn: '区分交易所行情、股票日线与历史缓存；先核对清洗、复权、时区、收盘状态和数据版本，再计算指标。', practice: '在数据探索切换加密、A股和美股数据，检查来源、周期和采样范围。', codeRef: 'src/data.rs::DataFeed' },
   { title: '指标与可证伪假设', learn: '指标是特征，不是交易建议；预热期为空是诚实的数据状态。', practice: '在指标大全展开一个概念，再用“在数据探索中实践”重算。', codeRef: 'src/indicators/ma.rs::sma' },
   { title: '策略只产生意图', learn: 'Strategy 读取一根已完成 K 线，输出 Signal；它不能直接改持仓。', practice: '阅读均线交叉策略，写下一个可验证的入场与退出条件。', codeRef: 'src/strategy.rs::Strategy' },
-  { title: '风控、仓位与订单', learn: '组合把信号换为订单，风险模块会拒绝或强平不符合约束的订单。', practice: '在回测调整止损、止盈和仓位，观察风险调整后指标。', codeRef: 'src/portfolio.rs::Portfolio::on_signal' },
+  { title: '仓位、风控与订单', learn: '组合先把信号换为候选订单，风险模块再拒绝不符合约束的订单或触发强平。', practice: '在回测调整止损、止盈和仓位，观察风险调整后指标。', codeRef: 'src/portfolio.rs::Portfolio::on_signal' },
   { title: '成交模拟与防未来函数', learn: '信号在 t 产生，下一可交易时点才执行；手续费与滑点属于成交事实。', practice: '运行回测，核对交易与净值曲线是否按事件顺序变化。', codeRef: 'src/engine.rs::BacktestEngine::run' },
   { title: '业绩、样本外与稳健性', learn: '收益须和回撤、夏普、索提诺、交易成本一起阅读；样本外和滚动验证防止挑样本。', practice: '在策略对比中选择多个策略，写下不会只看收益率的判断理由。', codeRef: 'src/metrics.rs::compute_metrics' },
   { title: '模拟盘、服务与验证', learn: '模拟盘复用事件链但当前状态在单进程内存；上线前要有可复现测试和运行监控。', practice: '启动模拟盘并检查日志、持仓、净值；阅读端到端测试如何覆盖用户路径。', codeRef: 'src/paper.rs::run_paper_loop' },
   { title: '研究扩展：ML / LLM 与数据存储', learn: 'ML/LLM 只能辅助研究；随着历史数据增长，再引入 Parquet + DuckDB，持久状态优先 SQLite。', practice: '先完成数据泄漏、回测和风险检查，再评估是否需要新增存储或模型。', codeRef: 'src/workflows.rs::entries' },
 ] as const;
 function PathView({ onOpenAlphas }: { onOpenAlphas: () => void }) {
-  return <div><h3>学习路径</h3><p className="ax-lead">从数据契约到可复现运行，共 9 步。每步都给出真实模块、一个动手验证和可定位的 GitHub 源码。</p><div className="ax-path-alpha"><div><strong>想把指标推广到 Alpha 研究？</strong><p>先读运算子和数据前提，再用真实日线检查因子与前瞻收益。</p></div><button className="ax-btn" onClick={onOpenAlphas}>进入 Alpha 研究</button></div><ol className="ax-path ax-learning-path">{LEARNING_PATH.map((step, i) => <li key={step.title}><p className="ax-path-kicker">第 {i + 1} 步</p><h4>{step.title}</h4><p>{step.learn}</p><div className="ax-path-practice"><strong>动手验证</strong><span>{step.practice}</span></div><ModuleSourceLink codeRef={step.codeRef} /></li>)}</ol></div>;
+  return <div><h3>学习路径</h3><p className="ax-lead">从数据契约到可复现运行，共 9 步。每步都给出真实模块、一个动手验证和可定位的 GitHub 源码。</p><div className="ax-path-alpha"><div><strong>想把指标推广到因子研究？</strong><p>先读运算子和数据前提，再用真实日线检查因子与前瞻收益。</p></div><button className="ax-btn" onClick={onOpenAlphas}>进入因子研究</button></div><ol className="ax-path ax-learning-path">{LEARNING_PATH.map((step, i) => <li key={step.title}><p className="ax-path-kicker">第 {i + 1} 步</p><h4>{step.title}</h4><p>{step.learn}</p><div className="ax-path-practice"><strong>动手验证</strong><span>{step.practice}</span></div><ModuleSourceLink codeRef={step.codeRef} /></li>)}</ol></div>;
 }
 
 // ===================================================================
@@ -1689,7 +1708,7 @@ export default function App() {
       <Header theme={theme} onToggleTheme={() => setTheme(current => current === 'dark' ? 'light' : 'dark')} />
       <TabBar active={tab} onChange={nextTab => navigate(nextTab)} />
       <main className="ax-main">
-        {tab === 'learn' && <LearnCenter sub={learnSub} onSubChange={nextSub => navigate('learn', nextSub)} onPractice={openPractice} />}
+        {tab === 'learn' && <LearnCenter sub={learnSub} onSubChange={nextSub => navigate('learn', nextSub)} onPractice={openPractice} onOpenModule={nextTab => navigate(nextTab)} />}
         {tab === 'data' && <DataExplore targetConcept={practiceTarget} targetSource={practiceMarketSource} theme={theme} />}
         {tab === 'backtest' && <Backtest targetConcept={practiceTarget} targetSource={practiceMarketSource} theme={theme} />}
         {tab === 'paper' && <PaperTrading targetConcept={practiceTarget} targetSource={practiceMarketSource} theme={theme} />}

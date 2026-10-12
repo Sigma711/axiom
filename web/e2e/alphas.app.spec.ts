@@ -5,6 +5,11 @@ const qlibIds = [
   'open0', 'high0', 'low0', 'vwap0',
   ...['roc', 'ma', 'std', 'beta', 'rsqr', 'resi', 'max', 'min', 'qtlu', 'qtld', 'rank', 'rsv', 'imax', 'imin', 'imxd', 'corr', 'cord', 'cntp', 'cntn', 'cntd', 'sump', 'sumn', 'sumd', 'vma', 'vstd', 'wvma', 'vsump', 'vsumn', 'vsumd'].flatMap(family => [5, 10, 20, 30, 60].map(window => `${family}${window}`)),
 ];
+const lessonIds = [
+  'kmid', 'open0', 'roc5', 'ma5', 'std5', 'rank5', 'corr5', 'beta5', 'rsqr5', 'resi5',
+  'max5', 'min5', 'qtlu5', 'qtld5', 'rsv5', 'imax5', 'imin5', 'imxd5', 'cord5', 'cntp5',
+  'cntn5', 'cntd5', 'sump5', 'sumn5', 'sumd5', 'vma5', 'vstd5', 'wvma5', 'vsump5', 'vsumn5', 'vsumd5',
+] as const;
 const qlibFactors = qlibIds.map(id => ({ id, name: id.toUpperCase(), status: id === 'vwap0' ? 'unavailable' : 'available', required_fields: id.startsWith('k') ? ['open', 'high', 'low', 'close'] : ['close'], summary: id === 'vwap0' ? '需要真实 VWAP，当前不可运行。' : `${id.toUpperCase()} 的逐项学习说明。`, formula: `${id.toUpperCase()} verified formula`, source_url: 'https://qlib.readthedocs.io/en/latest/component/data.html', code_url: id === 'vwap0' ? null : 'https://github.test/qlib' }));
 
 const catalog = { collections: [
@@ -15,7 +20,7 @@ const catalog = { collections: [
   { id: 'qlib_alpha158', name: 'Microsoft Qlib Alpha158', source_url: 'https://qlib.readthedocs.io/en/latest/component/data.html', total: 158, factors: qlibFactors },
 ] };
 
-test('Alpha research route runs a verified exercise with mocked real-data provenance', async ({ page }) => {
+test('factor research route runs a verified exercise with mocked real-data provenance', async ({ page }) => {
   let requestBody: unknown;
   await page.route('**/api/code_loc**', route => route.fulfill({ json: { path: 'src/example.rs', line: 1, url: 'https://github.test/source' } }));
   await page.route('**/api/alphas/catalog', route => route.fulfill({ json: catalog }));
@@ -31,13 +36,21 @@ test('Alpha research route runs a verified exercise with mocked real-data proven
   });
 
   await page.goto('/learn/path');
-  await page.getByRole('button', { name: '进入 Alpha 研究' }).click();
+  await page.getByRole('button', { name: '进入因子研究' }).click();
   await expect(page).toHaveURL(/\/learn\/alphas$/);
-  await expect(page.getByRole('button', { name: 'Alpha 研究', exact: true })).toHaveClass(/active/);
+  await expect(page.getByRole('button', { name: '因子研究', exact: true })).toHaveClass(/active/);
   await page.getByLabel('选择因子库').selectOption('qlib_alpha158');
   await expect(page.locator('[data-factor-card]')).toHaveCount(158);
   await expect(page.locator('[data-factor-card]').first()).toHaveCSS('content-visibility', 'visible');
-  await page.getByLabel('搜索因子').fill('ROC5');
+  const search = page.getByLabel('搜索因子');
+  for (const id of lessonIds) {
+    const name = id.toUpperCase();
+    await search.fill(name);
+    const card = page.locator('[data-factor-card]').filter({ has: page.locator('span', { hasText: new RegExp(`^${name}$`) }) });
+    await card.click();
+    await expect(page.getByLabel('当前因子方法')).toContainText(name);
+  }
+  await search.fill('ROC5');
   await expect(page.locator('[data-factor-card]')).toHaveCount(1);
   await page.locator('[data-factor-card]').click();
   await expect(page.getByLabel('ROC5 因子示意图')).toBeVisible();

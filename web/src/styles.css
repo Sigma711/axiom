@@ -320,6 +320,11 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
 .ax-card h4 { font-size: 0.92rem; margin-bottom: 0.4rem; color: var(--accent); }
 .ax-card p { color: var(--text-dim); font-size: 0.82rem; line-height: 1.6; }
 .ax-card.danger h4 { color: var(--red); }
+.ax-learning-roadmap { margin: 1.2rem 0 1.5rem; }
+.ax-learning-roadmap-card { display: block; width: 100%; min-height: 7.2rem; text-align: left; font: inherit; color: var(--text); cursor: pointer; border: 2px solid var(--border); border-top: .55rem solid var(--accent-2); border-radius: 0; background: var(--bg-card); transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+.ax-learning-roadmap-card:nth-child(3n+2) { border-top-color: var(--accent); }
+.ax-learning-roadmap-card:nth-child(3n) { border-top-color: var(--green); }
+.ax-learning-roadmap-card:hover, .ax-learning-roadmap-card:focus-visible { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 color-mix(in srgb, var(--text) 17%, transparent); border-color: var(--accent); outline: 3px solid var(--accent-2); outline-offset: 3px; }
 .ax-card code { display: block; margin-top: 0.4rem; font-size: 0.72rem; word-break: break-all; color: var(--text-dim); background: var(--bg-elev); padding: 0.3rem; border-radius: 3px; }
 
 /* === 模拟盘 === */
@@ -381,6 +386,10 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
 .ax-learn-sub.active { background: var(--accent-fill); color: var(--accent-on-fill); border-color: var(--accent); font-weight: 500; }
 .ax-path-alpha { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 0 0 1.2rem; padding: 1rem; border: 2px solid var(--border); border-left: .7rem solid var(--accent-2); background: var(--bg-card); box-shadow: var(--shadow); }
 .ax-path-alpha p { margin-top: .25rem; color: var(--text-dim); }
+.ax-build-practice { align-items: stretch; flex-direction: column; }
+.ax-build-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .55rem; width: 100%; }
+.ax-build-actions .ax-btn { min-width: 0; min-height: 2.7rem; padding: .55rem .4rem; text-align: center; white-space: normal; }
+@media (max-width: 700px) { .ax-build-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* === K 线形态 === */
 .ax-patterns { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 0.7rem 1.1rem; margin-top: 1rem; }

@@ -17,7 +17,7 @@
       "number": 1,
       "id": "alpha1",
       "formula": "(rank(Ts_ArgMax(SignedPower(((returns < 0) ? stddev(returns, 20) : close), 2.), 5)) - 0.5)",
-      "summary": "下跌日看收益波动、其他日看收盘价，再比较最近极大值出现时间的横截面排名。",
+      "summary": "最近的异常高点来得早还是晚？下跌日用收益波动代替收盘价，再和其他股票比较高点出现的时间。",
       "required_fields": [
         "close",
         "returns",
@@ -39,7 +39,7 @@
       "number": 2,
       "id": "alpha2",
       "formula": "(-1 * correlation(rank(delta(log(volume), 2)), rank(((close - open) / open)), 6))",
-      "summary": "比较成交量变化排名与日内涨跌排名的短期相关性，取反向。",
+      "summary": "近六天里，成交量的变化和开盘到收盘的涨跌常同向还是反向？公式比较两者排名后取反。",
       "required_fields": [
         "open",
         "close",
@@ -60,7 +60,7 @@
       "number": 3,
       "id": "alpha3",
       "formula": "(-1 * correlation(rank(open), rank(volume), 10))",
-      "summary": "观察开盘价排名与成交量排名的十日相关性，取反向。",
+      "summary": "近十天，这只股票的开盘价市场名次与成交量市场名次是否同步？公式衡量后取反。",
       "required_fields": [
         "open",
         "volume",
@@ -80,7 +80,7 @@
       "number": 4,
       "id": "alpha4",
       "formula": "(-1 * Ts_Rank(rank(low), 9))",
-      "summary": "观察最低价的横截面排名在自身九日历史中的位置，取反向。",
+      "summary": "今天最低价在全市场中的名次，处在它近九天的高位还是低位？公式对这个历史位置取反。",
       "required_fields": [
         "low",
         "cross_section_universe"
@@ -99,7 +99,7 @@
       "number": 5,
       "id": "alpha5",
       "formula": "(rank((open - (sum(vwap, 10) / 10))) * (-1 * abs(rank((close - vwap)))))",
-      "summary": "把开盘价偏离十日均价的位置与收盘价偏离成交均价的程度相乘。",
+      "summary": "开盘价离近十日平均成交价有多远，同时收盘价离当天成交均价有多远？公式把两种偏离的市场排名组合起来。",
       "required_fields": [
         "open",
         "close",
@@ -121,7 +121,7 @@
       "number": 6,
       "id": "alpha6",
       "formula": "(-1 * correlation(open, volume, 10))",
-      "summary": "观察开盘价与成交量十日内是否同向变化，取反向。",
+      "summary": "近十天开盘价和成交量通常一起升降吗？公式用相关性衡量，再把方向取反。",
       "required_fields": [
         "open",
         "volume"
@@ -140,7 +140,7 @@
       "number": 7,
       "id": "alpha7",
       "formula": "((adv20 < volume) ? ((-1 * ts_rank(abs(delta(close, 7)), 60)) * sign(delta(close, 7))) : (-1 * 1))",
-      "summary": "成交量超过原式 adv20 阈值时反向衡量七日涨跌，否则输出负一。",
+      "summary": "只有当天成交量超过公式中的 adv20 阈值时，才看七日涨跌的方向和它在近六十天是否罕见；否则固定为负一。",
       "required_fields": [
         "close",
         "volume",
@@ -162,7 +162,7 @@
       "number": 8,
       "id": "alpha8",
       "formula": "(-1 * rank(((sum(open, 5) * sum(returns, 5)) - delay((sum(open, 5) * sum(returns, 5)), 10))))",
-      "summary": "比较开盘价五日合计与收益五日合计的乘积相对十日前的变化，反向排名。",
+      "summary": "近五日开盘价合计与收益合计的组合，比十天前变化了多少？公式在股票间比较后取反。",
       "required_fields": [
         "open",
         "returns",
@@ -182,7 +182,7 @@
       "number": 9,
       "id": "alpha9",
       "formula": "((0 < ts_min(delta(close, 1), 5)) ? delta(close, 1) : ((ts_max(delta(close, 1), 5) < 0) ? delta(close, 1) : (-1 * delta(close, 1))))",
-      "summary": "连续五日同方向变动时保留当天涨跌，否则反转当天涨跌。",
+      "summary": "若过去五天每天都涨或都跌，就沿用今天的价格变化；走势不一致时，则把今天的变化反过来。",
       "required_fields": [
         "close"
       ],
@@ -200,7 +200,7 @@
       "number": 10,
       "id": "alpha10",
       "formula": "rank(((0 < ts_min(delta(close, 1), 4)) ? delta(close, 1) : ((ts_max(delta(close, 1), 4) < 0) ? delta(close, 1) : (-1 * delta(close, 1)))))",
-      "summary": "连续四日同方向变动时保留当天涨跌，否则反转，并做横截面排名。",
+      "summary": "若过去四天每天都涨或都跌，就保留今天的价格变化；否则反向，再与其他股票比较名次。",
       "required_fields": [
         "close",
         "cross_section_universe"
@@ -219,7 +219,7 @@
       "number": 11,
       "id": "alpha11",
       "formula": "((rank(ts_max((vwap - close), 3)) + rank(ts_min((vwap - close), 3))) * rank(delta(volume, 3)))",
-      "summary": "结合成交均价与收盘价之差的三日极值排名及成交量三日变化。",
+      "summary": "近三天成交均价与收盘价的差距曾有多大和多小？公式先把两个极值的市场名次相加，再乘以三日成交量变化的名次。",
       "required_fields": [
         "close",
         "volume",
@@ -241,7 +241,7 @@
       "number": 12,
       "id": "alpha12",
       "formula": "(sign(delta(volume, 1)) * (-1 * delta(close, 1)))",
-      "summary": "用成交量增减方向调节收盘价一天变化的反向值。",
+      "summary": "今天成交量增减的方向，是否配合了收盘价的反向变化？公式用量的方向给一天价格变化加正负号。",
       "required_fields": [
         "close",
         "volume"
@@ -260,7 +260,7 @@
       "number": 13,
       "id": "alpha13",
       "formula": "(-1 * rank(covariance(rank(close), rank(volume), 5)))",
-      "summary": "衡量收盘价排名与成交量排名的五日协方差，反向排名。",
+      "summary": "近五天里，收盘价的市场名次和成交量名次是否一起波动？公式比较这种共同变化后取反。",
       "required_fields": [
         "close",
         "volume",
@@ -280,7 +280,7 @@
       "number": 14,
       "id": "alpha14",
       "formula": "((-1 * rank(delta(returns, 3))) * correlation(open, volume, 10))",
-      "summary": "把收益三日变化的反向排名乘以开盘价与成交量的相关性。",
+      "summary": "三日收益变化在市场中有多突出，同时近十天开盘价与成交量有多同步？公式把前者取反后与后者相乘。",
       "required_fields": [
         "open",
         "volume",
@@ -301,7 +301,7 @@
       "number": 15,
       "id": "alpha15",
       "formula": "(-1 * sum(rank(correlation(rank(high), rank(volume), 3)), 3))",
-      "summary": "累加最高价排名与成交量排名的短期相关性排名，取反向。",
+      "summary": "最高价名次和成交量名次近三天有多同步？公式连续三天累加这种相关性的市场名次，再取反。",
       "required_fields": [
         "high",
         "volume",
@@ -321,7 +321,7 @@
       "number": 16,
       "id": "alpha16",
       "formula": "(-1 * rank(covariance(rank(high), rank(volume), 5)))",
-      "summary": "衡量最高价排名与成交量排名的五日协方差，反向排名。",
+      "summary": "近五天里，最高价的市场名次与成交量名次是否共同起伏？公式比较后取反。",
       "required_fields": [
         "high",
         "volume",
@@ -341,7 +341,7 @@
       "number": 17,
       "id": "alpha17",
       "formula": "(((-1 * rank(ts_rank(close, 10))) * rank(delta(delta(close, 1), 1))) * rank(ts_rank((volume / adv20), 5)))",
-      "summary": "结合收盘价历史位置、涨跌加速度和相对成交活跃度的排名。",
+      "summary": "收盘价近十天处在什么位置、一天涨跌是否在加速、成交活跃度近五天处在什么位置？公式把三项市场名次相乘后取反。",
       "required_fields": [
         "close",
         "volume",
@@ -365,7 +365,7 @@
       "number": 18,
       "id": "alpha18",
       "formula": "(-1 * rank(((stddev(abs((close - open)), 5) + (close - open)) + correlation(close, open, 10))))",
-      "summary": "综合日内涨跌、日内涨跌幅度波动与开收盘相关性，反向排名。",
+      "summary": "当天开收盘差、这种差距近五天的波动，以及开盘与收盘近十天的同步性合起来有多大？公式比较后取反。",
       "required_fields": [
         "open",
         "close",
@@ -385,7 +385,7 @@
       "number": 19,
       "id": "alpha19",
       "formula": "((-1 * sign(((close - delay(close, 7)) + delta(close, 7)))) * (1 + rank((1 + sum(returns, 250)))))",
-      "summary": "将七日涨跌方向反转，再以长期收益排名调节大小。",
+      "summary": "先判断七日价格变化的方向并取反，再按近二百五十日收益合计的市场名次放大。",
       "required_fields": [
         "close",
         "returns",
@@ -405,7 +405,7 @@
       "number": 20,
       "id": "alpha20",
       "formula": "(((-1 * rank((open - delay(high, 1)))) * rank((open - delay(close, 1)))) * rank((open - delay(low, 1))))",
-      "summary": "结合开盘价相对昨日最高、最低及收盘价的三个偏离排名。",
+      "summary": "今天开盘价相对昨天最高价、最低价和收盘价各偏离多少？公式把三个市场名次相乘，并让其中一项取反。",
       "required_fields": [
         "open",
         "high",
@@ -427,7 +427,7 @@
       "number": 21,
       "id": "alpha21",
       "formula": "((((sum(close, 8) / 8) + stddev(close, 8)) < (sum(close, 2) / 2)) ? (-1 * 1) : (((sum(close, 2) / 2) < ((sum(close, 8) / 8) - stddev(close, 8))) ? 1 : (((1 < (volume / adv20)) || ((volume / adv20) == 1)) ? 1 : (-1 * 1))))",
-      "summary": "短均价越过长均价波动带时输出方向信号，否则比较成交量与 adv20。",
+      "summary": "两日均价若突破八日均价上下一个标准差，就给出固定方向；落在区间内时，再看成交量是否达到二十日平均成交金额。",
       "required_fields": [
         "close",
         "volume",
@@ -449,7 +449,7 @@
       "number": 22,
       "id": "alpha22",
       "formula": "(-1 * (delta(correlation(high, volume, 5), 5) * rank(stddev(close, 20))))",
-      "summary": "将最高价和成交量相关性的变化乘以收盘价波动排名，取反向。",
+      "summary": "最高价与成交量的五日相关性，五天来改变了多少？公式乘上二十日收盘波动的市场名次后取反。",
       "required_fields": [
         "high",
         "close",
@@ -470,7 +470,7 @@
       "number": 23,
       "id": "alpha23",
       "formula": "(((sum(high, 20) / 20) < high) ? (-1 * delta(high, 2)) : 0)",
-      "summary": "最高价超过二十日均值时反转其两日变化，否则输出零。",
+      "summary": "只有今天最高价高于近二十日平均最高价时，才把最高价的两日变化取反；否则为零。",
       "required_fields": [
         "high"
       ],
@@ -488,7 +488,7 @@
       "number": 24,
       "id": "alpha24",
       "formula": "((((delta((sum(close, 100) / 100), 100) / delay(close, 100)) < 0.05) || ((delta((sum(close, 100) / 100), 100) / delay(close, 100)) == 0.05)) ? (-1 * (close - ts_min(close, 100))) : (-1 * delta(close, 3)))",
-      "summary": "长期均价变化较小时看收盘价距百日低点，否则反转三日涨跌。",
+      "summary": "若百日均价的一百日变化除以百日前收盘价不超过 5%，就看收盘价离百日低点多远并取反；否则取反三日价格变化。",
       "required_fields": [
         "close"
       ],
@@ -506,7 +506,7 @@
       "number": 25,
       "id": "alpha25",
       "formula": "rank(((((-1 * returns) * adv20) * vwap) * (high - close)))",
-      "summary": "综合反向收益、平均成交金额、成交均价及收盘价距最高价的差距。",
+      "summary": "当天收益、二十日平均成交金额、成交均价，以及收盘价离当天最高价的距离合在一起，在股票间处于什么位置？收益方向先取反。",
       "required_fields": [
         "high",
         "close",
@@ -533,7 +533,7 @@
       "number": 26,
       "id": "alpha26",
       "formula": "(-1 * ts_max(correlation(ts_rank(volume, 5), ts_rank(high, 5), 5), 3))",
-      "summary": "先比较成交量和最高价各自的历史排名，再取其相关性的近期最大值并反向。",
+      "summary": "先看成交量和最高价各自在近五天的位置是否同步，再取这种相关性近三天的最高值并取反。",
       "required_fields": [
         "high",
         "volume"
@@ -552,7 +552,7 @@
       "number": 27,
       "id": "alpha27",
       "formula": "((0.5 < rank((sum(correlation(rank(volume), rank(vwap), 6), 2) / 2.0))) ? (-1 * 1) : 1)",
-      "summary": "比较成交量排名与成交均价排名的相关性排名，按阈值输出正负一。",
+      "summary": "成交量名次与成交均价名次近六天有多同步？公式把两天的相关性平均后在市场中排名，超过中位数输出负一，否则正一。",
       "required_fields": [
         "volume",
         "vwap",
@@ -573,7 +573,7 @@
       "number": 28,
       "id": "alpha28",
       "formula": "scale(((correlation(adv20, low, 5) + ((high + low) / 2)) - close))",
-      "summary": "将低价与平均成交金额相关性及收盘价相对日内中点的偏离合并缩放。",
+      "summary": "最低价与二十日平均成交金额的短期关系，加上日内中点相对收盘价的偏离后有多大？公式按全市场统一缩放。",
       "required_fields": [
         "high",
         "low",
@@ -598,7 +598,7 @@
       "number": 29,
       "id": "alpha29",
       "formula": "(min(product(rank(rank(scale(log(sum(ts_min(rank(rank((-1 * rank(delta((close - 1), 5))))), 2), 1))))), 1), 5) + ts_rank(delay((-1 * returns), 6), 5))",
-      "summary": "将收盘价变化的多层排名变换与滞后反向收益的历史排名相加。",
+      "summary": "一部分反复排名和缩放五日收盘变化，另一部分看六天前的反向收益在截至当时的五天中处于什么位置；公式把两部分相加。",
       "required_fields": [
         "close",
         "returns",
@@ -618,7 +618,7 @@
       "number": 30,
       "id": "alpha30",
       "formula": "(((1.0 - rank(((sign((close - delay(close, 1))) + sign((delay(close, 1) - delay(close, 2)))) + sign((delay(close, 2) - delay(close, 3)))))) * sum(volume, 5)) / sum(volume, 20))",
-      "summary": "用最近三日涨跌方向的反向排名，乘以五日成交量占二十日成交量的比例。",
+      "summary": "最近三次日涨跌方向加总后，在市场中有多极端？公式用其反向名次乘以近五日成交量占近二十日的比例。",
       "required_fields": [
         "close",
         "volume",
@@ -638,7 +638,7 @@
       "number": 31,
       "id": "alpha31",
       "formula": "((rank(rank(rank(decay_linear((-1 * rank(rank(delta(close, 10)))), 10)))) + rank((-1 * delta(close, 3)))) + sign(scale(correlation(adv20, low, 12))))",
-      "summary": "结合平滑后的十日价格变化、反向三日变化和低价与成交金额相关性。",
+      "summary": "十日价格变化经平滑和多次排名、三日价格变化取反，以及最低价与平均成交金额的相关方向，三部分相加。",
       "required_fields": [
         "low",
         "close",
@@ -662,7 +662,7 @@
       "number": 32,
       "id": "alpha32",
       "formula": "(scale(((sum(close, 7) / 7) - close)) + (20 * scale(correlation(vwap, delay(close, 5), 230))))",
-      "summary": "合并收盘价偏离七日均值及成交均价与滞后收盘价的长期相关性。",
+      "summary": "收盘价离七日均价多远，以及成交均价与五天前收盘价在长期内有多同步？两部分分别缩放后相加，后者乘二十。",
       "required_fields": [
         "close",
         "vwap",
@@ -683,7 +683,7 @@
       "number": 33,
       "id": "alpha33",
       "formula": "rank((-1 * ((1 - (open / close))^1)))",
-      "summary": "按开盘价相对于收盘价的比例做横截面排名。",
+      "summary": "开盘价相对收盘价是高还是低？公式把这个日内开收盘关系与其他股票比较。",
       "required_fields": [
         "open",
         "close",
@@ -703,7 +703,7 @@
       "number": 34,
       "id": "alpha34",
       "formula": "rank(((1 - rank((stddev(returns, 2) / stddev(returns, 5)))) + (1 - rank(delta(close, 1)))))",
-      "summary": "结合收益短长波动比的反向排名与一日价格变化的反向排名。",
+      "summary": "两日收益波动相对五日波动有多大，同时今天的价格变化在市场中有多高？公式对两项名次分别取反后相加再排名。",
       "required_fields": [
         "close",
         "returns",
@@ -723,7 +723,7 @@
       "number": 35,
       "id": "alpha35",
       "formula": "((Ts_Rank(volume, 32) * (1 - Ts_Rank(((close + high) - low), 16))) * (1 - Ts_Rank(returns, 32)))",
-      "summary": "结合成交量、价格组合及收益各自在历史中的相对位置。",
+      "summary": "成交量在近三十二天的位置、价格组合在近十六天的位置、收益在近三十二天的位置如何搭配？公式让后两项反向后相乘。",
       "required_fields": [
         "high",
         "low",
@@ -745,7 +745,7 @@
       "number": 36,
       "id": "alpha36",
       "formula": "(((((2.21 * rank(correlation((close - open), delay(volume, 1), 15))) + (0.7 * rank((open - close)))) + (0.73 * rank(Ts_Rank(delay((-1 * returns), 6), 5)))) + rank(abs(correlation(vwap, adv20, 6)))) + (0.6 * rank((((sum(close, 200) / 200) - open) * (close - open)))))",
-      "summary": "加权合并日内价量相关、日内反向涨跌、滞后收益、均价量相关及长期偏离。",
+      "summary": "把五项加权相加：日内涨跌与昨日成交量的相关性、反向开收盘差、六天前反向收益的历史位置、均价量关系，以及开盘偏离二百日均价与当天开收盘差的乘积。",
       "required_fields": [
         "open",
         "close",
@@ -773,7 +773,7 @@
       "number": 37,
       "id": "alpha37",
       "formula": "(rank(correlation(delay((open - close), 1), close, 200)) + rank((open - close)))",
-      "summary": "合并昨日开收盘差与收盘价的长期相关性排名及当日开收盘差排名。",
+      "summary": "昨天的开收盘差与收盘价在近二百天是否同步，再加上今天开收盘差的市场名次。",
       "required_fields": [
         "open",
         "close",
@@ -793,7 +793,7 @@
       "number": 38,
       "id": "alpha38",
       "formula": "((-1 * rank(Ts_Rank(close, 10))) * rank((close / open)))",
-      "summary": "将收盘价历史位置的反向排名乘以收开盘比值排名。",
+      "summary": "收盘价在自己近十天的位置有多高，同时今天收盘相对开盘有多强？公式将前者的市场名次取反后与后者相乘。",
       "required_fields": [
         "open",
         "close",
@@ -813,7 +813,7 @@
       "number": 39,
       "id": "alpha39",
       "formula": "((-1 * rank((delta(close, 7) * (1 - rank(decay_linear((volume / adv20), 9)))))) * (1 + rank(sum(returns, 250))))",
-      "summary": "用相对成交活跃度调节七日价格反转，再乘以长期收益排名。",
+      "summary": "七日价格变化先按近期相对成交活跃度降权并取反，再由近二百五十日收益合计的市场名次调节大小。",
       "required_fields": [
         "close",
         "volume",
@@ -838,7 +838,7 @@
       "number": 40,
       "id": "alpha40",
       "formula": "((-1 * rank(stddev(high, 10))) * correlation(high, volume, 10))",
-      "summary": "把最高价波动的反向排名乘以最高价与成交量的相关性。",
+      "summary": "最高价近十天波动有多大，同时它与成交量有多同步？公式把波动的市场名次取反后乘以相关性。",
       "required_fields": [
         "high",
         "volume",
@@ -858,7 +858,7 @@
       "number": 41,
       "id": "alpha41",
       "formula": "(((high * low)^0.5) - vwap)",
-      "summary": "比较最高最低价几何均值与真实成交均价。",
+      "summary": "当天最高价与最低价的几何中点，比实际成交均价高还是低、相差多少？",
       "required_fields": [
         "high",
         "low",
@@ -878,7 +878,7 @@
       "number": 42,
       "id": "alpha42",
       "formula": "(rank((vwap - close)) / rank((vwap + close)))",
-      "summary": "用成交均价减收盘价的排名除以二者之和的排名。",
+      "summary": "成交均价相对收盘价的差，在市场中有多大？公式用这个名次除以两者总和的名次。",
       "required_fields": [
         "close",
         "vwap",
@@ -899,7 +899,7 @@
       "number": 43,
       "id": "alpha43",
       "formula": "(ts_rank((volume / adv20), 20) * ts_rank((-1 * delta(close, 7)), 8))",
-      "summary": "将相对成交活跃度的历史排名与七日反向价格变化的历史排名相乘。",
+      "summary": "相对二十日平均成交金额的活跃度，近二十天处在什么位置；七日反向价格变化近八天又处在什么位置？公式将两者相乘。",
       "required_fields": [
         "close",
         "volume",
@@ -921,7 +921,7 @@
       "number": 44,
       "id": "alpha44",
       "formula": "(-1 * correlation(high, rank(volume), 5))",
-      "summary": "观察最高价与成交量横截面排名的五日相关性，取反向。",
+      "summary": "近五天里，最高价和成交量的市场名次是否同步？公式对这种相关性取反。",
       "required_fields": [
         "high",
         "volume",
@@ -941,7 +941,7 @@
       "number": 45,
       "id": "alpha45",
       "formula": "(-1 * ((rank((sum(delay(close, 5), 20) / 20)) * correlation(close, volume, 2)) * rank(correlation(sum(close, 5), sum(close, 20), 2))))",
-      "summary": "合并滞后收盘均值排名、短期价量相关及长短价格合计相关排名，取反向。",
+      "summary": "截至五天前的二十日平均收盘价、两日价量关系、五日与二十日收盘合计的关系，三者组合后整体取反。",
       "required_fields": [
         "close",
         "volume",
@@ -961,7 +961,7 @@
       "number": 46,
       "id": "alpha46",
       "formula": "((0.25 < (((delay(close, 20) - delay(close, 10)) / 10) - ((delay(close, 10) - close) / 10))) ? (-1 * 1) : (((((delay(close, 20) - delay(close, 10)) / 10) - ((delay(close, 10) - close) / 10)) < 0) ? 1 : ((-1 * 1) * (close - delay(close, 1)))))",
-      "summary": "根据两个十日价格斜率之差选择负一、正一或一日价格反转。",
+      "summary": "比较前后两个十日价格斜率：差值大于 0.25 输出负一，小于零输出正一，介于两者时取反一天价格变化。",
       "required_fields": [
         "close"
       ],
@@ -979,7 +979,7 @@
       "number": 47,
       "id": "alpha47",
       "formula": "((((rank((1 / close)) * volume) / adv20) * ((high * rank((high - close))) / (sum(high, 5) / 5))) - rank((vwap - delay(vwap, 5))))",
-      "summary": "结合价格倒数排名、相对成交活跃度与高收价差，减去成交均价变化排名。",
+      "summary": "低价股名次、当天相对成交活跃度、最高价离收盘价的距离共同形成一项，再减去成交均价五日变化的市场名次。",
       "required_fields": [
         "high",
         "close",
@@ -1006,7 +1006,7 @@
       "number": 48,
       "id": "alpha48",
       "formula": "(indneutralize(((correlation(delta(close, 1), delta(delay(close, 1), 1), 250) * delta(close, 1)) / close), IndClass.subindustry) / sum(((delta(close, 1) / delay(close, 1))^2), 250))",
-      "summary": "对价格变化自相关信号做子行业去均值，再除以长期平方收益合计。",
+      "summary": "一天价格变化与前一天价格变化在长期内是否延续？公式把该关系乘上当天变化并按价格归一化，去除子行业平均后，再除以长期平方收益合计。",
       "required_fields": [
         "close",
         "IndClass.subindustry",
@@ -1029,7 +1029,7 @@
       "number": 49,
       "id": "alpha49",
       "formula": "(((((delay(close, 20) - delay(close, 10)) / 10) - ((delay(close, 10) - close) / 10)) < (-1 * 0.1)) ? 1 : ((-1 * 1) * (close - delay(close, 1))))",
-      "summary": "价格斜率变化低于负零点一时输出一，否则反转一天价格变化。",
+      "summary": "若前后两个十日价格斜率之差低于 -0.1，就输出正一；否则取反一天价格变化。",
       "required_fields": [
         "close"
       ],
@@ -1047,7 +1047,7 @@
       "number": 50,
       "id": "alpha50",
       "formula": "(-1 * ts_max(rank(correlation(rank(volume), rank(vwap), 5)), 5))",
-      "summary": "取成交量排名与成交均价排名相关性的近期最高排名，反向输出。",
+      "summary": "成交量名次与成交均价名次近五天有多同步？公式取该相关性市场名次近五天的最高值，再取反。",
       "required_fields": [
         "volume",
         "vwap",
@@ -1068,7 +1068,7 @@
       "number": 51,
       "id": "alpha51",
       "formula": "(((((delay(close, 20) - delay(close, 10)) / 10) - ((delay(close, 10) - close) / 10)) < (-1 * 0.05)) ? 1 : ((-1 * 1) * (close - delay(close, 1))))",
-      "summary": "价格斜率变化低于负零点零五时输出一，否则反转一天价格变化。",
+      "summary": "若前后两个十日价格斜率之差低于 -0.05，就输出正一；否则取反一天价格变化。",
       "required_fields": [
         "close"
       ],
@@ -1086,7 +1086,7 @@
       "number": 52,
       "id": "alpha52",
       "formula": "((((-1 * ts_min(low, 5)) + delay(ts_min(low, 5), 5)) * rank(((sum(returns, 240) - sum(returns, 20)) / 220))) * ts_rank(volume, 5))",
-      "summary": "结合近期最低价变化、中长期收益排名及成交量历史位置。",
+      "summary": "五日最低价比五天前升降多少、中长期收益在市场中处于何位、成交量在近五天处于何位？公式将三项相乘。",
       "required_fields": [
         "low",
         "volume",
@@ -1107,7 +1107,7 @@
       "number": 53,
       "id": "alpha53",
       "formula": "(-1 * delta((((close - low) - (high - close)) / (close - low)), 9))",
-      "summary": "观察收盘价在日内高低区间中的非对称位置九日变化，取反向。",
+      "summary": "收盘价偏向当天高点还是低点的程度，九天来改变了多少？公式对这种变化取反。",
       "required_fields": [
         "high",
         "low",
@@ -1127,7 +1127,7 @@
       "number": 54,
       "id": "alpha54",
       "formula": "((-1 * ((low - close) * (open^5))) / ((low - high) * (close^5)))",
-      "summary": "用开收盘价格五次幂比例调节收盘价相对最低价的位置。",
+      "summary": "收盘价离最低价多远，并由开盘价与收盘价的五次幂比例放大或缩小；分母还用到当天高低价差。",
       "required_fields": [
         "open",
         "high",
@@ -1148,7 +1148,7 @@
       "number": 55,
       "id": "alpha55",
       "formula": "(-1 * correlation(rank(((close - ts_min(low, 12)) / (ts_max(high, 12) - ts_min(low, 12)))), rank(volume), 6))",
-      "summary": "比较区间价格位置排名与成交量排名的六日相关性，取反向。",
+      "summary": "收盘价在近十二天高低区间中的位置，与成交量的市场名次近六天是否同步？公式比较两者名次后取反。",
       "required_fields": [
         "high",
         "low",
@@ -1170,7 +1170,7 @@
       "number": 56,
       "id": "alpha56",
       "formula": "(0 - (1 * (rank((sum(returns, 10) / sum(sum(returns, 2), 3))) * rank((returns * cap)))))",
-      "summary": "将短期收益合计比例排名与收益乘市值排名相乘并取反向。",
+      "summary": "十日收益合计相对近三个时点的两日收益合计之和有多高，同时当天收益乘市值有多大？公式将两项市场名次相乘后取反。",
       "required_fields": [
         "returns",
         "cap",
@@ -1191,7 +1191,7 @@
       "number": 57,
       "id": "alpha57",
       "formula": "(0 - (1 * ((close - vwap) / decay_linear(rank(ts_argmax(close, 30)), 2))))",
-      "summary": "用收盘价偏离成交均价的程度除以平滑后的近期最高价时间排名，取反向。",
+      "summary": "收盘价离成交均价多远，再除以近三十天最高收盘价出现时间的平滑名次，最后整体取反。",
       "required_fields": [
         "close",
         "vwap",
@@ -1212,7 +1212,7 @@
       "number": 58,
       "id": "alpha58",
       "formula": "(-1 * Ts_Rank(decay_linear(correlation(IndNeutralize(vwap, IndClass.sector), volume, 3.92795), 7.89291), 5.50322))",
-      "summary": "对板块中性成交均价与成交量的相关性进行平滑、历史排名并反向。",
+      "summary": "去掉板块共同影响后，成交均价与成交量短期有多同步？公式先平滑，再看它在自身近期历史中的位置并取反。",
       "required_fields": [
         "volume",
         "vwap",
@@ -1237,7 +1237,7 @@
       "number": 59,
       "id": "alpha59",
       "formula": "(-1 * Ts_Rank(decay_linear(correlation(IndNeutralize(((vwap * 0.728317) + (vwap * (1 - 0.728317))), IndClass.industry), volume, 4.25197), 16.2289), 8.19648))",
-      "summary": "对行业中性成交均价与成交量的相关性进行平滑、历史排名并反向。",
+      "summary": "去掉行业共同影响后，成交均价与成交量短期有多同步？公式先平滑，再看它在自身近期历史中的位置并取反。",
       "required_fields": [
         "volume",
         "vwap",
@@ -1262,7 +1262,7 @@
       "number": 60,
       "id": "alpha60",
       "formula": "(0 - (1 * ((2 * scale(rank(((((close - low) - (high - close)) / (high - low)) * volume)))) - scale(rank(ts_argmax(close, 10))))))",
-      "summary": "比较成交量加权收盘位置的缩放排名与近期最高收盘价时间的缩放排名。",
+      "summary": "一边看收盘价偏向日内高点还是低点并用成交量加权，另一边看近十天最高收盘价何时出现；两项分别排名和缩放，第一项乘二后减去第二项，再整体取反。",
       "required_fields": [
         "high",
         "low",
@@ -1284,7 +1284,7 @@
       "number": 61,
       "id": "alpha61",
       "formula": "(rank((vwap - ts_min(vwap, 16.1219))) < rank(correlation(vwap, adv180, 17.9282)))",
-      "summary": "比较成交均价距近期低点的排名与均价和平均成交金额相关性的排名。",
+      "summary": "成交均价离近十六天低点的市场名次，是否低于它与一百八十日平均成交金额相关性的名次？结果是一个条件值。",
       "required_fields": [
         "vwap",
         "adv180",
@@ -1308,7 +1308,7 @@
       "number": 62,
       "id": "alpha62",
       "formula": "((rank(correlation(vwap, sum(adv20, 22.4101), 9.91009)) < rank(((rank(open) + rank(open)) < (rank(((high + low) / 2)) + rank(high))))) * -1)",
-      "summary": "比较均价量相关排名与开盘排名相对日内中高价排名的条件排名。",
+      "summary": "先看成交均价与累计二十日平均成交金额的相关名次，再看“两倍开盘价名次是否低于日内中点名次加最高价名次”这一条件的名次；比较两项后取反。",
       "required_fields": [
         "open",
         "high",
@@ -1335,7 +1335,7 @@
       "number": 63,
       "id": "alpha63",
       "formula": "((rank(decay_linear(delta(IndNeutralize(close, IndClass.industry), 2.25164), 8.22237)) - rank(decay_linear(correlation(((vwap * 0.318108) + (open * (1 - 0.318108))), sum(adv180, 37.2467), 13.557), 12.2883))) * -1)",
-      "summary": "比较行业中性收盘变化的平滑排名与混合价格量相关性的平滑排名。",
+      "summary": "行业中性收盘价的短期变化，与开盘和成交均价混合价对累计一百八十日平均成交金额的相关性，分别平滑并排名后作差，再取反。",
       "required_fields": [
         "open",
         "close",
@@ -1365,7 +1365,7 @@
       "number": 64,
       "id": "alpha64",
       "formula": "((rank(correlation(sum(((open * 0.178404) + (low * (1 - 0.178404))), 12.7054), sum(adv120, 12.7054), 16.6208)) < rank(delta(((((high + low) / 2) * 0.178404) + (vwap * (1 - 0.178404))), 3.69741))) * -1)",
-      "summary": "比较混合开低价与成交金额合计的相关排名和混合均价的变化排名。",
+      "summary": "开盘价与最低价混合价的累计值，同累计的一百二十日平均成交金额有多同步？公式把其名次与日内中点和成交均价混合价的变化名次比较，再取反。",
       "required_fields": [
         "open",
         "high",
@@ -1392,7 +1392,7 @@
       "number": 65,
       "id": "alpha65",
       "formula": "((rank(correlation(((open * 0.00817205) + (vwap * (1 - 0.00817205))), sum(adv60, 8.6911), 6.40374)) < rank((open - ts_min(open, 13.635)))) * -1)",
-      "summary": "比较混合开盘均价与成交金额的相关排名和开盘价距近期低点的排名。",
+      "summary": "几乎等于成交均价的混合价格，与累计六十日平均成交金额有多同步？公式把其名次与开盘价离近期低点的名次比较，再取反。",
       "required_fields": [
         "open",
         "vwap",
@@ -1417,7 +1417,7 @@
       "number": 66,
       "id": "alpha66",
       "formula": "((rank(decay_linear(delta(vwap, 3.51013), 7.23052)) + Ts_Rank(decay_linear(((((low * 0.96633) + (low * (1 - 0.96633))) - vwap) / (open - ((high + low) / 2))), 11.4157), 6.72611)) * -1)",
-      "summary": "合并成交均价变化的平滑排名与低价均价差相对开盘中点差的历史排名。",
+      "summary": "一项看成交均价短期变化经平滑后的市场名次，另一项看最低价相对成交均价和开盘相对日内中点之比的平滑历史位置；相加后取反。",
       "required_fields": [
         "open",
         "high",
@@ -1440,7 +1440,7 @@
       "number": 67,
       "id": "alpha67",
       "formula": "((rank((high - ts_min(high, 2.14593)))^rank(correlation(IndNeutralize(vwap, IndClass.sector), IndNeutralize(adv20, IndClass.subindustry), 6.02936))) * -1)",
-      "summary": "以中性均价和中性成交金额相关性排名为指数，变换最高价离低点的排名。",
+      "summary": "最高价比近两天最低的最高价高多少，其市场名次作为底数；板块中性成交均价与子行业中性二十日平均成交金额的相关名次作为指数，幂运算后取反。",
       "required_fields": [
         "high",
         "vwap",
@@ -1471,7 +1471,7 @@
       "number": 68,
       "id": "alpha68",
       "formula": "((Ts_Rank(correlation(rank(high), rank(adv15), 8.91644), 13.9333) < rank(delta(((close * 0.518371) + (low * (1 - 0.518371))), 1.06157))) * -1)",
-      "summary": "比较高价与平均成交金额排名相关性的历史位置和混合收低价变化排名。",
+      "summary": "最高价名次与十五日平均成交金额名次的相关性，在自身历史中处于何位？公式把它与收盘和最低价混合价的短期变化名次比较，再取反。",
       "required_fields": [
         "high",
         "low",
@@ -1496,7 +1496,7 @@
       "number": 69,
       "id": "alpha69",
       "formula": "((rank(ts_max(delta(IndNeutralize(vwap, IndClass.industry), 2.72412), 4.79344))^Ts_Rank(correlation(((close * 0.490655) + (vwap * (1 - 0.490655))), adv20, 4.92416), 9.0615)) * -1)",
-      "summary": "将行业中性均价变化极值排名按混合收盘均价的量相关历史排名作幂变换。",
+      "summary": "行业中性成交均价的短期变化近期最高有多大，其市场名次作为底数；收盘与成交均价混合价对二十日平均成交金额的相关历史位置作为指数，结果取反。",
       "required_fields": [
         "close",
         "vwap",
@@ -1525,7 +1525,7 @@
       "number": 70,
       "id": "alpha70",
       "formula": "((rank(delta(vwap, 1.29456))^Ts_Rank(correlation(IndNeutralize(close, IndClass.industry), adv50, 17.8256), 17.9171)) * -1)",
-      "summary": "将成交均价变化排名按行业中性收盘与成交金额相关性的历史排名作幂变换。",
+      "summary": "成交均价短期变化的市场名次作为底数，行业中性收盘价与五十日平均成交金额的相关历史位置作为指数，幂运算后取反。",
       "required_fields": [
         "close",
         "vwap",
@@ -1554,7 +1554,7 @@
       "number": 71,
       "id": "alpha71",
       "formula": "max(Ts_Rank(decay_linear(correlation(Ts_Rank(close, 3.43976), Ts_Rank(adv180, 12.0647), 18.0175), 4.20501), 15.6948), Ts_Rank(decay_linear((rank(((low + open) - (vwap + vwap)))^2), 16.4662), 4.4388))",
-      "summary": "取收盘量相关历史排名与低开价相对均价偏离的平滑历史排名中较强的一项。",
+      "summary": "两条信号取较大者：一条看收盘价历史位置与一百八十日平均成交金额历史位置的相关性，另一条看最低价加开盘价相对两倍成交均价的偏离；两条都先平滑再做历史排名。",
       "required_fields": [
         "open",
         "low",
@@ -1583,7 +1583,7 @@
       "number": 72,
       "id": "alpha72",
       "formula": "(rank(decay_linear(correlation(((high + low) / 2), adv40, 8.93345), 10.1519)) / rank(decay_linear(correlation(Ts_Rank(vwap, 3.72469), Ts_Rank(volume, 18.5188), 6.86671), 2.95011)))",
-      "summary": "以中点价格量相关的平滑排名除以成交均价与成交量历史排名相关的平滑排名。",
+      "summary": "分子看日内中点价格与四十日平均成交金额的相关性，分母看成交均价历史位置与成交量历史位置的相关性；两者平滑并排名后相除。",
       "required_fields": [
         "high",
         "low",
@@ -1610,7 +1610,7 @@
       "number": 73,
       "id": "alpha73",
       "formula": "(max(rank(decay_linear(delta(vwap, 4.72775), 2.91864)), Ts_Rank(decay_linear(((delta(((open * 0.147155) + (low * (1 - 0.147155))), 2.03608) / ((open * 0.147155) + (low * (1 - 0.147155)))) * -1), 3.33829), 16.7411)) * -1)",
-      "summary": "比较均价变化与混合开低价反向相对变化两条平滑信号，取较强者的反向。",
+      "summary": "一条看成交均价短期变化平滑后的市场名次，另一条看开盘价和最低价混合价的反向相对变化平滑后的历史位置；取两者较大值，再整体取反。",
       "required_fields": [
         "open",
         "low",
@@ -1634,7 +1634,7 @@
       "number": 74,
       "id": "alpha74",
       "formula": "((rank(correlation(close, sum(adv30, 37.4843), 15.1365)) < rank(correlation(rank(((high * 0.0261661) + (vwap * (1 - 0.0261661)))), rank(volume), 11.4791))) * -1)",
-      "summary": "比较收盘价与累计平均成交金额相关排名和混合高均价与成交量排名的相关排名。",
+      "summary": "一边看收盘价与累计三十日平均成交金额的相关名次；另一边看高价和成交均价混合价名次与成交量名次的相关名次。前者较低时结果为负一，否则为零。",
       "required_fields": [
         "high",
         "close",
@@ -1661,7 +1661,7 @@
       "number": 75,
       "id": "alpha75",
       "formula": "(rank(correlation(vwap, volume, 4.24304)) < rank(correlation(rank(low), rank(adv50), 12.4413)))",
-      "summary": "比较成交均价与成交量的相关排名和低价排名与平均成交金额排名的相关排名。",
+      "summary": "成交均价与成交量的短期相关名次，是否低于最低价名次与五十日平均成交金额名次的较长期相关名次？",
       "required_fields": [
         "low",
         "volume",
@@ -1687,7 +1687,7 @@
       "number": 76,
       "id": "alpha76",
       "formula": "(max(rank(decay_linear(delta(vwap, 1.24383), 11.8259)), Ts_Rank(decay_linear(Ts_Rank(correlation(IndNeutralize(low, IndClass.sector), adv81, 8.14941), 19.569), 17.1543), 19.383)) * -1)",
-      "summary": "比较均价变化与板块中性低价量相关两条平滑信号，取较强者的反向。",
+      "summary": "一条看成交均价短期变化平滑后的市场名次，另一条先看板块中性最低价与八十一日平均成交金额相关性的历史位置，再平滑并做一次历史排名；取两者较大值后取反。",
       "required_fields": [
         "low",
         "vwap",
@@ -1718,7 +1718,7 @@
       "number": 77,
       "id": "alpha77",
       "formula": "min(rank(decay_linear(((((high + low) / 2) + high) - (vwap + high)), 20.0451)), rank(decay_linear(correlation(((high + low) / 2), adv40, 3.1614), 5.64125)))",
-      "summary": "在日内中点相对成交均价的偏离与中点量相关两条平滑排名中取较小者。",
+      "summary": "一条看日内中点相对成交均价的偏离，另一条看日内中点与四十日平均成交金额的相关性；两条平滑并排名后取较小者。",
       "required_fields": [
         "high",
         "low",
@@ -1746,7 +1746,7 @@
       "number": 78,
       "id": "alpha78",
       "formula": "(rank(correlation(sum(((low * 0.352233) + (vwap * (1 - 0.352233))), 19.7428), sum(adv40, 19.7428), 6.83313))^rank(correlation(rank(vwap), rank(volume), 5.77492)))",
-      "summary": "以成交均价成交量排名相关为指数，变换混合低均价与成交金额合计的相关排名。",
+      "summary": "最低价与成交均价混合价的累计值同累计四十日平均成交金额的相关名次作为底数，成交均价名次与成交量名次的相关名次作为指数。",
       "required_fields": [
         "low",
         "volume",
@@ -1772,7 +1772,7 @@
       "number": 79,
       "id": "alpha79",
       "formula": "(rank(delta(IndNeutralize(((close * 0.60733) + (open * (1 - 0.60733))), IndClass.sector), 1.23438)) < rank(correlation(Ts_Rank(vwap, 3.60973), Ts_Rank(adv150, 9.18637), 14.6644)))",
-      "summary": "比较板块中性混合开收价变化排名与均价、成交金额历史排名的相关排名。",
+      "summary": "去掉板块共同影响后，开盘和收盘混合价的短期变化名次，是否低于成交均价历史位置与一百五十日平均成交金额历史位置的相关名次？",
       "required_fields": [
         "open",
         "close",
@@ -1802,7 +1802,7 @@
       "number": 80,
       "id": "alpha80",
       "formula": "((rank(Sign(delta(IndNeutralize(((open * 0.868128) + (high * (1 - 0.868128))), IndClass.industry), 4.04545)))^Ts_Rank(correlation(high, adv10, 5.11456), 5.53756)) * -1)",
-      "summary": "将行业中性混合开高价变化方向排名按最高价量相关的历史排名作幂变换。",
+      "summary": "去掉行业共同影响后，开盘和最高价混合价的变化方向名次作为底数；最高价与十日平均成交金额相关性的历史位置作为指数，结果取反。",
       "required_fields": [
         "open",
         "high",
@@ -1830,7 +1830,7 @@
       "number": 81,
       "id": "alpha81",
       "formula": "((rank(Log(product(rank((rank(correlation(vwap, sum(adv10, 49.6054), 8.47743))^4)), 14.9655))) < rank(correlation(rank(vwap), rank(volume), 5.07914))) * -1)",
-      "summary": "比较成交均价量相关的多层排名乘积对数与均价成交量排名相关性。",
+      "summary": "第一项把成交均价与累计十日平均成交金额的相关名次做四次方并再次排名，再连乘并取对数。第二项看成交均价名次与成交量名次的相关性；比较两边名次后取反。",
       "required_fields": [
         "volume",
         "vwap",
@@ -1855,7 +1855,7 @@
       "number": 82,
       "id": "alpha82",
       "formula": "(min(rank(decay_linear(delta(open, 1.46063), 14.8717)), Ts_Rank(decay_linear(correlation(IndNeutralize(volume, IndClass.sector), ((open * 0.634196) + (open * (1 - 0.634196))), 17.4842), 6.92131), 13.4283)) * -1)",
-      "summary": "比较开盘变化与板块中性成交量开盘相关两条平滑信号，取较小者的反向。",
+      "summary": "一条看开盘价的短期变化，另一条看板块中性成交量与开盘价的相关性；两条平滑后分别排名，取较小者再取反。",
       "required_fields": [
         "open",
         "volume",
@@ -1881,7 +1881,7 @@
       "number": 83,
       "id": "alpha83",
       "formula": "((rank(delay(((high - low) / (sum(close, 5) / 5)), 2)) * rank(rank(volume))) / (((high - low) / (sum(close, 5) / 5)) / (vwap - close)))",
-      "summary": "将滞后相对振幅排名和成交量排名相乘，再用当日相对振幅和均价收盘差调整。",
+      "summary": "两天前的日内振幅相对五日均价有多大，乘上成交量名次；再除以今天的相对振幅与成交均价减收盘价之比。",
       "required_fields": [
         "high",
         "low",
@@ -1905,7 +1905,7 @@
       "number": 84,
       "id": "alpha84",
       "formula": "SignedPower(Ts_Rank((vwap - ts_max(vwap, 15.3217)), 20.7127), delta(close, 4.96796))",
-      "summary": "以收盘价变化为指数，对成交均价距近期高点的历史排名作幂变换。",
+      "summary": "成交均价低于近十五日最高均价的程度，在近二十日处于什么位置？公式以四日收盘变化为指数做带符号幂。",
       "required_fields": [
         "close",
         "vwap"
@@ -1926,7 +1926,7 @@
       "number": 85,
       "id": "alpha85",
       "formula": "(rank(correlation(((high * 0.876703) + (close * (1 - 0.876703))), adv30, 9.61331))^rank(correlation(Ts_Rank(((high + low) / 2), 3.70596), Ts_Rank(volume, 10.1595), 7.11408)))",
-      "summary": "以中点价格与成交量历史排名的相关排名为指数，变换混合高收价量相关排名。",
+      "summary": "最高价和收盘价混合价与三十日平均成交金额的相关名次作为底数，日内中点历史位置与成交量历史位置的相关名次作为指数。",
       "required_fields": [
         "high",
         "low",
@@ -1952,7 +1952,7 @@
       "number": 86,
       "id": "alpha86",
       "formula": "((Ts_Rank(correlation(close, sum(adv20, 14.7444), 6.00049), 20.4195) < rank(((open + close) - (vwap + open)))) * -1)",
-      "summary": "比较收盘价与累计平均成交金额相关性的历史排名和收盘偏离成交均价的排名。",
+      "summary": "收盘价与累计二十日平均成交金额的相关性，在自身历史中处于何位？公式把它与收盘价偏离成交均价的市场名次比较，再取反。",
       "required_fields": [
         "open",
         "close",
@@ -1978,7 +1978,7 @@
       "number": 87,
       "id": "alpha87",
       "formula": "(max(rank(decay_linear(delta(((close * 0.369701) + (vwap * (1 - 0.369701))), 1.91233), 2.65461)), Ts_Rank(decay_linear(abs(correlation(IndNeutralize(adv81, IndClass.industry), close, 13.4132)), 4.89768), 14.4535)) * -1)",
-      "summary": "比较混合收盘均价变化和行业中性成交金额收盘相关两条平滑信号，取较强反向。",
+      "summary": "一条看收盘价和成交均价混合价短期变化平滑后的市场名次，另一条看行业中性八十一日平均成交金额与收盘价相关性绝对值的平滑历史位置；取两者较大值，再取反。",
       "required_fields": [
         "close",
         "vwap",
@@ -2009,7 +2009,7 @@
       "number": 88,
       "id": "alpha88",
       "formula": "min(rank(decay_linear(((rank(open) + rank(low)) - (rank(high) + rank(close))), 8.06882)), Ts_Rank(decay_linear(correlation(Ts_Rank(close, 8.44728), Ts_Rank(adv60, 20.6966), 8.01266), 6.65053), 2.61957))",
-      "summary": "在开低价排名相对高收价排名的平滑差及收盘量相关的平滑历史排名中取较小者。",
+      "summary": "一条看开盘价、最低价名次与最高价、收盘价名次之差平滑后的市场名次，另一条看收盘历史位置与六十日平均成交金额历史位置相关性的平滑历史名次；取两者较小值。",
       "required_fields": [
         "open",
         "high",
@@ -2037,7 +2037,7 @@
       "number": 89,
       "id": "alpha89",
       "formula": "(Ts_Rank(decay_linear(correlation(((low * 0.967285) + (low * (1 - 0.967285))), adv10, 6.94279), 5.51607), 3.79744) - Ts_Rank(decay_linear(delta(IndNeutralize(vwap, IndClass.industry), 3.48158), 10.1466), 15.3012))",
-      "summary": "用低价量相关的平滑历史排名减去行业中性成交均价变化的平滑历史排名。",
+      "summary": "先算最低价与十日平均成交金额相关性的平滑历史位置，再减去行业中性成交均价变化的平滑历史位置。",
       "required_fields": [
         "low",
         "vwap",
@@ -2066,7 +2066,7 @@
       "number": 90,
       "id": "alpha90",
       "formula": "((rank((close - ts_max(close, 4.66719)))^Ts_Rank(correlation(IndNeutralize(adv40, IndClass.subindustry), low, 5.38375), 3.21856)) * -1)",
-      "summary": "以子行业中性成交金额与低价相关的历史排名为指数，变换收盘价距近期高点的排名。",
+      "summary": "收盘价低于近期最高收盘价的市场名次作为底数，子行业中性四十日平均成交金额与最低价相关性的历史位置作为指数，结果取反。",
       "required_fields": [
         "low",
         "close",
@@ -2094,7 +2094,7 @@
       "number": 91,
       "id": "alpha91",
       "formula": "((Ts_Rank(decay_linear(decay_linear(correlation(IndNeutralize(close, IndClass.industry), volume, 9.74928), 16.398), 3.83219), 4.8667) - rank(decay_linear(correlation(vwap, adv30, 4.01303), 2.6809))) * -1)",
-      "summary": "比较行业中性收盘价量相关的双重平滑历史排名与成交均价量相关的平滑排名。",
+      "summary": "行业中性收盘价与成交量的相关性经过两次平滑并做历史排名，再与成交均价和三十日平均成交金额相关性的平滑名次作差，最后取反。",
       "required_fields": [
         "close",
         "volume",
@@ -2124,7 +2124,7 @@
       "number": 92,
       "id": "alpha92",
       "formula": "min(Ts_Rank(decay_linear(((((high + low) / 2) + close) < (low + open)), 14.7221), 18.8683), Ts_Rank(decay_linear(correlation(rank(low), rank(adv30), 7.58555), 6.94024), 6.80584))",
-      "summary": "在日内价格关系条件的平滑历史排名与低价成交金额排名相关的平滑历史排名中取较小者。",
+      "summary": "一条记录“日内中点加收盘价是否低于最低价加开盘价”并平滑，另一条看最低价名次与三十日平均成交金额名次的相关性；两条做历史排名后取较小者。",
       "required_fields": [
         "open",
         "high",
@@ -2152,7 +2152,7 @@
       "number": 93,
       "id": "alpha93",
       "formula": "(Ts_Rank(decay_linear(correlation(IndNeutralize(vwap, IndClass.industry), adv81, 17.4193), 19.848), 7.54455) / rank(decay_linear(delta(((close * 0.524434) + (vwap * (1 - 0.524434))), 2.77377), 16.2664)))",
-      "summary": "以行业中性均价量相关的平滑历史排名除以混合收盘均价变化的平滑排名。",
+      "summary": "分子看行业中性成交均价与八十一日平均成交金额相关性的平滑历史位置，分母看收盘与成交均价混合价变化的平滑市场名次。",
       "required_fields": [
         "close",
         "vwap",
@@ -2181,7 +2181,7 @@
       "number": 94,
       "id": "alpha94",
       "formula": "((rank((vwap - ts_min(vwap, 11.5783)))^Ts_Rank(correlation(Ts_Rank(vwap, 19.6462), Ts_Rank(adv60, 4.02992), 18.0926), 2.70756)) * -1)",
-      "summary": "以成交均价与成交金额历史排名相关性的历史排名为指数，变换均价距低点的排名。",
+      "summary": "成交均价离近期低点的市场名次作为底数，成交均价历史位置与六十日平均成交金额历史位置相关性的近期历史位置作为指数，结果取反。",
       "required_fields": [
         "vwap",
         "adv60",
@@ -2205,7 +2205,7 @@
       "number": 95,
       "id": "alpha95",
       "formula": "(rank((open - ts_min(open, 12.4105))) < Ts_Rank((rank(correlation(sum(((high + low) / 2), 19.1351), sum(adv40, 19.1351), 12.8742))^5), 11.7584))",
-      "summary": "比较开盘价距低点的排名与中点价格成交金额累计相关排名幂值的历史位置。",
+      "summary": "第一项看开盘价离近期最低开盘价多远的市场名次。第二项把累计日内中点与累计四十日平均成交金额的相关名次取五次方，再看它的历史位置；公式比较第一项名次是否低于第二项历史位置。",
       "required_fields": [
         "open",
         "high",
@@ -2230,7 +2230,7 @@
       "number": 96,
       "id": "alpha96",
       "formula": "(max(Ts_Rank(decay_linear(correlation(rank(vwap), rank(volume), 3.83878), 4.16783), 8.38151), Ts_Rank(decay_linear(Ts_ArgMax(correlation(Ts_Rank(close, 7.45404), Ts_Rank(adv60, 4.13242), 3.65459), 12.6556), 14.0365), 13.4143)) * -1)",
-      "summary": "比较均价成交量排名相关及收盘量相关极值时间两条平滑历史信号，取较强反向。",
+      "summary": "第一项看成交均价名次与成交量名次相关性的平滑历史位置。第二项看收盘历史位置与六十日平均成交金额历史位置的相关性何时达到高点，再把高点出现时间平滑并做历史排名；两项取较大者后取反。",
       "required_fields": [
         "close",
         "volume",
@@ -2258,7 +2258,7 @@
       "number": 97,
       "id": "alpha97",
       "formula": "((rank(decay_linear(delta(IndNeutralize(((low * 0.721001) + (vwap * (1 - 0.721001))), IndClass.industry), 3.3705), 20.4523)) - Ts_Rank(decay_linear(Ts_Rank(correlation(Ts_Rank(low, 7.87871), Ts_Rank(adv60, 17.255), 4.97547), 18.5925), 15.7152), 6.71659)) * -1)",
-      "summary": "比较行业中性混合低均价变化的平滑排名与低价成交金额历史排名相关的多层平滑值。",
+      "summary": "第一项看行业中性最低价和成交均价混合价的变化，经平滑后的市场名次。第二项看最低价历史位置与六十日平均成交金额历史位置的相关性，经多层排名和平滑后的历史名次；两项作差再取反。",
       "required_fields": [
         "low",
         "vwap",
@@ -2287,7 +2287,7 @@
       "number": 98,
       "id": "alpha98",
       "formula": "(rank(decay_linear(correlation(vwap, sum(adv5, 26.4719), 4.58418), 7.18088)) - rank(decay_linear(Ts_Rank(Ts_ArgMin(correlation(rank(open), rank(adv15), 20.8187), 8.62571), 6.95668), 8.07206)))",
-      "summary": "将成交均价与累计平均成交金额相关的平滑排名减去开盘量排名相关低点时间的平滑排名。",
+      "summary": "第一项看成交均价与累计五日平均成交金额相关性的平滑名次。第二项看开盘价名次和十五日平均成交金额名次的相关性何时处于近期低点，并对该时间做排名和平滑；前者减后者。",
       "required_fields": [
         "open",
         "vwap",
@@ -2314,7 +2314,7 @@
       "number": 99,
       "id": "alpha99",
       "formula": "((rank(correlation(sum(((high + low) / 2), 19.8975), sum(adv60, 19.8975), 8.8136)) < rank(correlation(low, volume, 6.28259))) * -1)",
-      "summary": "比较中点价格合计与成交金额合计相关排名和最低价与成交量的相关排名。",
+      "summary": "一边看累计日内中点与累计六十日平均成交金额的相关名次，另一边看最低价与成交量的短期相关名次。前者较低时结果为负一，否则为零。",
       "required_fields": [
         "high",
         "low",
@@ -2339,7 +2339,7 @@
       "number": 100,
       "id": "alpha100",
       "formula": "(0 - (1 * (((1.5 * scale(indneutralize(indneutralize(rank(((((close - low) - (high - close)) / (high - low)) * volume)), IndClass.subindustry), IndClass.subindustry))) - scale(indneutralize((correlation(close, rank(adv20), 5) - rank(ts_argmin(close, 30))), IndClass.subindustry))) * (volume / adv20))))",
-      "summary": "对子行业中性的量价位置和价量相关信号缩放求差，再按相对成交活跃度反向调节。",
+      "summary": "第一项把成交量加权的收盘日内位置去掉子行业平均影响，缩放后乘 1.5。第二项将收盘价与二十日平均成交金额市场名次的相关性，减去近期低点出现时间的市场名次，再去掉子行业平均影响并独立缩放；两项相减，乘相对成交活跃度后取反。",
       "required_fields": [
         "high",
         "low",
@@ -2369,7 +2369,7 @@
       "number": 101,
       "id": "alpha101",
       "formula": "((close - open) / ((high - low) + .001))",
-      "summary": "用收盘价减开盘价除以日内振幅加零点零零一，衡量日内方向与强度。",
+      "summary": "收盘价比开盘价高还是低，这个差占当天高低振幅的多少？分母加 0.001，避免振幅接近零时直接除零。",
       "required_fields": [
         "open",
         "high",

@@ -31,9 +31,16 @@
 .ax-alpha-no-match { padding: 1rem; color: var(--text-dim); }
 .ax-alpha-method { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(190px, .8fr); gap: 1rem; padding: 1rem; box-shadow: none; border-top: .65rem solid var(--accent); }
 .ax-alpha-method h4 { margin: .35rem 0; color: var(--text); }
+.ax-alpha-method h5 { margin: 1rem 0 .3rem; color: var(--text); font-size: .84rem; }
+.ax-alpha-reading { display: grid; gap: .35rem; margin: .5rem 0 0; padding-left: 1.15rem; color: var(--text-dim); font-size: .78rem; line-height: 1.5; }
+.ax-alpha-example { margin-top: 1rem; padding: .75rem .85rem; border-left: .35rem solid var(--green); background: color-mix(in srgb, var(--green) 8%, var(--bg-card)); }
+.ax-alpha-example strong { color: var(--text); font-size: .76rem; }
+.ax-alpha-example p { margin: .3rem 0 0; color: var(--text-dim); font-size: .79rem; line-height: 1.55; }
 .ax-alpha-formula { display: block; margin: .7rem 0; padding: .7rem; color: var(--accent-on-fill); background: var(--accent-fill); border-left: .4rem solid var(--accent); white-space: normal; overflow-wrap: anywhere; }
 .ax-alpha-formula-missing { font-family: inherit; font-style: normal; }
 .ax-alpha-lesson-svg { display: block; width: 100%; min-height: 150px; padding: .55rem; color: var(--text-dim); background: var(--bg-elev); border: 2px solid var(--border); }
+.ax-alpha-lesson-figure { min-width: 0; margin: 0; }
+.ax-alpha-lesson-figure figcaption { margin-top: .3rem; color: var(--text-faint); font-size: .68rem; line-height: 1.4; }
 .ax-alpha-lesson-svg line, .ax-alpha-lesson-svg rect { fill: none; stroke: currentColor; stroke-width: 3; }
 .ax-alpha-lesson-svg text { fill: var(--text-dim); font: 12px var(--mono); }
 .ax-alpha-lesson-svg .signal { fill: color-mix(in srgb, var(--alpha-signal) 23%, transparent); stroke: var(--alpha-signal); }
@@ -48,11 +55,21 @@
 .ax-alpha-lab { margin-top: 1rem; padding: clamp(1rem, 2.5vw, 1.5rem); border-top: .7rem solid var(--accent); }
 .ax-alpha-lab > h3 { margin: 0; font-size: 1.35rem; }
 .ax-alpha-lab > p { margin: .35rem 0 1rem; color: var(--text-dim); }
+.ax-alpha-lab-heading { display: flex; align-items: flex-start; gap: .85rem; margin: 0 0 1.25rem; padding-bottom: 1rem; border-bottom: 2px solid var(--border); }
+.ax-alpha-lab-heading h3 { margin: .2rem 0; color: var(--text); font-size: 1.45rem; }
+.ax-alpha-lab-heading p { margin: .25rem 0 0; color: var(--text-dim); font-size: .84rem; line-height: 1.5; }
+.ax-alpha-lab-mark { display: grid; flex: 0 0 2.35rem; width: 2.35rem; height: 2.35rem; place-items: center; color: var(--accent-on-fill); background: var(--accent-fill); font-size: 1.05rem; }
 .ax-alpha-form { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)) auto; gap: .75rem; align-items: end; }
 .ax-alpha-form label { display: grid; gap: .3rem; color: var(--text-dim); font-size: .75rem; font-weight: 700; }
+.ax-alpha-form select, .ax-alpha-form input, .ax-alpha-source strong { box-sizing: border-box; width: 100%; min-height: 2.8rem; border-radius: 0; }
+.ax-alpha-form select { padding-right: 1.8rem; }
+.ax-alpha-source { display: grid; gap: .3rem; min-width: 0; color: var(--text-dim); font-size: .75rem; font-weight: 700; }
+.ax-alpha-source strong { display: flex; align-items: center; padding: .5rem .65rem; border: 2px solid var(--border); background: var(--bg-elev); color: var(--text); font-size: .82rem; font-weight: 650; }
+.ax-alpha-run { min-height: 2.8rem; white-space: nowrap; }
 .ax-alpha-error, .ax-alpha-status { margin-top: 1rem; padding: .8rem 1rem; border: 2px solid var(--red); background: color-mix(in srgb, var(--red) 10%, var(--bg-card)); }
 .ax-alpha-status { border-color: var(--accent); }
 .ax-alpha-results { margin-top: 1rem; }
+.ax-alpha-result-guide { margin: .8rem 0 0; padding: .7rem .8rem; color: var(--text-dim); background: var(--bg-elev); border-left: .35rem solid var(--accent-2); font-size: .78rem; line-height: 1.55; }
 .ax-alpha-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .7rem; }
 .ax-alpha-metrics article { min-height: 6.5rem; padding: 1rem; border: 2px solid var(--border); background: var(--bg-elev); }
 .ax-alpha-metrics span { display: block; color: var(--text-dim); font: 700 .68rem/1.3 var(--mono); letter-spacing: .08em; }

@@ -2,6 +2,22 @@ use axiom::code_links;
 #[path = "../build_support/source_map.rs"]
 mod source_map;
 #[test]
+fn learning_overview_new_modules_have_precise_source_targets() {
+    for reference in [
+        "src/symbols.rs::search",
+        "src/indicators/ma.rs::sma",
+        "src/alpha_research.rs::research",
+        "src/execution.rs::ExecutionProfile",
+        "src/strategy.rs::SmaCrossStrategy",
+    ] {
+        let location = code_links::resolve(reference)
+            .unwrap_or_else(|| panic!("missing source target: {reference}"));
+        assert!(location.line > 0 && location.end_line >= location.line);
+        let source = code_links::source(&location.path).expect("embedded source exists");
+        assert!(source.lines().nth(location.line - 1).is_some());
+    }
+}
+#[test]
 fn source_reordering_recomputes_exact_ast_case_lines() {
     let a="fn evaluate(id: &str) {\n match id {\n \"first\" => first(),\n \"second\" | \"alias\" => second(),\n _ => ()\n }\n}\n";
     let first = source_map::scan("src/example.rs", a).unwrap();

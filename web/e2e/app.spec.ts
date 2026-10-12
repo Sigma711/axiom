@@ -1109,11 +1109,21 @@ test('concept overview visualizes the full research-to-operation workflow and op
   await page.goto('/learn/concepts');
   const workflow = page.getByLabel('量化交易全流程');
   await expect(workflow).toBeVisible();
-  await expect(workflow).toContainText('数据接入与治理');
-  await expect(workflow).toContainText('清洗、复权、时间对齐');
-  await expect(workflow).toContainText('回测与稳健性');
+  await expect(workflow).toContainText('市场数据');
+  await expect(workflow).toContainText('研究标的池');
+  await expect(workflow).toContainText('因子研究');
+  await expect(workflow).toContainText('策略规则');
+  await expect(workflow).toContainText('仓位与风险门控');
+  await expect(workflow).toContainText('执行与成交');
+  await expect(workflow).toContainText('研究验证循环');
   await expect(workflow).toContainText('机器学习与大模型');
-  await expect(workflow).toContainText('上线、监控与复盘');
+  await expect(page.getByRole('navigation', { name: '学习子页路线' })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('concept-overview-dark.png'), fullPage: true });
+  await page.getByLabel('切换到浅色模式').click();
+  await page.screenshot({ path: test.info().outputPath('concept-overview-light.png'), fullPage: true });
+  await page.getByRole('button', { name: /前往因子研究/ }).click();
+  await expect(page).toHaveURL(/\/learn\/alphas$/);
+  await page.goto('/learn/concepts');
 
   await page.getByRole('button', { name: /K线 \(Bar\).*查看模块说明/ }).click();
   const dialog = page.getByRole('dialog', { name: /K线 \(Bar\) 模块说明/ });
@@ -1122,6 +1132,26 @@ test('concept overview visualizes the full research-to-operation workflow and op
   await expect(dialog.locator('svg')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
+});
+
+test('strategy creation guide connects research, validation, comparison, and paper practice', async ({ page }) => {
+  await page.goto('/learn/build');
+  await expect(page.locator('.ax-path > li')).toHaveCount(6);
+  const pitfalls = page.locator('.ax-card.danger');
+  await expect(pitfalls).toHaveCount(8);
+  for (let index = 0; index < await pitfalls.count(); index += 1) {
+    await expect(pitfalls.nth(index)).toContainText('例：');
+    await expect(pitfalls.nth(index)).toContainText('检查：');
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.locator('.ax-main').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await page.screenshot({ path: test.info().outputPath('build-guide-mobile.png'), fullPage: true });
+
+  for (const [button, path] of [['进入因子研究', '/learn/alphas'], ['打开回测', '/backtest'], ['打开策略对比', '/compare'], ['打开模拟盘', '/paper']] as const) {
+    await page.goto('/learn/build');
+    await page.getByRole('button', { name: button, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`${path}$`));
+  }
 });
 
 test('book contents uses an arrow-only accessible collapse control', async ({ page }) => {
@@ -1162,7 +1192,7 @@ test('every visible learning source reference is requested through the AST-backe
   });
   await page.goto('/learn/concepts');
   const cards = page.locator('.ax-module-card');
-  await expect(cards).toHaveCount(10);
+  await expect(cards).toHaveCount(13);
   for (let index = 0; index < await cards.count(); index += 1) {
     await cards.nth(index).click();
     await expect(page.getByRole('dialog')).toBeVisible();
@@ -1170,12 +1200,13 @@ test('every visible learning source reference is requested through the AST-backe
   }
   await page.goto('/learn/path');
   await expect(page.locator('.ax-learning-path > li')).toHaveCount(9);
-  await expect.poll(() => refs.size).toBe(11);
+  await expect.poll(() => refs.size).toBe(14);
   expect([...refs].sort()).toEqual([
-    'src/broker.rs::Broker', 'src/data.rs::DataFeed', 'src/engine.rs::BacktestEngine::run',
+    'src/alpha_research.rs::research', 'src/broker.rs::Broker', 'src/data.rs::DataFeed', 'src/engine.rs::BacktestEngine::run',
+    'src/execution.rs::ExecutionProfile',
     'src/indicators/ma.rs::sma', 'src/metrics.rs::compute_metrics', 'src/paper.rs::run_paper_loop',
     'src/portfolio.rs::Portfolio::on_signal', 'src/risk.rs::RiskManager::allow_order',
-    'src/strategy.rs::Strategy', 'src/types.rs::Bar', 'src/workflows.rs::entries',
+    'src/strategy.rs::Strategy', 'src/symbols.rs::search', 'src/types.rs::Bar', 'src/workflows.rs::entries',
   ]);
 });
 
@@ -1293,11 +1324,11 @@ test('symbol picker surfaces a catalog error and retries after a new query', asy
 
 test('build view exposes all strategy teaching steps and pitfalls', async ({ page }) => {
   await page.goto('/learn/build');
-  await expect(page.getByRole('heading', { name: '创建自己的策略 - 5 步教学' })).toBeVisible();
-  await expect(page.locator('.ax-path > li')).toHaveCount(5);
-  await expect(page.locator('.ax-card.danger')).toHaveCount(6);
-  await expect(page.locator('.ax-path')).toContainText('形成可验证的市场假设');
-  await expect(page.locator('.ax-grid')).toContainText('RSI 超买 ≠ 卖出');
+  await expect(page.getByRole('heading', { name: '创建自己的策略 - 6 步' })).toBeVisible();
+  await expect(page.locator('.ax-path > li')).toHaveCount(6);
+  await expect(page.locator('.ax-card.danger')).toHaveCount(8);
+  await expect(page.locator('.ax-path')).toContainText('固定研究合同');
+  await expect(page.locator('.ax-card.danger').first()).toContainText('未来数据泄漏');
 });
 
 test('practice reports invalid JSON and succeeds after the input is corrected', async ({ page }) => {
