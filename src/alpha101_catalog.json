@@ -1,0 +1,2390 @@
+{
+  "source_url": "https://arxiv.org/pdf/1601.00991",
+  "source_title": "101 Formulaic Alphas, Appendix A",
+  "source_pdf_sha256": "1f9c21afe32dcb3ee77b31548acdaea00451fbfa1c0ee10c907867bcc736fce9",
+  "schema_version": 1,
+  "formula_status": "transcribed_from_primary_source_not_execution_verified",
+  "operator_notes": [
+    "函数名大小写不敏感；公式保留原编号、系数和未简化表达式。",
+    "时间窗口中的非整数天数按原文向下取整。",
+    "rank 是横截面排名，ts_rank 是单证券历史排名；scale 是横截面绝对值合计归一化。",
+    "原文未穷尽并列排名、样本标准差、缺失值、除零及极值时间索引约定；执行器应明确并独立核验。",
+    "原式 delay-0 为 42、48、53、54；使用完整日线后在下一时段执行属于研究时点选择，并非复制原交易时点。",
+    "目录收录不代表已经实现、具备输入数据或具有投资有效性；不得填充或伪造不可计算结果。"
+  ],
+  "factors": [
+    {
+      "number": 1,
+      "id": "alpha1",
+      "formula": "(rank(Ts_ArgMax(SignedPower(((returns < 0) ? stddev(returns, 20) : close), 2.), 5)) - 0.5)",
+      "summary": "下跌日看收益波动、其他日看收盘价，再比较最近极大值出现时间的横截面排名。",
+      "required_fields": [
+        "close",
+        "returns",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": [
+        "原文 SignedPower 定义写为 x^a；不得静默改成其他带符号幂约定。"
+      ]
+    },
+    {
+      "number": 2,
+      "id": "alpha2",
+      "formula": "(-1 * correlation(rank(delta(log(volume), 2)), rank(((close - open) / open)), 6))",
+      "summary": "比较成交量变化排名与日内涨跌排名的短期相关性，取反向。",
+      "required_fields": [
+        "open",
+        "close",
+        "volume",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 3,
+      "id": "alpha3",
+      "formula": "(-1 * correlation(rank(open), rank(volume), 10))",
+      "summary": "观察开盘价排名与成交量排名的十日相关性，取反向。",
+      "required_fields": [
+        "open",
+        "volume",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 4,
+      "id": "alpha4",
+      "formula": "(-1 * Ts_Rank(rank(low), 9))",
+      "summary": "观察最低价的横截面排名在自身九日历史中的位置，取反向。",
+      "required_fields": [
+        "low",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 5,
+      "id": "alpha5",
+      "formula": "(rank((open - (sum(vwap, 10) / 10))) * (-1 * abs(rank((close - vwap)))))",
+      "summary": "把开盘价偏离十日均价的位置与收盘价偏离成交均价的程度相乘。",
+      "required_fields": [
+        "open",
+        "close",
+        "vwap",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 6,
+      "id": "alpha6",
+      "formula": "(-1 * correlation(open, volume, 10))",
+      "summary": "观察开盘价与成交量十日内是否同向变化，取反向。",
+      "required_fields": [
+        "open",
+        "volume"
+      ],
+      "requires_cross_section": false,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "价格及成交量须具有一致调整口径，历史窗口完整且只使用当时已知数据。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 7,
+      "id": "alpha7",
+      "formula": "((adv20 < volume) ? ((-1 * ts_rank(abs(delta(close, 7)), 60)) * sign(delta(close, 7))) : (-1 * 1))",
+      "summary": "成交量超过原式 adv20 阈值时反向衡量七日涨跌，否则输出负一。",
+      "required_fields": [
+        "close",
+        "volume",
+        "adv20"
+      ],
+      "requires_cross_section": false,
+      "adv_windows": [
+        20
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 8,
+      "id": "alpha8",
+      "formula": "(-1 * rank(((sum(open, 5) * sum(returns, 5)) - delay((sum(open, 5) * sum(returns, 5)), 10))))",
+      "summary": "比较开盘价五日合计与收益五日合计的乘积相对十日前的变化，反向排名。",
+      "required_fields": [
+        "open",
+        "returns",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 9,
+      "id": "alpha9",
+      "formula": "((0 < ts_min(delta(close, 1), 5)) ? delta(close, 1) : ((ts_max(delta(close, 1), 5) < 0) ? delta(close, 1) : (-1 * delta(close, 1))))",
+      "summary": "连续五日同方向变动时保留当天涨跌，否则反转当天涨跌。",
+      "required_fields": [
+        "close"
+      ],
+      "requires_cross_section": false,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "价格及成交量须具有一致调整口径，历史窗口完整且只使用当时已知数据。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 10,
+      "id": "alpha10",
+      "formula": "rank(((0 < ts_min(delta(close, 1), 4)) ? delta(close, 1) : ((ts_max(delta(close, 1), 4) < 0) ? delta(close, 1) : (-1 * delta(close, 1)))))",
+      "summary": "连续四日同方向变动时保留当天涨跌，否则反转，并做横截面排名。",
+      "required_fields": [
+        "close",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 11,
+      "id": "alpha11",
+      "formula": "((rank(ts_max((vwap - close), 3)) + rank(ts_min((vwap - close), 3))) * rank(delta(volume, 3)))",
+      "summary": "结合成交均价与收盘价之差的三日极值排名及成交量三日变化。",
+      "required_fields": [
+        "close",
+        "volume",
+        "vwap",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 12,
+      "id": "alpha12",
+      "formula": "(sign(delta(volume, 1)) * (-1 * delta(close, 1)))",
+      "summary": "用成交量增减方向调节收盘价一天变化的反向值。",
+      "required_fields": [
+        "close",
+        "volume"
+      ],
+      "requires_cross_section": false,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "价格及成交量须具有一致调整口径，历史窗口完整且只使用当时已知数据。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 13,
+      "id": "alpha13",
+      "formula": "(-1 * rank(covariance(rank(close), rank(volume), 5)))",
+      "summary": "衡量收盘价排名与成交量排名的五日协方差，反向排名。",
+      "required_fields": [
+        "close",
+        "volume",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 14,
+      "id": "alpha14",
+      "formula": "((-1 * rank(delta(returns, 3))) * correlation(open, volume, 10))",
+      "summary": "把收益三日变化的反向排名乘以开盘价与成交量的相关性。",
+      "required_fields": [
+        "open",
+        "volume",
+        "returns",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 15,
+      "id": "alpha15",
+      "formula": "(-1 * sum(rank(correlation(rank(high), rank(volume), 3)), 3))",
+      "summary": "累加最高价排名与成交量排名的短期相关性排名，取反向。",
+      "required_fields": [
+        "high",
+        "volume",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 16,
+      "id": "alpha16",
+      "formula": "(-1 * rank(covariance(rank(high), rank(volume), 5)))",
+      "summary": "衡量最高价排名与成交量排名的五日协方差，反向排名。",
+      "required_fields": [
+        "high",
+        "volume",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 17,
+      "id": "alpha17",
+      "formula": "(((-1 * rank(ts_rank(close, 10))) * rank(delta(delta(close, 1), 1))) * rank(ts_rank((volume / adv20), 5)))",
+      "summary": "结合收盘价历史位置、涨跌加速度和相对成交活跃度的排名。",
+      "required_fields": [
+        "close",
+        "volume",
+        "adv20",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        20
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 18,
+      "id": "alpha18",
+      "formula": "(-1 * rank(((stddev(abs((close - open)), 5) + (close - open)) + correlation(close, open, 10))))",
+      "summary": "综合日内涨跌、日内涨跌幅度波动与开收盘相关性，反向排名。",
+      "required_fields": [
+        "open",
+        "close",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 19,
+      "id": "alpha19",
+      "formula": "((-1 * sign(((close - delay(close, 7)) + delta(close, 7)))) * (1 + rank((1 + sum(returns, 250)))))",
+      "summary": "将七日涨跌方向反转，再以长期收益排名调节大小。",
+      "required_fields": [
+        "close",
+        "returns",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 20,
+      "id": "alpha20",
+      "formula": "(((-1 * rank((open - delay(high, 1)))) * rank((open - delay(close, 1)))) * rank((open - delay(low, 1))))",
+      "summary": "结合开盘价相对昨日最高、最低及收盘价的三个偏离排名。",
+      "required_fields": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 21,
+      "id": "alpha21",
+      "formula": "((((sum(close, 8) / 8) + stddev(close, 8)) < (sum(close, 2) / 2)) ? (-1 * 1) : (((sum(close, 2) / 2) < ((sum(close, 8) / 8) - stddev(close, 8))) ? 1 : (((1 < (volume / adv20)) || ((volume / adv20) == 1)) ? 1 : (-1 * 1))))",
+      "summary": "短均价越过长均价波动带时输出方向信号，否则比较成交量与 adv20。",
+      "required_fields": [
+        "close",
+        "volume",
+        "adv20"
+      ],
+      "requires_cross_section": false,
+      "adv_windows": [
+        20
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 22,
+      "id": "alpha22",
+      "formula": "(-1 * (delta(correlation(high, volume, 5), 5) * rank(stddev(close, 20))))",
+      "summary": "将最高价和成交量相关性的变化乘以收盘价波动排名，取反向。",
+      "required_fields": [
+        "high",
+        "close",
+        "volume",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 23,
+      "id": "alpha23",
+      "formula": "(((sum(high, 20) / 20) < high) ? (-1 * delta(high, 2)) : 0)",
+      "summary": "最高价超过二十日均值时反转其两日变化，否则输出零。",
+      "required_fields": [
+        "high"
+      ],
+      "requires_cross_section": false,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "价格及成交量须具有一致调整口径，历史窗口完整且只使用当时已知数据。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 24,
+      "id": "alpha24",
+      "formula": "((((delta((sum(close, 100) / 100), 100) / delay(close, 100)) < 0.05) || ((delta((sum(close, 100) / 100), 100) / delay(close, 100)) == 0.05)) ? (-1 * (close - ts_min(close, 100))) : (-1 * delta(close, 3)))",
+      "summary": "长期均价变化较小时看收盘价距百日低点，否则反转三日涨跌。",
+      "required_fields": [
+        "close"
+      ],
+      "requires_cross_section": false,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "价格及成交量须具有一致调整口径，历史窗口完整且只使用当时已知数据。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 25,
+      "id": "alpha25",
+      "formula": "rank(((((-1 * returns) * adv20) * vwap) * (high - close)))",
+      "summary": "综合反向收益、平均成交金额、成交均价及收盘价距最高价的差距。",
+      "required_fields": [
+        "high",
+        "close",
+        "returns",
+        "vwap",
+        "adv20",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        20
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 26,
+      "id": "alpha26",
+      "formula": "(-1 * ts_max(correlation(ts_rank(volume, 5), ts_rank(high, 5), 5), 3))",
+      "summary": "先比较成交量和最高价各自的历史排名，再取其相关性的近期最大值并反向。",
+      "required_fields": [
+        "high",
+        "volume"
+      ],
+      "requires_cross_section": false,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "价格及成交量须具有一致调整口径，历史窗口完整且只使用当时已知数据。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 27,
+      "id": "alpha27",
+      "formula": "((0.5 < rank((sum(correlation(rank(volume), rank(vwap), 6), 2) / 2.0))) ? (-1 * 1) : 1)",
+      "summary": "比较成交量排名与成交均价排名的相关性排名，按阈值输出正负一。",
+      "required_fields": [
+        "volume",
+        "vwap",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 28,
+      "id": "alpha28",
+      "formula": "scale(((correlation(adv20, low, 5) + ((high + low) / 2)) - close))",
+      "summary": "将低价与平均成交金额相关性及收盘价相对日内中点的偏离合并缩放。",
+      "required_fields": [
+        "high",
+        "low",
+        "close",
+        "adv20",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        20
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 29,
+      "id": "alpha29",
+      "formula": "(min(product(rank(rank(scale(log(sum(ts_min(rank(rank((-1 * rank(delta((close - 1), 5))))), 2), 1))))), 1), 5) + ts_rank(delay((-1 * returns), 6), 5))",
+      "summary": "将收盘价变化的多层排名变换与滞后反向收益的历史排名相加。",
+      "required_fields": [
+        "close",
+        "returns",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 30,
+      "id": "alpha30",
+      "formula": "(((1.0 - rank(((sign((close - delay(close, 1))) + sign((delay(close, 1) - delay(close, 2)))) + sign((delay(close, 2) - delay(close, 3)))))) * sum(volume, 5)) / sum(volume, 20))",
+      "summary": "用最近三日涨跌方向的反向排名，乘以五日成交量占二十日成交量的比例。",
+      "required_fields": [
+        "close",
+        "volume",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 31,
+      "id": "alpha31",
+      "formula": "((rank(rank(rank(decay_linear((-1 * rank(rank(delta(close, 10)))), 10)))) + rank((-1 * delta(close, 3)))) + sign(scale(correlation(adv20, low, 12))))",
+      "summary": "结合平滑后的十日价格变化、反向三日变化和低价与成交金额相关性。",
+      "required_fields": [
+        "low",
+        "close",
+        "adv20",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        20
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 32,
+      "id": "alpha32",
+      "formula": "(scale(((sum(close, 7) / 7) - close)) + (20 * scale(correlation(vwap, delay(close, 5), 230))))",
+      "summary": "合并收盘价偏离七日均值及成交均价与滞后收盘价的长期相关性。",
+      "required_fields": [
+        "close",
+        "vwap",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 33,
+      "id": "alpha33",
+      "formula": "rank((-1 * ((1 - (open / close))^1)))",
+      "summary": "按开盘价相对于收盘价的比例做横截面排名。",
+      "required_fields": [
+        "open",
+        "close",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 34,
+      "id": "alpha34",
+      "formula": "rank(((1 - rank((stddev(returns, 2) / stddev(returns, 5)))) + (1 - rank(delta(close, 1)))))",
+      "summary": "结合收益短长波动比的反向排名与一日价格变化的反向排名。",
+      "required_fields": [
+        "close",
+        "returns",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 35,
+      "id": "alpha35",
+      "formula": "((Ts_Rank(volume, 32) * (1 - Ts_Rank(((close + high) - low), 16))) * (1 - Ts_Rank(returns, 32)))",
+      "summary": "结合成交量、价格组合及收益各自在历史中的相对位置。",
+      "required_fields": [
+        "high",
+        "low",
+        "close",
+        "volume",
+        "returns"
+      ],
+      "requires_cross_section": false,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "价格及成交量须具有一致调整口径，历史窗口完整且只使用当时已知数据。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 36,
+      "id": "alpha36",
+      "formula": "(((((2.21 * rank(correlation((close - open), delay(volume, 1), 15))) + (0.7 * rank((open - close)))) + (0.73 * rank(Ts_Rank(delay((-1 * returns), 6), 5)))) + rank(abs(correlation(vwap, adv20, 6)))) + (0.6 * rank((((sum(close, 200) / 200) - open) * (close - open)))))",
+      "summary": "加权合并日内价量相关、日内反向涨跌、滞后收益、均价量相关及长期偏离。",
+      "required_fields": [
+        "open",
+        "close",
+        "volume",
+        "returns",
+        "vwap",
+        "adv20",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        20
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 37,
+      "id": "alpha37",
+      "formula": "(rank(correlation(delay((open - close), 1), close, 200)) + rank((open - close)))",
+      "summary": "合并昨日开收盘差与收盘价的长期相关性排名及当日开收盘差排名。",
+      "required_fields": [
+        "open",
+        "close",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 38,
+      "id": "alpha38",
+      "formula": "((-1 * rank(Ts_Rank(close, 10))) * rank((close / open)))",
+      "summary": "将收盘价历史位置的反向排名乘以收开盘比值排名。",
+      "required_fields": [
+        "open",
+        "close",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 39,
+      "id": "alpha39",
+      "formula": "((-1 * rank((delta(close, 7) * (1 - rank(decay_linear((volume / adv20), 9)))))) * (1 + rank(sum(returns, 250))))",
+      "summary": "用相对成交活跃度调节七日价格反转，再乘以长期收益排名。",
+      "required_fields": [
+        "close",
+        "volume",
+        "returns",
+        "adv20",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        20
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 40,
+      "id": "alpha40",
+      "formula": "((-1 * rank(stddev(high, 10))) * correlation(high, volume, 10))",
+      "summary": "把最高价波动的反向排名乘以最高价与成交量的相关性。",
+      "required_fields": [
+        "high",
+        "volume",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 41,
+      "id": "alpha41",
+      "formula": "(((high * low)^0.5) - vwap)",
+      "summary": "比较最高最低价几何均值与真实成交均价。",
+      "required_fields": [
+        "high",
+        "low",
+        "vwap"
+      ],
+      "requires_cross_section": false,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 42,
+      "id": "alpha42",
+      "formula": "(rank((vwap - close)) / rank((vwap + close)))",
+      "summary": "用成交均价减收盘价的排名除以二者之和的排名。",
+      "required_fields": [
+        "close",
+        "vwap",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 0,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 43,
+      "id": "alpha43",
+      "formula": "(ts_rank((volume / adv20), 20) * ts_rank((-1 * delta(close, 7)), 8))",
+      "summary": "将相对成交活跃度的历史排名与七日反向价格变化的历史排名相乘。",
+      "required_fields": [
+        "close",
+        "volume",
+        "adv20"
+      ],
+      "requires_cross_section": false,
+      "adv_windows": [
+        20
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 44,
+      "id": "alpha44",
+      "formula": "(-1 * correlation(high, rank(volume), 5))",
+      "summary": "观察最高价与成交量横截面排名的五日相关性，取反向。",
+      "required_fields": [
+        "high",
+        "volume",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 45,
+      "id": "alpha45",
+      "formula": "(-1 * ((rank((sum(delay(close, 5), 20) / 20)) * correlation(close, volume, 2)) * rank(correlation(sum(close, 5), sum(close, 20), 2))))",
+      "summary": "合并滞后收盘均值排名、短期价量相关及长短价格合计相关排名，取反向。",
+      "required_fields": [
+        "close",
+        "volume",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 46,
+      "id": "alpha46",
+      "formula": "((0.25 < (((delay(close, 20) - delay(close, 10)) / 10) - ((delay(close, 10) - close) / 10))) ? (-1 * 1) : (((((delay(close, 20) - delay(close, 10)) / 10) - ((delay(close, 10) - close) / 10)) < 0) ? 1 : ((-1 * 1) * (close - delay(close, 1)))))",
+      "summary": "根据两个十日价格斜率之差选择负一、正一或一日价格反转。",
+      "required_fields": [
+        "close"
+      ],
+      "requires_cross_section": false,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "价格及成交量须具有一致调整口径，历史窗口完整且只使用当时已知数据。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 47,
+      "id": "alpha47",
+      "formula": "((((rank((1 / close)) * volume) / adv20) * ((high * rank((high - close))) / (sum(high, 5) / 5))) - rank((vwap - delay(vwap, 5))))",
+      "summary": "结合价格倒数排名、相对成交活跃度与高收价差，减去成交均价变化排名。",
+      "required_fields": [
+        "high",
+        "close",
+        "volume",
+        "vwap",
+        "adv20",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        20
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 48,
+      "id": "alpha48",
+      "formula": "(indneutralize(((correlation(delta(close, 1), delta(delay(close, 1), 1), 250) * delta(close, 1)) / close), IndClass.subindustry) / sum(((delta(close, 1) / delay(close, 1))^2), 250))",
+      "summary": "对价格变化自相关信号做子行业去均值，再除以长期平方收益合计。",
+      "required_fields": [
+        "close",
+        "IndClass.subindustry",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [
+        "subindustry"
+      ],
+      "original_delay": 0,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "当时已知的行业分类及同组完整横截面，逐组去均值。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 49,
+      "id": "alpha49",
+      "formula": "(((((delay(close, 20) - delay(close, 10)) / 10) - ((delay(close, 10) - close) / 10)) < (-1 * 0.1)) ? 1 : ((-1 * 1) * (close - delay(close, 1))))",
+      "summary": "价格斜率变化低于负零点一时输出一，否则反转一天价格变化。",
+      "required_fields": [
+        "close"
+      ],
+      "requires_cross_section": false,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "价格及成交量须具有一致调整口径，历史窗口完整且只使用当时已知数据。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 50,
+      "id": "alpha50",
+      "formula": "(-1 * ts_max(rank(correlation(rank(volume), rank(vwap), 5)), 5))",
+      "summary": "取成交量排名与成交均价排名相关性的近期最高排名，反向输出。",
+      "required_fields": [
+        "volume",
+        "vwap",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 51,
+      "id": "alpha51",
+      "formula": "(((((delay(close, 20) - delay(close, 10)) / 10) - ((delay(close, 10) - close) / 10)) < (-1 * 0.05)) ? 1 : ((-1 * 1) * (close - delay(close, 1))))",
+      "summary": "价格斜率变化低于负零点零五时输出一，否则反转一天价格变化。",
+      "required_fields": [
+        "close"
+      ],
+      "requires_cross_section": false,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "价格及成交量须具有一致调整口径，历史窗口完整且只使用当时已知数据。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 52,
+      "id": "alpha52",
+      "formula": "((((-1 * ts_min(low, 5)) + delay(ts_min(low, 5), 5)) * rank(((sum(returns, 240) - sum(returns, 20)) / 220))) * ts_rank(volume, 5))",
+      "summary": "结合近期最低价变化、中长期收益排名及成交量历史位置。",
+      "required_fields": [
+        "low",
+        "volume",
+        "returns",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 53,
+      "id": "alpha53",
+      "formula": "(-1 * delta((((close - low) - (high - close)) / (close - low)), 9))",
+      "summary": "观察收盘价在日内高低区间中的非对称位置九日变化，取反向。",
+      "required_fields": [
+        "high",
+        "low",
+        "close"
+      ],
+      "requires_cross_section": false,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 0,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "价格及成交量须具有一致调整口径，历史窗口完整且只使用当时已知数据。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 54,
+      "id": "alpha54",
+      "formula": "((-1 * ((low - close) * (open^5))) / ((low - high) * (close^5)))",
+      "summary": "用开收盘价格五次幂比例调节收盘价相对最低价的位置。",
+      "required_fields": [
+        "open",
+        "high",
+        "low",
+        "close"
+      ],
+      "requires_cross_section": false,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 0,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "价格及成交量须具有一致调整口径，历史窗口完整且只使用当时已知数据。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 55,
+      "id": "alpha55",
+      "formula": "(-1 * correlation(rank(((close - ts_min(low, 12)) / (ts_max(high, 12) - ts_min(low, 12)))), rank(volume), 6))",
+      "summary": "比较区间价格位置排名与成交量排名的六日相关性，取反向。",
+      "required_fields": [
+        "high",
+        "low",
+        "close",
+        "volume",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 56,
+      "id": "alpha56",
+      "formula": "(0 - (1 * (rank((sum(returns, 10) / sum(sum(returns, 2), 3))) * rank((returns * cap)))))",
+      "summary": "将短期收益合计比例排名与收益乘市值排名相乘并取反向。",
+      "required_fields": [
+        "returns",
+        "cap",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "与价格和股本口径一致、当时已知的市值。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 57,
+      "id": "alpha57",
+      "formula": "(0 - (1 * ((close - vwap) / decay_linear(rank(ts_argmax(close, 30)), 2))))",
+      "summary": "用收盘价偏离成交均价的程度除以平滑后的近期最高价时间排名，取反向。",
+      "required_fields": [
+        "close",
+        "vwap",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 58,
+      "id": "alpha58",
+      "formula": "(-1 * Ts_Rank(decay_linear(correlation(IndNeutralize(vwap, IndClass.sector), volume, 3.92795), 7.89291), 5.50322))",
+      "summary": "对板块中性成交均价与成交量的相关性进行平滑、历史排名并反向。",
+      "required_fields": [
+        "volume",
+        "vwap",
+        "IndClass.sector",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [
+        "sector"
+      ],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。",
+        "当时已知的行业分类及同组完整横截面，逐组去均值。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 59,
+      "id": "alpha59",
+      "formula": "(-1 * Ts_Rank(decay_linear(correlation(IndNeutralize(((vwap * 0.728317) + (vwap * (1 - 0.728317))), IndClass.industry), volume, 4.25197), 16.2289), 8.19648))",
+      "summary": "对行业中性成交均价与成交量的相关性进行平滑、历史排名并反向。",
+      "required_fields": [
+        "volume",
+        "vwap",
+        "IndClass.industry",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [
+        "industry"
+      ],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。",
+        "当时已知的行业分类及同组完整横截面，逐组去均值。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 60,
+      "id": "alpha60",
+      "formula": "(0 - (1 * ((2 * scale(rank(((((close - low) - (high - close)) / (high - low)) * volume)))) - scale(rank(ts_argmax(close, 10))))))",
+      "summary": "比较成交量加权收盘位置的缩放排名与近期最高收盘价时间的缩放排名。",
+      "required_fields": [
+        "high",
+        "low",
+        "close",
+        "volume",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 61,
+      "id": "alpha61",
+      "formula": "(rank((vwap - ts_min(vwap, 16.1219))) < rank(correlation(vwap, adv180, 17.9282)))",
+      "summary": "比较成交均价距近期低点的排名与均价和平均成交金额相关性的排名。",
+      "required_fields": [
+        "vwap",
+        "adv180",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        180
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 62,
+      "id": "alpha62",
+      "formula": "((rank(correlation(vwap, sum(adv20, 22.4101), 9.91009)) < rank(((rank(open) + rank(open)) < (rank(((high + low) / 2)) + rank(high))))) * -1)",
+      "summary": "比较均价量相关排名与开盘排名相对日内中高价排名的条件排名。",
+      "required_fields": [
+        "open",
+        "high",
+        "low",
+        "vwap",
+        "adv20",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        20
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 63,
+      "id": "alpha63",
+      "formula": "((rank(decay_linear(delta(IndNeutralize(close, IndClass.industry), 2.25164), 8.22237)) - rank(decay_linear(correlation(((vwap * 0.318108) + (open * (1 - 0.318108))), sum(adv180, 37.2467), 13.557), 12.2883))) * -1)",
+      "summary": "比较行业中性收盘变化的平滑排名与混合价格量相关性的平滑排名。",
+      "required_fields": [
+        "open",
+        "close",
+        "vwap",
+        "adv180",
+        "IndClass.industry",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        180
+      ],
+      "industry_levels": [
+        "industry"
+      ],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。",
+        "当时已知的行业分类及同组完整横截面，逐组去均值。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 64,
+      "id": "alpha64",
+      "formula": "((rank(correlation(sum(((open * 0.178404) + (low * (1 - 0.178404))), 12.7054), sum(adv120, 12.7054), 16.6208)) < rank(delta(((((high + low) / 2) * 0.178404) + (vwap * (1 - 0.178404))), 3.69741))) * -1)",
+      "summary": "比较混合开低价与成交金额合计的相关排名和混合均价的变化排名。",
+      "required_fields": [
+        "open",
+        "high",
+        "low",
+        "vwap",
+        "adv120",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        120
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 65,
+      "id": "alpha65",
+      "formula": "((rank(correlation(((open * 0.00817205) + (vwap * (1 - 0.00817205))), sum(adv60, 8.6911), 6.40374)) < rank((open - ts_min(open, 13.635)))) * -1)",
+      "summary": "比较混合开盘均价与成交金额的相关排名和开盘价距近期低点的排名。",
+      "required_fields": [
+        "open",
+        "vwap",
+        "adv60",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        60
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 66,
+      "id": "alpha66",
+      "formula": "((rank(decay_linear(delta(vwap, 3.51013), 7.23052)) + Ts_Rank(decay_linear(((((low * 0.96633) + (low * (1 - 0.96633))) - vwap) / (open - ((high + low) / 2))), 11.4157), 6.72611)) * -1)",
+      "summary": "合并成交均价变化的平滑排名与低价均价差相对开盘中点差的历史排名。",
+      "required_fields": [
+        "open",
+        "high",
+        "low",
+        "vwap",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 67,
+      "id": "alpha67",
+      "formula": "((rank((high - ts_min(high, 2.14593)))^rank(correlation(IndNeutralize(vwap, IndClass.sector), IndNeutralize(adv20, IndClass.subindustry), 6.02936))) * -1)",
+      "summary": "以中性均价和中性成交金额相关性排名为指数，变换最高价离低点的排名。",
+      "required_fields": [
+        "high",
+        "vwap",
+        "adv20",
+        "IndClass.sector",
+        "IndClass.subindustry",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        20
+      ],
+      "industry_levels": [
+        "sector",
+        "subindustry"
+      ],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。",
+        "当时已知的行业分类及同组完整横截面，逐组去均值。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 68,
+      "id": "alpha68",
+      "formula": "((Ts_Rank(correlation(rank(high), rank(adv15), 8.91644), 13.9333) < rank(delta(((close * 0.518371) + (low * (1 - 0.518371))), 1.06157))) * -1)",
+      "summary": "比较高价与平均成交金额排名相关性的历史位置和混合收低价变化排名。",
+      "required_fields": [
+        "high",
+        "low",
+        "close",
+        "adv15",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        15
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 69,
+      "id": "alpha69",
+      "formula": "((rank(ts_max(delta(IndNeutralize(vwap, IndClass.industry), 2.72412), 4.79344))^Ts_Rank(correlation(((close * 0.490655) + (vwap * (1 - 0.490655))), adv20, 4.92416), 9.0615)) * -1)",
+      "summary": "将行业中性均价变化极值排名按混合收盘均价的量相关历史排名作幂变换。",
+      "required_fields": [
+        "close",
+        "vwap",
+        "adv20",
+        "IndClass.industry",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        20
+      ],
+      "industry_levels": [
+        "industry"
+      ],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。",
+        "当时已知的行业分类及同组完整横截面，逐组去均值。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 70,
+      "id": "alpha70",
+      "formula": "((rank(delta(vwap, 1.29456))^Ts_Rank(correlation(IndNeutralize(close, IndClass.industry), adv50, 17.8256), 17.9171)) * -1)",
+      "summary": "将成交均价变化排名按行业中性收盘与成交金额相关性的历史排名作幂变换。",
+      "required_fields": [
+        "close",
+        "vwap",
+        "adv50",
+        "IndClass.industry",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        50
+      ],
+      "industry_levels": [
+        "industry"
+      ],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。",
+        "当时已知的行业分类及同组完整横截面，逐组去均值。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 71,
+      "id": "alpha71",
+      "formula": "max(Ts_Rank(decay_linear(correlation(Ts_Rank(close, 3.43976), Ts_Rank(adv180, 12.0647), 18.0175), 4.20501), 15.6948), Ts_Rank(decay_linear((rank(((low + open) - (vwap + vwap)))^2), 16.4662), 4.4388))",
+      "summary": "取收盘量相关历史排名与低开价相对均价偏离的平滑历史排名中较强的一项。",
+      "required_fields": [
+        "open",
+        "low",
+        "close",
+        "vwap",
+        "adv180",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        180
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": [
+        "原文 min/max 定义为时间序列算子，但此式传入两个表达式；常见逐元素解释尚须明确核验。"
+      ]
+    },
+    {
+      "number": 72,
+      "id": "alpha72",
+      "formula": "(rank(decay_linear(correlation(((high + low) / 2), adv40, 8.93345), 10.1519)) / rank(decay_linear(correlation(Ts_Rank(vwap, 3.72469), Ts_Rank(volume, 18.5188), 6.86671), 2.95011)))",
+      "summary": "以中点价格量相关的平滑排名除以成交均价与成交量历史排名相关的平滑排名。",
+      "required_fields": [
+        "high",
+        "low",
+        "volume",
+        "vwap",
+        "adv40",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        40
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 73,
+      "id": "alpha73",
+      "formula": "(max(rank(decay_linear(delta(vwap, 4.72775), 2.91864)), Ts_Rank(decay_linear(((delta(((open * 0.147155) + (low * (1 - 0.147155))), 2.03608) / ((open * 0.147155) + (low * (1 - 0.147155)))) * -1), 3.33829), 16.7411)) * -1)",
+      "summary": "比较均价变化与混合开低价反向相对变化两条平滑信号，取较强者的反向。",
+      "required_fields": [
+        "open",
+        "low",
+        "vwap",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": [
+        "原文 min/max 定义为时间序列算子，但此式传入两个表达式；常见逐元素解释尚须明确核验。"
+      ]
+    },
+    {
+      "number": 74,
+      "id": "alpha74",
+      "formula": "((rank(correlation(close, sum(adv30, 37.4843), 15.1365)) < rank(correlation(rank(((high * 0.0261661) + (vwap * (1 - 0.0261661)))), rank(volume), 11.4791))) * -1)",
+      "summary": "比较收盘价与累计平均成交金额相关排名和混合高均价与成交量排名的相关排名。",
+      "required_fields": [
+        "high",
+        "close",
+        "volume",
+        "vwap",
+        "adv30",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        30
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 75,
+      "id": "alpha75",
+      "formula": "(rank(correlation(vwap, volume, 4.24304)) < rank(correlation(rank(low), rank(adv50), 12.4413)))",
+      "summary": "比较成交均价与成交量的相关排名和低价排名与平均成交金额排名的相关排名。",
+      "required_fields": [
+        "low",
+        "volume",
+        "vwap",
+        "adv50",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        50
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 76,
+      "id": "alpha76",
+      "formula": "(max(rank(decay_linear(delta(vwap, 1.24383), 11.8259)), Ts_Rank(decay_linear(Ts_Rank(correlation(IndNeutralize(low, IndClass.sector), adv81, 8.14941), 19.569), 17.1543), 19.383)) * -1)",
+      "summary": "比较均价变化与板块中性低价量相关两条平滑信号，取较强者的反向。",
+      "required_fields": [
+        "low",
+        "vwap",
+        "adv81",
+        "IndClass.sector",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        81
+      ],
+      "industry_levels": [
+        "sector"
+      ],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。",
+        "当时已知的行业分类及同组完整横截面，逐组去均值。"
+      ],
+      "semantic_notes": [
+        "原文 min/max 定义为时间序列算子，但此式传入两个表达式；常见逐元素解释尚须明确核验。"
+      ]
+    },
+    {
+      "number": 77,
+      "id": "alpha77",
+      "formula": "min(rank(decay_linear(((((high + low) / 2) + high) - (vwap + high)), 20.0451)), rank(decay_linear(correlation(((high + low) / 2), adv40, 3.1614), 5.64125)))",
+      "summary": "在日内中点相对成交均价的偏离与中点量相关两条平滑排名中取较小者。",
+      "required_fields": [
+        "high",
+        "low",
+        "vwap",
+        "adv40",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        40
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": [
+        "原文 min/max 定义为时间序列算子，但此式传入两个表达式；常见逐元素解释尚须明确核验。"
+      ]
+    },
+    {
+      "number": 78,
+      "id": "alpha78",
+      "formula": "(rank(correlation(sum(((low * 0.352233) + (vwap * (1 - 0.352233))), 19.7428), sum(adv40, 19.7428), 6.83313))^rank(correlation(rank(vwap), rank(volume), 5.77492)))",
+      "summary": "以成交均价成交量排名相关为指数，变换混合低均价与成交金额合计的相关排名。",
+      "required_fields": [
+        "low",
+        "volume",
+        "vwap",
+        "adv40",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        40
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 79,
+      "id": "alpha79",
+      "formula": "(rank(delta(IndNeutralize(((close * 0.60733) + (open * (1 - 0.60733))), IndClass.sector), 1.23438)) < rank(correlation(Ts_Rank(vwap, 3.60973), Ts_Rank(adv150, 9.18637), 14.6644)))",
+      "summary": "比较板块中性混合开收价变化排名与均价、成交金额历史排名的相关排名。",
+      "required_fields": [
+        "open",
+        "close",
+        "vwap",
+        "adv150",
+        "IndClass.sector",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        150
+      ],
+      "industry_levels": [
+        "sector"
+      ],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。",
+        "当时已知的行业分类及同组完整横截面，逐组去均值。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 80,
+      "id": "alpha80",
+      "formula": "((rank(Sign(delta(IndNeutralize(((open * 0.868128) + (high * (1 - 0.868128))), IndClass.industry), 4.04545)))^Ts_Rank(correlation(high, adv10, 5.11456), 5.53756)) * -1)",
+      "summary": "将行业中性混合开高价变化方向排名按最高价量相关的历史排名作幂变换。",
+      "required_fields": [
+        "open",
+        "high",
+        "adv10",
+        "IndClass.industry",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        10
+      ],
+      "industry_levels": [
+        "industry"
+      ],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "当时已知的行业分类及同组完整横截面，逐组去均值。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 81,
+      "id": "alpha81",
+      "formula": "((rank(Log(product(rank((rank(correlation(vwap, sum(adv10, 49.6054), 8.47743))^4)), 14.9655))) < rank(correlation(rank(vwap), rank(volume), 5.07914))) * -1)",
+      "summary": "比较成交均价量相关的多层排名乘积对数与均价成交量排名相关性。",
+      "required_fields": [
+        "volume",
+        "vwap",
+        "adv10",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        10
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 82,
+      "id": "alpha82",
+      "formula": "(min(rank(decay_linear(delta(open, 1.46063), 14.8717)), Ts_Rank(decay_linear(correlation(IndNeutralize(volume, IndClass.sector), ((open * 0.634196) + (open * (1 - 0.634196))), 17.4842), 6.92131), 13.4283)) * -1)",
+      "summary": "比较开盘变化与板块中性成交量开盘相关两条平滑信号，取较小者的反向。",
+      "required_fields": [
+        "open",
+        "volume",
+        "IndClass.sector",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [
+        "sector"
+      ],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "当时已知的行业分类及同组完整横截面，逐组去均值。"
+      ],
+      "semantic_notes": [
+        "原文 min/max 定义为时间序列算子，但此式传入两个表达式；常见逐元素解释尚须明确核验。"
+      ]
+    },
+    {
+      "number": 83,
+      "id": "alpha83",
+      "formula": "((rank(delay(((high - low) / (sum(close, 5) / 5)), 2)) * rank(rank(volume))) / (((high - low) / (sum(close, 5) / 5)) / (vwap - close)))",
+      "summary": "将滞后相对振幅排名和成交量排名相乘，再用当日相对振幅和均价收盘差调整。",
+      "required_fields": [
+        "high",
+        "low",
+        "close",
+        "volume",
+        "vwap",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 84,
+      "id": "alpha84",
+      "formula": "SignedPower(Ts_Rank((vwap - ts_max(vwap, 15.3217)), 20.7127), delta(close, 4.96796))",
+      "summary": "以收盘价变化为指数，对成交均价距近期高点的历史排名作幂变换。",
+      "required_fields": [
+        "close",
+        "vwap"
+      ],
+      "requires_cross_section": false,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": [
+        "原文 SignedPower 定义写为 x^a；不得静默改成其他带符号幂约定。"
+      ]
+    },
+    {
+      "number": 85,
+      "id": "alpha85",
+      "formula": "(rank(correlation(((high * 0.876703) + (close * (1 - 0.876703))), adv30, 9.61331))^rank(correlation(Ts_Rank(((high + low) / 2), 3.70596), Ts_Rank(volume, 10.1595), 7.11408)))",
+      "summary": "以中点价格与成交量历史排名的相关排名为指数，变换混合高收价量相关排名。",
+      "required_fields": [
+        "high",
+        "low",
+        "close",
+        "volume",
+        "adv30",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        30
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 86,
+      "id": "alpha86",
+      "formula": "((Ts_Rank(correlation(close, sum(adv20, 14.7444), 6.00049), 20.4195) < rank(((open + close) - (vwap + open)))) * -1)",
+      "summary": "比较收盘价与累计平均成交金额相关性的历史排名和收盘偏离成交均价的排名。",
+      "required_fields": [
+        "open",
+        "close",
+        "vwap",
+        "adv20",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        20
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 87,
+      "id": "alpha87",
+      "formula": "(max(rank(decay_linear(delta(((close * 0.369701) + (vwap * (1 - 0.369701))), 1.91233), 2.65461)), Ts_Rank(decay_linear(abs(correlation(IndNeutralize(adv81, IndClass.industry), close, 13.4132)), 4.89768), 14.4535)) * -1)",
+      "summary": "比较混合收盘均价变化和行业中性成交金额收盘相关两条平滑信号，取较强反向。",
+      "required_fields": [
+        "close",
+        "vwap",
+        "adv81",
+        "IndClass.industry",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        81
+      ],
+      "industry_levels": [
+        "industry"
+      ],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。",
+        "当时已知的行业分类及同组完整横截面，逐组去均值。"
+      ],
+      "semantic_notes": [
+        "原文 min/max 定义为时间序列算子，但此式传入两个表达式；常见逐元素解释尚须明确核验。"
+      ]
+    },
+    {
+      "number": 88,
+      "id": "alpha88",
+      "formula": "min(rank(decay_linear(((rank(open) + rank(low)) - (rank(high) + rank(close))), 8.06882)), Ts_Rank(decay_linear(correlation(Ts_Rank(close, 8.44728), Ts_Rank(adv60, 20.6966), 8.01266), 6.65053), 2.61957))",
+      "summary": "在开低价排名相对高收价排名的平滑差及收盘量相关的平滑历史排名中取较小者。",
+      "required_fields": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "adv60",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        60
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。"
+      ],
+      "semantic_notes": [
+        "原文 min/max 定义为时间序列算子，但此式传入两个表达式；常见逐元素解释尚须明确核验。"
+      ]
+    },
+    {
+      "number": 89,
+      "id": "alpha89",
+      "formula": "(Ts_Rank(decay_linear(correlation(((low * 0.967285) + (low * (1 - 0.967285))), adv10, 6.94279), 5.51607), 3.79744) - Ts_Rank(decay_linear(delta(IndNeutralize(vwap, IndClass.industry), 3.48158), 10.1466), 15.3012))",
+      "summary": "用低价量相关的平滑历史排名减去行业中性成交均价变化的平滑历史排名。",
+      "required_fields": [
+        "low",
+        "vwap",
+        "adv10",
+        "IndClass.industry",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        10
+      ],
+      "industry_levels": [
+        "industry"
+      ],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。",
+        "当时已知的行业分类及同组完整横截面，逐组去均值。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 90,
+      "id": "alpha90",
+      "formula": "((rank((close - ts_max(close, 4.66719)))^Ts_Rank(correlation(IndNeutralize(adv40, IndClass.subindustry), low, 5.38375), 3.21856)) * -1)",
+      "summary": "以子行业中性成交金额与低价相关的历史排名为指数，变换收盘价距近期高点的排名。",
+      "required_fields": [
+        "low",
+        "close",
+        "adv40",
+        "IndClass.subindustry",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        40
+      ],
+      "industry_levels": [
+        "subindustry"
+      ],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "当时已知的行业分类及同组完整横截面，逐组去均值。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 91,
+      "id": "alpha91",
+      "formula": "((Ts_Rank(decay_linear(decay_linear(correlation(IndNeutralize(close, IndClass.industry), volume, 9.74928), 16.398), 3.83219), 4.8667) - rank(decay_linear(correlation(vwap, adv30, 4.01303), 2.6809))) * -1)",
+      "summary": "比较行业中性收盘价量相关的双重平滑历史排名与成交均价量相关的平滑排名。",
+      "required_fields": [
+        "close",
+        "volume",
+        "vwap",
+        "adv30",
+        "IndClass.industry",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        30
+      ],
+      "industry_levels": [
+        "industry"
+      ],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。",
+        "当时已知的行业分类及同组完整横截面，逐组去均值。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 92,
+      "id": "alpha92",
+      "formula": "min(Ts_Rank(decay_linear(((((high + low) / 2) + close) < (low + open)), 14.7221), 18.8683), Ts_Rank(decay_linear(correlation(rank(low), rank(adv30), 7.58555), 6.94024), 6.80584))",
+      "summary": "在日内价格关系条件的平滑历史排名与低价成交金额排名相关的平滑历史排名中取较小者。",
+      "required_fields": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "adv30",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        30
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。"
+      ],
+      "semantic_notes": [
+        "原文 min/max 定义为时间序列算子，但此式传入两个表达式；常见逐元素解释尚须明确核验。"
+      ]
+    },
+    {
+      "number": 93,
+      "id": "alpha93",
+      "formula": "(Ts_Rank(decay_linear(correlation(IndNeutralize(vwap, IndClass.industry), adv81, 17.4193), 19.848), 7.54455) / rank(decay_linear(delta(((close * 0.524434) + (vwap * (1 - 0.524434))), 2.77377), 16.2664)))",
+      "summary": "以行业中性均价量相关的平滑历史排名除以混合收盘均价变化的平滑排名。",
+      "required_fields": [
+        "close",
+        "vwap",
+        "adv81",
+        "IndClass.industry",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        81
+      ],
+      "industry_levels": [
+        "industry"
+      ],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。",
+        "当时已知的行业分类及同组完整横截面，逐组去均值。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 94,
+      "id": "alpha94",
+      "formula": "((rank((vwap - ts_min(vwap, 11.5783)))^Ts_Rank(correlation(Ts_Rank(vwap, 19.6462), Ts_Rank(adv60, 4.02992), 18.0926), 2.70756)) * -1)",
+      "summary": "以成交均价与成交金额历史排名相关性的历史排名为指数，变换均价距低点的排名。",
+      "required_fields": [
+        "vwap",
+        "adv60",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        60
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 95,
+      "id": "alpha95",
+      "formula": "(rank((open - ts_min(open, 12.4105))) < Ts_Rank((rank(correlation(sum(((high + low) / 2), 19.1351), sum(adv40, 19.1351), 12.8742))^5), 11.7584))",
+      "summary": "比较开盘价距低点的排名与中点价格成交金额累计相关排名幂值的历史位置。",
+      "required_fields": [
+        "open",
+        "high",
+        "low",
+        "adv40",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        40
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 96,
+      "id": "alpha96",
+      "formula": "(max(Ts_Rank(decay_linear(correlation(rank(vwap), rank(volume), 3.83878), 4.16783), 8.38151), Ts_Rank(decay_linear(Ts_ArgMax(correlation(Ts_Rank(close, 7.45404), Ts_Rank(adv60, 4.13242), 3.65459), 12.6556), 14.0365), 13.4143)) * -1)",
+      "summary": "比较均价成交量排名相关及收盘量相关极值时间两条平滑历史信号，取较强反向。",
+      "required_fields": [
+        "close",
+        "volume",
+        "vwap",
+        "adv60",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        60
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": [
+        "原文 min/max 定义为时间序列算子，但此式传入两个表达式；常见逐元素解释尚须明确核验。"
+      ]
+    },
+    {
+      "number": 97,
+      "id": "alpha97",
+      "formula": "((rank(decay_linear(delta(IndNeutralize(((low * 0.721001) + (vwap * (1 - 0.721001))), IndClass.industry), 3.3705), 20.4523)) - Ts_Rank(decay_linear(Ts_Rank(correlation(Ts_Rank(low, 7.87871), Ts_Rank(adv60, 17.255), 4.97547), 18.5925), 15.7152), 6.71659)) * -1)",
+      "summary": "比较行业中性混合低均价变化的平滑排名与低价成交金额历史排名相关的多层平滑值。",
+      "required_fields": [
+        "low",
+        "vwap",
+        "adv60",
+        "IndClass.industry",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        60
+      ],
+      "industry_levels": [
+        "industry"
+      ],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。",
+        "当时已知的行业分类及同组完整横截面，逐组去均值。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 98,
+      "id": "alpha98",
+      "formula": "(rank(decay_linear(correlation(vwap, sum(adv5, 26.4719), 4.58418), 7.18088)) - rank(decay_linear(Ts_Rank(Ts_ArgMin(correlation(rank(open), rank(adv15), 20.8187), 8.62571), 6.95668), 8.07206)))",
+      "summary": "将成交均价与累计平均成交金额相关的平滑排名减去开盘量排名相关低点时间的平滑排名。",
+      "required_fields": [
+        "open",
+        "vwap",
+        "adv5",
+        "adv15",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        5,
+        15
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "真实逐笔或可靠成交金额/成交数量口径的日 VWAP；不得用典型价替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 99,
+      "id": "alpha99",
+      "formula": "((rank(correlation(sum(((high + low) / 2), 19.8975), sum(adv60, 19.8975), 8.8136)) < rank(correlation(low, volume, 6.28259))) * -1)",
+      "summary": "比较中点价格合计与成交金额合计相关排名和最低价与成交量的相关排名。",
+      "required_fields": [
+        "high",
+        "low",
+        "volume",
+        "adv60",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        60
+      ],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 100,
+      "id": "alpha100",
+      "formula": "(0 - (1 * (((1.5 * scale(indneutralize(indneutralize(rank(((((close - low) - (high - close)) / (high - low)) * volume)), IndClass.subindustry), IndClass.subindustry))) - scale(indneutralize((correlation(close, rank(adv20), 5) - rank(ts_argmin(close, 30))), IndClass.subindustry))) * (volume / adv20))))",
+      "summary": "对子行业中性的量价位置和价量相关信号缩放求差，再按相对成交活跃度反向调节。",
+      "required_fields": [
+        "high",
+        "low",
+        "close",
+        "volume",
+        "adv20",
+        "IndClass.subindustry",
+        "cross_section_universe"
+      ],
+      "requires_cross_section": true,
+      "adv_windows": [
+        20
+      ],
+      "industry_levels": [
+        "subindustry"
+      ],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "同一时点的完整股票横截面及当时可用成分；单只股票不能替代。",
+        "adv 为过去 d 日平均成交金额；不得用平均成交股数替代。",
+        "当时已知的行业分类及同组完整横截面，逐组去均值。"
+      ],
+      "semantic_notes": []
+    },
+    {
+      "number": 101,
+      "id": "alpha101",
+      "formula": "((close - open) / ((high - low) + .001))",
+      "summary": "用收盘价减开盘价除以日内振幅加零点零零一，衡量日内方向与强度。",
+      "required_fields": [
+        "open",
+        "high",
+        "low",
+        "close"
+      ],
+      "requires_cross_section": false,
+      "adv_windows": [],
+      "industry_levels": [],
+      "original_delay": 1,
+      "computation_status": "catalog_only",
+      "requirements": [
+        "价格及成交量须具有一致调整口径，历史窗口完整且只使用当时已知数据。"
+      ],
+      "semantic_notes": []
+    }
+  ]
+}

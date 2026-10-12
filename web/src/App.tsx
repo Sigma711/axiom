@@ -23,6 +23,7 @@ import { marketSourceFromPracticeRoute, practiceRouteSource } from './practiceRo
 import { chartDataset, type DisplayPriceBasis } from './chartDataset';
 import { SymbolPicker } from './SymbolPicker';
 import { PdfBookReader } from './PdfBookReader';
+import { AlphaResearchPage } from './AlphaResearchPage';
 import { indicatorPanel, validSeries, type IndicatorPanel } from './chart';
 const MARKET_SOURCE_OPTIONS = [
   { v: 'binance', l: '加密货币 · Binance' },
@@ -180,7 +181,7 @@ const TABS: { id: TabId; label: string }[] = [
 ];
 
 function routeFor(tab: TabId, sub: LearnSub = 'knowledge', concept?: string, source?: PracticeRouteSource) {
-  const learnPaths: Record<LearnSub, string> = { knowledge: '/learn', book: '/learn/book', concepts: '/learn/concepts', build: '/learn/build', path: '/learn/path' };
+  const learnPaths: Record<LearnSub, string> = { knowledge: '/learn', alphas: '/learn/alphas', book: '/learn/book', concepts: '/learn/concepts', build: '/learn/build', path: '/learn/path' };
   const base = tab === 'learn' ? learnPaths[sub] : `/${tab}`;
   const path = appPath(base);
   return concept ? `${path}?concept=${encodeURIComponent(concept)}${source ? `&source=${source}` : ''}` : path;
@@ -189,7 +190,7 @@ function readRoute() {
   const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
   const path = (appBase && pathname.startsWith(appBase) ? pathname.slice(appBase.length) : pathname) || '/';
   const tab = ({ '/data': 'data', '/backtest': 'backtest', '/paper': 'paper', '/compare': 'compare' } as Record<string, TabId>)[path] || 'learn';
-  const sub = ({ '/learn/book': 'book', '/learn/concepts': 'concepts', '/learn/build': 'build', '/learn/path': 'path' } as Record<string, LearnSub>)[path] || 'knowledge';
+  const sub = ({ '/learn/alphas': 'alphas', '/learn/book': 'book', '/learn/concepts': 'concepts', '/learn/build': 'build', '/learn/path': 'path' } as Record<string, LearnSub>)[path] || 'knowledge';
   const query = new URLSearchParams(window.location.search);
   const requestedSource = query.get('source');
   const source: PracticeRouteSource | undefined = requestedSource === 'binance' || requestedSource === 'a_share' || requestedSource === 'us_stock' || requestedSource === 'issuer_disclosure' || requestedSource === 'market_breadth' ? requestedSource : undefined;
@@ -348,9 +349,10 @@ const INDICATOR_OPTIONS = [
 // ===================================================================
 // 学习中心: 4 个子标签
 // ===================================================================
-type LearnSub = 'knowledge' | 'concepts' | 'build' | 'path' | 'book';
+type LearnSub = 'knowledge' | 'alphas' | 'concepts' | 'build' | 'path' | 'book';
 const LEARN_SUBS: { id: LearnSub; label: string }[] = [
   { id: 'knowledge', label: '指标大全' },
+  { id: 'alphas', label: 'Alpha 研究' },
   { id: 'concepts', label: '概念速览' },
   { id: 'build', label: '创建策略' },
   { id: 'book', label: '原书阅读' },
@@ -371,10 +373,11 @@ function LearnCenter({ sub, onSubChange, onPractice }: { sub: LearnSub; onSubCha
         ))}
       </nav>
       {sub === 'knowledge' && <KnowledgeView onPractice={onPractice} />}
+      {sub === 'alphas' && <AlphaResearchPage />}
       {sub === 'concepts' && <ConceptsView />}
       {sub === 'book' && <PdfBookReader />}
       {sub === 'build' && <BuildView />}
-      {sub === 'path' && <PathView />}
+      {sub === 'path' && <PathView onOpenAlphas={() => onSubChange('alphas')} />}
     </section>
   );
 }
@@ -820,8 +823,8 @@ const LEARNING_PATH = [
   { title: '模拟盘、服务与验证', learn: '模拟盘复用事件链但当前状态在单进程内存；上线前要有可复现测试和运行监控。', practice: '启动模拟盘并检查日志、持仓、净值；阅读端到端测试如何覆盖用户路径。', codeRef: 'src/paper.rs::run_paper_loop' },
   { title: '研究扩展：ML / LLM 与数据存储', learn: 'ML/LLM 只能辅助研究；随着历史数据增长，再引入 Parquet + DuckDB，持久状态优先 SQLite。', practice: '先完成数据泄漏、回测和风险检查，再评估是否需要新增存储或模型。', codeRef: 'src/workflows.rs::entries' },
 ] as const;
-function PathView() {
-  return <div><h3>学习路径</h3><p className="ax-lead">从数据契约到可复现运行，共 9 步。每步都给出真实模块、一个动手验证和可定位的 GitHub 源码。</p><ol className="ax-path ax-learning-path">{LEARNING_PATH.map((step, i) => <li key={step.title}><p className="ax-path-kicker">第 {i + 1} 步</p><h4>{step.title}</h4><p>{step.learn}</p><div className="ax-path-practice"><strong>动手验证</strong><span>{step.practice}</span></div><ModuleSourceLink codeRef={step.codeRef} /></li>)}</ol></div>;
+function PathView({ onOpenAlphas }: { onOpenAlphas: () => void }) {
+  return <div><h3>学习路径</h3><p className="ax-lead">从数据契约到可复现运行，共 9 步。每步都给出真实模块、一个动手验证和可定位的 GitHub 源码。</p><div className="ax-path-alpha"><div><strong>想把指标推广到 Alpha 研究？</strong><p>先读运算子和数据前提，再用真实日线检查因子与前瞻收益。</p></div><button className="ax-btn" onClick={onOpenAlphas}>进入 Alpha 研究</button></div><ol className="ax-path ax-learning-path">{LEARNING_PATH.map((step, i) => <li key={step.title}><p className="ax-path-kicker">第 {i + 1} 步</p><h4>{step.title}</h4><p>{step.learn}</p><div className="ax-path-practice"><strong>动手验证</strong><span>{step.practice}</span></div><ModuleSourceLink codeRef={step.codeRef} /></li>)}</ol></div>;
 }
 
 // ===================================================================

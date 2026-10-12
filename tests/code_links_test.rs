@@ -257,6 +257,42 @@ fn learning_navigation_references_resolve_to_exact_source_symbols() {
 }
 
 #[test]
+fn every_executable_alpha_has_a_precise_current_implementation_link() {
+    let available = axiom::alpha_research::catalog()
+        .into_iter()
+        .flat_map(|collection| collection.factors)
+        .filter(|factor| factor.status == "available")
+        .collect::<Vec<_>>();
+    assert!(available.len() >= 2);
+    for factor in available {
+        let url = factor
+            .code_url
+            .expect("available factor must link to its code");
+        let fragment = url.split("#L").nth(1).expect("line-level link");
+        let line = fragment
+            .split('-')
+            .next()
+            .unwrap()
+            .parse::<usize>()
+            .unwrap();
+        let source = code_links::source("src/alpha_research.rs").unwrap();
+        let code_line = source.lines().nth(line - 1).unwrap();
+        assert!(
+            code_line.trim_start().starts_with("fn qlib_alpha158")
+                || code_line.trim_start().starts_with("fn wq_"),
+            "{factor_id}: {code_line}",
+            factor_id = factor.id
+        );
+        if std::env::var("AXIOM_REQUIRE_GITHUB_LINKS").as_deref() == Ok("1") {
+            let revision = code_links::revision().unwrap();
+            assert!(url.starts_with(&format!(
+                "https://github.com/Sigma711/axiom/blob/{revision}/src/alpha_research.rs#L"
+            )));
+        }
+    }
+}
+
+#[test]
 fn legacy_short_names_resolve_only_when_the_method_is_unambiguous() {
     let location = code_links::resolve("src/risk.rs::allow_order")
         .expect("one RiskManager allow_order method");

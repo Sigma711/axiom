@@ -379,6 +379,8 @@ details > .ax-kb-details:not(.is-open) { color: var(--accent-2) !important; }
 .ax-learn-sub { background: transparent; color: var(--text-dim); border: 1px solid var(--border); padding: 0.4rem 0.85rem; border-radius: 4px; cursor: pointer; font-size: 0.83rem; font-family: inherit; }
 .ax-learn-sub:hover { color: var(--text); border-color: var(--accent); }
 .ax-learn-sub.active { background: var(--accent-fill); color: var(--accent-on-fill); border-color: var(--accent); font-weight: 500; }
+.ax-path-alpha { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 0 0 1.2rem; padding: 1rem; border: 2px solid var(--border); border-left: .7rem solid var(--accent-2); background: var(--bg-card); box-shadow: var(--shadow); }
+.ax-path-alpha p { margin-top: .25rem; color: var(--text-dim); }
 
 /* === K 线形态 === */
 .ax-patterns { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 0.7rem 1.1rem; margin-top: 1rem; }

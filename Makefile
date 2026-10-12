@@ -15,9 +15,9 @@ NPM ?= npm
 PLAYWRIGHT_ARGS ?=
 AXIOM_PORT ?= 8080
 
-.PHONY: deploy help setup browser-deps build build-web build-rust build-debug run-debug dev serve serve-test test test-rust test-unit test-one test-web test-e2e test-e2e-real test-visual lint lint-rust lint-web check-format fmt check ci coverage coverage-rust tools verify-published
+.PHONY: deploy help setup browser-deps build build-web build-rust build-debug run-debug dev serve serve-test test test-rust test-unit test-one test-web test-e2e test-e2e-real test-visual lint lint-rust lint-web check-format fmt check ci coverage coverage-rust tools verify-published alpha-oracle-fixtures
 help:
-	@printf '%s\n' 'make setup      Install locked frontend dependencies and browser' 'make build      Build frontend and Rust release' 'make serve      Run the production app (AXIOM_PORT=8080)' 'make dev        Run the frontend dev server' 'make test       Rust, frontend unit tests, real-browser E2E and visual checks' 'make check      Formatting, lint, typecheck, build and every test' 'make coverage   Rust and Chromium executable-source coverage, each enforced at 95%' 'make fmt        Format Rust source' 'make deploy     Publish the tested main revision to sigma711.top/axiom'
+	@printf '%s\n' 'make setup      Install locked frontend dependencies and browser' 'make build      Build frontend and Rust release' 'make serve      Run the production app (AXIOM_PORT=8080)' 'make dev        Run the frontend dev server' 'make test       Rust, frontend unit tests, real-browser E2E and visual checks' 'make check      Formatting, lint, typecheck, build and every test' 'make coverage   Rust and Chromium executable-source coverage, each enforced at 95%' 'make alpha-oracle-fixtures  Regenerate Qlib numeric reference data' 'make fmt        Format Rust source' 'make deploy     Publish the tested main revision to sigma711.top/axiom'
 
 setup:
 	cd web && $(NPM) ci
@@ -81,6 +81,14 @@ ci: check
 tools:
 	rustup component add rustfmt clippy llvm-tools-preview
 	cargo install cargo-llvm-cov --locked
+
+# Rebuild the checked-in numerical reference with Qlib itself. Normal CI only
+# consumes the fixtures, so builds remain independent of Python package indexes.
+alpha-oracle-fixtures:
+	python3 -m venv target/alpha-oracle-venv
+	target/alpha-oracle-venv/bin/python -m pip install 'pyqlib==0.9.7'
+	target/alpha-oracle-venv/bin/python scripts/generate-alpha158-oracle.py
+	target/alpha-oracle-venv/bin/python scripts/generate-alpha158-oracle.py edge
 coverage: build-web
 	rm -rf coverage/rust coverage/web-e2e coverage/web-combined coverage/lcov.info coverage/html
 	$(MAKE) coverage-rust

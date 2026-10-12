@@ -27,6 +27,7 @@
 //! - 任何模块都可以被替换,只要保持接口不变
 
 pub mod a_share_float;
+pub mod alpha_research;
 pub mod broker;
 pub mod config;
 pub mod corporate_actions;

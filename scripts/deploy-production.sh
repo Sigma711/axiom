@@ -195,6 +195,35 @@ for source, symbol, _ in markets:
         assert result["market_provenance"]["stock_split_coverage"]["status"] == "verified_no_split_in_window"
     print(source, symbol, "production backtest", "verified", flush=True)
 
+alpha_catalog = read_json("/api/alphas/catalog", {})["collections"]
+assert [(item["id"], item["total"]) for item in alpha_catalog] == [("worldquant101", 101), ("qlib_alpha158", 158)]
+for collection, factor, source, symbol in (
+    ("worldquant101", "alpha101", "us_stock", "AAPL"),
+    ("qlib_alpha158", "kmid", "a_share", "600519"),
+):
+    study = post_json("/api/alphas/research", {
+        "collection": collection, "id": factor, "source": source,
+        "symbol": symbol, "limit": 60,
+    }, timeout=90)
+    assert study["status"] == "computed"
+    assert len(study["bars"]) == len(study["series"]) == len(study["forward_returns"]) == 60
+    assert study["stats"]["paired_count"] > 20
+    assert study["market_provenance"]["provider"] in allowed[source]
+    assert study["factor"]["code_url"].startswith("https://github.com/Sigma711/axiom/blob/")
+    if factor == "alpha101":
+        bar = study["bars"][0]
+        expected = (bar["close"] - bar["open"]) / (bar["high"] - bar["low"] + 0.001)
+        assert math.isclose(study["series"][0]["value"], expected, rel_tol=1e-12, abs_tol=1e-12)
+    else:
+        for i, bar in enumerate(study["bars"]):
+            expected = (bar["close"] - bar["open"]) / bar["open"]
+            assert math.isclose(study["series"][i]["value"], expected, rel_tol=1e-10, abs_tol=1e-10)
+        for i in range(len(study["bars"]) - 2):
+            bars = study["bars"]
+            expected = bars[i + 2]["close"] / bars[i + 1]["close"] - 1
+            assert math.isclose(study["forward_returns"][i]["value"], expected, rel_tol=1e-10, abs_tol=1e-10)
+    print(collection, factor, symbol, "production formula and provenance", "verified", flush=True)
+
 # Stage 3 market breadth must be real cross-sectional data. Validate the
 # aggregate contract, exercise every practice route, then independently pull
 # the member URLs and recompute the latest critical values without trusting

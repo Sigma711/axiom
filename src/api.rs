@@ -142,6 +142,7 @@ pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/", get(serve_index))
         .route("/learn", get(serve_index))
+        .route("/learn/alphas", get(serve_index))
         .route("/learn/book", get(serve_index))
         .route("/learn/concepts", get(serve_index))
         .route("/learn/build", get(serve_index))
@@ -171,6 +172,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/paper/ws", get(ws_paper))
         .route("/api/book/pdf", get(serve_book_pdf))
         .route("/api/knowledge", get(get_knowledge))
+        .route("/api/alphas/catalog", get(get_alpha_catalog))
+        .route("/api/alphas/research", post(post_alpha_research))
         .route(
             "/api/market-breadth/snapshot",
             get(get_market_breadth_snapshot),
@@ -1006,6 +1009,60 @@ async fn get_knowledge() -> Json<Value> {
         "total": total,
         "categories": grouped,
     }))
+}
+
+async fn get_alpha_catalog() -> Json<Value> {
+    Json(json!({ "collections": crate::alpha_research::catalog() }))
+}
+
+#[derive(Deserialize)]
+struct AlphaResearchRequest {
+    collection: String,
+    id: String,
+    source: String,
+    symbol: String,
+    limit: Option<usize>,
+}
+
+async fn post_alpha_research(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<AlphaResearchRequest>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let expected_source = match req.collection.as_str() {
+        "worldquant101" => "us_stock",
+        "qlib_alpha158" => "a_share",
+        _ => return Err(validate::bad("未知的因子系列")),
+    };
+    if req.source != expected_source {
+        return Err(validate::bad("该研究需使用对应证券市场的真实日线"));
+    }
+    if crate::alpha_research::available(&req.collection, &req.id).is_none() {
+        return Err(validate::bad("该因子尚未具备经过核验的真实行情计算"));
+    }
+    let limit = req.limit.unwrap_or(160);
+    if !(30..=500).contains(&limit) {
+        return Err(validate::bad("研究窗口必须为 30–500 根日线"));
+    }
+    let snapshot = market_snapshot(&state, &req.symbol, &req.source, limit).await?;
+    let stock_split_coverage =
+        guard_stock_backtest_window(&req.source, &snapshot.stock_split_coverage, &snapshot.bars)
+            .map_err(|error| (StatusCode::UNPROCESSABLE_ENTITY, error.to_string()))?;
+    let study = crate::alpha_research::research(&req.collection, &req.id, &snapshot.bars)
+        .map_err(validate::bad)?;
+    Ok(Json(json!({
+        "collection": req.collection,
+        "source": req.source,
+        "symbol": req.symbol,
+        "factor": study.factor,
+        "bars": snapshot.bars,
+        "series": study.series,
+        "forward_returns": study.forward_returns,
+        "stats": study.stats,
+        "notes": study.notes,
+        "market_provenance": snapshot.provenance,
+        "stock_split_coverage": stock_split_coverage,
+        "status": "computed"
+    })))
 }
 
 // -----------------------------------------------------------------------------

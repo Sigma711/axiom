@@ -1,3 +1,49 @@
+export type AlphaCollectionId = 'worldquant101' | 'qlib_alpha158';
+export type AlphaResearchSource = 'us_stock' | 'a_share';
+
+export interface AlphaFactor {
+  id: string;
+  name: string;
+  status: 'available' | 'unavailable';
+  required_fields: string[];
+  summary: string;
+  formula?: string | null;
+  source_url: string;
+  code_url?: string | null;
+}
+
+export interface AlphaCollection {
+  id: AlphaCollectionId;
+  name: string;
+  source_url: string;
+  total: number;
+  factors: AlphaFactor[];
+}
+
+export interface AlphaCatalog { collections: AlphaCollection[]; }
+export interface AlphaPoint { timestamp: string; value: number | null; }
+export interface AlphaResearchRequest {
+  collection: AlphaCollectionId;
+  id: string;
+  source: AlphaResearchSource;
+  symbol: string;
+  limit: number;
+}
+export interface AlphaResearchResult {
+  collection?: AlphaCollectionId;
+  source?: AlphaResearchSource;
+  symbol?: string;
+  factor: AlphaFactor;
+  market_provenance: import('./ExecutionAssumptionsVisual').MarketProvenance;
+  bars: Bar[];
+  series: AlphaPoint[];
+  forward_returns: AlphaPoint[];
+  stats: { paired_count: number; time_series_correlation: number | null };
+  status: string;
+  reason?: string | null;
+  notes: string[];
+}
+
 // 共享类型定义
 import type { ExecutionAssumption, MarketProvenance } from './ExecutionAssumptionsVisual';
 export type Side = 'BUY' | 'SELL' | 'HOLD';
