@@ -10,17 +10,20 @@
 .ax-alpha-truth strong { margin-bottom: .45rem; font-size: 1.05rem; }
 .ax-alpha-truth p, .ax-alpha-learning header p, .ax-alpha-method p { color: var(--text-dim); }
 .ax-alpha-collection-switch { display: flex; justify-content: flex-end; margin: 1rem 0; }
-.ax-alpha-collection-switch label, .ax-alpha-catalog-tools label { display: grid; gap: .25rem; color: var(--text-dim); font-size: .72rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
-.ax-alpha select, .ax-alpha input { min-width: 0; min-height: 2.65rem; padding: .5rem .65rem; color: var(--text); background: var(--bg-input); border: 2px solid var(--border); font: inherit; }
-.ax-alpha select:focus, .ax-alpha input:focus { outline: 3px solid color-mix(in srgb, var(--alpha-signal) 28%, transparent); border-color: var(--alpha-signal); }
-.ax-alpha select:disabled { opacity: 1; color: var(--text-dim); background: var(--bg-elev); }
+.ax-alpha-collection-switch .ax-alpha-field, .ax-alpha-catalog-tools label, .ax-alpha-catalog-tools .ax-alpha-field { display: grid; gap: .25rem; color: var(--text-dim); font-size: .72rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.ax-alpha-collection-switch .ax-alpha-field { width: min(100%, 17rem); }
+.ax-alpha input:not(.ax-dd-search) { min-width: 0; min-height: 2.9rem; padding: .62rem .8rem; color: var(--text); background: var(--bg-input); border: 2px solid var(--border); border-radius: 0; font-family: inherit; font-size: .9rem; font-weight: 650; line-height: 1.2; }
+.ax-alpha input:not(.ax-dd-search):focus-visible { outline: 3px solid color-mix(in srgb, var(--alpha-signal) 28%, transparent); outline-offset: 2px; border-color: var(--alpha-signal); }
+.ax-alpha .ax-dropdown { width: 100%; min-width: 0; }
+.ax-alpha .ax-dd-trigger { box-sizing: border-box; width: 100%; max-width: none; min-width: 0; min-height: 2.9rem; padding: .62rem 2.4rem .62rem .8rem; font-size: .9rem; font-weight: 650; }
+.ax-alpha .ax-dd-trigger:focus-visible { outline: 3px solid color-mix(in srgb, var(--alpha-signal) 28%, transparent); outline-offset: 2px; }
 .ax-alpha-learning { margin: 1rem 0; padding: clamp(1rem, 2.5vw, 1.5rem); border-top: .7rem solid var(--alpha-signal); }
 .ax-alpha-learning > header { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
 .ax-alpha-learning > header h3 { margin: .35rem 0; font-size: 1.45rem; }
 .ax-alpha-learning > header strong { flex: 0 0 auto; padding: .45rem .65rem; color: var(--accent-on-fill); background: var(--accent-fill); border: 2px solid var(--accent); font: 900 1rem/1 var(--mono); }
 .ax-alpha-learning-layout { display: grid; grid-template-columns: minmax(235px, .65fr) minmax(0, 1.6fr); gap: 1rem; align-items: start; }
 .ax-alpha-catalog { min-width: 0; border: 2px solid var(--border); background: var(--bg-elev); }
-.ax-alpha-catalog-tools { display: grid; grid-template-columns: minmax(0, 1fr) 108px; gap: .55rem; padding: .7rem; border-bottom: 2px solid var(--border); background: var(--bg-card); }
+.ax-alpha-catalog-tools { display: grid; grid-template-columns: minmax(0, 1fr) minmax(105px, .65fr); gap: .55rem; padding: .7rem; border-bottom: 2px solid var(--border); background: var(--bg-card); }
 .ax-alpha-factor-list { max-height: 620px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; contain: content; }
 .ax-alpha-factor-list > button { display: grid; grid-template-columns: minmax(0, 1fr) auto; width: 100%; padding: .72rem; color: var(--text); background: transparent; border: 0; border-bottom: 1px solid var(--border); cursor: pointer; text-align: left; }
 .ax-alpha-factor-list > button:hover, .ax-alpha-factor-list > button:focus-visible { background: color-mix(in srgb, var(--alpha-signal) 9%, var(--bg-card)); outline: 3px solid var(--alpha-signal); outline-offset: -3px; }
@@ -59,13 +62,13 @@
 .ax-alpha-lab-heading h3 { margin: .2rem 0; color: var(--text); font-size: 1.45rem; }
 .ax-alpha-lab-heading p { margin: .25rem 0 0; color: var(--text-dim); font-size: .84rem; line-height: 1.5; }
 .ax-alpha-lab-mark { display: grid; flex: 0 0 2.35rem; width: 2.35rem; height: 2.35rem; place-items: center; color: var(--accent-on-fill); background: var(--accent-fill); font-size: 1.05rem; }
-.ax-alpha-form { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)) auto; gap: .75rem; align-items: end; }
-.ax-alpha-form label { display: grid; gap: .3rem; color: var(--text-dim); font-size: .75rem; font-weight: 700; }
-.ax-alpha-form select, .ax-alpha-form input, .ax-alpha-source strong { box-sizing: border-box; width: 100%; min-height: 2.8rem; border-radius: 0; }
-.ax-alpha-form select { padding-right: 1.8rem; }
-.ax-alpha-source { display: grid; gap: .3rem; min-width: 0; color: var(--text-dim); font-size: .75rem; font-weight: 700; }
-.ax-alpha-source strong { display: flex; align-items: center; padding: .5rem .65rem; border: 2px solid var(--border); background: var(--bg-elev); color: var(--text); font-size: .82rem; font-weight: 650; }
-.ax-alpha-run { min-height: 2.8rem; white-space: nowrap; }
+.ax-alpha-form { display: grid; grid-template-columns: minmax(145px, 1.25fr) minmax(125px, .9fr) minmax(120px, 1fr) minmax(105px, .7fr) auto; gap: .75rem; align-items: end; }
+.ax-alpha-form label, .ax-alpha-form .ax-alpha-field, .ax-alpha-source { display: grid; grid-template-rows: 1.2rem 2.9rem; gap: .4rem; min-width: 0; color: var(--text-dim); font-size: .75rem; font-weight: 750; line-height: 1.2; }
+.ax-alpha-form input, .ax-alpha-source strong { box-sizing: border-box; width: 100%; height: 2.9rem; }
+.ax-alpha-source strong { display: flex; align-items: center; padding: .62rem .8rem; border: 2px solid var(--border); background: var(--bg-elev); color: var(--text); font-size: .9rem; font-weight: 650; }
+.ax-alpha-run.ax-btn { min-height: 2.9rem; padding: .62rem 1.05rem; border: 2px solid var(--accent); border-radius: 0; box-shadow: 4px 4px 0 var(--border); white-space: nowrap; }
+.ax-alpha-run.ax-btn:hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--border); }
+.ax-alpha-run.ax-btn:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--border); }
 .ax-alpha-error, .ax-alpha-status { margin-top: 1rem; padding: .8rem 1rem; border: 2px solid var(--red); background: color-mix(in srgb, var(--red) 10%, var(--bg-card)); }
 .ax-alpha-status { border-color: var(--accent); }
 .ax-alpha-results { margin-top: 1rem; }
@@ -91,5 +94,7 @@
 .ax-alpha-provenance p, .ax-alpha-caveats li { margin-top: .45rem; color: var(--text-dim); }
 .ax-alpha-caveats { border-left: .7rem solid var(--accent); }
 .ax-alpha-caveats ul { padding-left: 1.15rem; }
-@media (max-width: 900px) { .ax-alpha-learning-layout { grid-template-columns: 1fr; } .ax-alpha-factor-list { max-height: 320px; } .ax-alpha-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ax-alpha-form button { grid-column: 1 / -1; } }
+@media (max-width: 1050px) { .ax-alpha-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ax-alpha-form button { grid-column: 1 / -1; } }
+@media (max-width: 900px) { .ax-alpha-learning-layout { grid-template-columns: 1fr; } .ax-alpha-factor-list { max-height: 320px; } }
+@media (min-width: 901px) and (max-width: 1250px) { .ax-alpha-catalog-tools { grid-template-columns: 1fr; } }
 @media (max-width: 650px) { .ax-alpha-hero, .ax-alpha-method, .ax-alpha-charts { grid-template-columns: 1fr; } .ax-alpha-learning > header { align-items: start; flex-direction: column; } .ax-alpha-catalog-tools, .ax-alpha-form, .ax-alpha-metrics { grid-template-columns: 1fr; } .ax-alpha-method-meta { grid-column: auto; } .ax-alpha-scatter { grid-column: auto; } .ax-alpha-intro, .ax-alpha-truth, .ax-alpha-learning, .ax-alpha-lab, .ax-alpha-chart-card, .ax-alpha-caveats { box-shadow: 4px 4px 0 color-mix(in srgb, var(--text) 14%, transparent); } }

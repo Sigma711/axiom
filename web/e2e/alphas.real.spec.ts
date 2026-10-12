@@ -11,11 +11,13 @@ test('verified Alpha exercises run against actual stock bars and expose provenan
     .toEqual(expect.arrayContaining([expect.objectContaining({ id: 'alpha101', status: 'available' })]));
 
   for (const exercise of [
-    { collection: 'worldquant101', factor: 'alpha101', source: 'us_stock', symbol: 'AAPL', name: 'WorldQuant Alpha101' },
-    { collection: 'qlib_alpha158', factor: 'kmid', source: 'a_share', symbol: '600519', name: 'Qlib Alpha158' },
+    { collection: 'worldquant101', factor: 'alpha101', factorName: 'Alpha 101', source: 'us_stock', symbol: 'AAPL', name: 'WorldQuant Alpha101' },
+    { collection: 'qlib_alpha158', factor: 'kmid', factorName: 'KMID', source: 'a_share', symbol: '600519', name: 'Microsoft Qlib Alpha158' },
   ]) {
-    await page.getByLabel('选择因子库').selectOption(exercise.collection);
-    await page.getByLabel('选择因子', { exact: true }).selectOption(exercise.factor);
+    await page.getByRole('button', { name: '选择因子库' }).click();
+    await page.getByRole('listbox', { name: '选择因子库' }).getByRole('option', { name: exercise.name, exact: true }).click();
+    await page.getByRole('button', { name: '选择因子', exact: true }).click();
+    await page.getByRole('listbox', { name: '选择因子' }).getByRole('option', { name: exercise.factorName, exact: true }).click();
     await expect(page.getByLabel('研究标的')).toHaveValue(exercise.symbol);
     await page.getByLabel('日线根数').fill('80');
     const responsePromise = page.waitForResponse(response => response.url().includes('/api/alphas/research') && response.request().method() === 'POST');

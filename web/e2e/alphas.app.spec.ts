@@ -12,6 +12,11 @@ const lessonIds = [
 ] as const;
 const qlibFactors = qlibIds.map(id => ({ id, name: id.toUpperCase(), status: id === 'vwap0' ? 'unavailable' : 'available', required_fields: id.startsWith('k') ? ['open', 'high', 'low', 'close'] : ['close'], summary: id === 'vwap0' ? '需要真实 VWAP，当前不可运行。' : `${id.toUpperCase()} 的逐项学习说明。`, formula: `${id.toUpperCase()} verified formula`, source_url: 'https://qlib.readthedocs.io/en/latest/component/data.html', code_url: id === 'vwap0' ? null : 'https://github.test/qlib' }));
 
+async function choose(page: import('@playwright/test').Page, label: string, option: string) {
+  await page.getByRole('button', { name: label, exact: true }).click();
+  await page.getByRole('listbox', { name: label }).getByRole('option', { name: option, exact: true }).click();
+}
+
 const catalog = { collections: [
   { id: 'worldquant101', name: 'WorldQuant Alpha101', source_url: 'https://arxiv.org/pdf/1601.00991', total: 101, factors: [
     { id: 'alpha1', name: 'Alpha 1', status: 'unavailable', required_fields: [], summary: '尚未进入可运行练习。', source_url: 'https://arxiv.org/pdf/1601.00991', code_url: null },
@@ -39,7 +44,25 @@ test('factor research route runs a verified exercise with mocked real-data prove
   await page.getByRole('button', { name: '进入因子研究' }).click();
   await expect(page).toHaveURL(/\/learn\/alphas$/);
   await expect(page.getByRole('button', { name: '因子研究', exact: true })).toHaveClass(/active/);
-  await page.getByLabel('选择因子库').selectOption('qlib_alpha158');
+  const collectionTrigger = page.getByRole('button', { name: '选择因子库' });
+  await collectionTrigger.focus();
+  await collectionTrigger.press('ArrowDown');
+  await expect(collectionTrigger).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('listbox', { name: '选择因子库' }).getByRole('option', { name: 'WorldQuant Alpha101' })).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.getByRole('listbox', { name: '选择因子库' }).getByRole('option', { name: 'Microsoft Qlib Alpha158' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(collectionTrigger).toBeFocused();
+  await expect(collectionTrigger).toContainText('Microsoft Qlib Alpha158');
+  const statusTrigger = page.getByRole('button', { name: '因子状态' });
+  await statusTrigger.press('End');
+  await page.keyboard.press('End');
+  await expect(page.getByRole('listbox', { name: '因子状态' }).getByRole('option', { name: '待核验' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(statusTrigger).toBeFocused();
+  await expect(statusTrigger).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('select')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '选择因子库' })).toHaveAttribute('aria-haspopup', 'listbox');
   await expect(page.locator('[data-factor-card]')).toHaveCount(158);
   await expect(page.locator('[data-factor-card]').first()).toHaveCSS('content-visibility', 'visible');
   const search = page.getByLabel('搜索因子');
@@ -53,13 +76,22 @@ test('factor research route runs a verified exercise with mocked real-data prove
   await search.fill('ROC5');
   await expect(page.locator('[data-factor-card]')).toHaveCount(1);
   await page.locator('[data-factor-card]').click();
+  await expect(page.locator('[data-factor-card]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByLabel('ROC5 因子示意图')).toBeVisible();
-  const factor = page.getByLabel('选择因子', { exact: true });
-  await expect(factor.locator('option')).toHaveCount(157);
-  await factor.selectOption('kmid');
+  const factor = page.getByRole('button', { name: '选择因子', exact: true });
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await factor.click();
+  await expect(factor.locator('..')).toHaveClass(/open-up/);
+  await expect(page.getByRole('listbox', { name: '选择因子' }).getByRole('option')).toHaveCount(157);
+  await page.getByRole('listbox', { name: '选择因子' }).getByRole('option', { name: 'KMID', exact: true }).click();
+  await expect(factor).toHaveAttribute('aria-haspopup', 'listbox');
+  await expect(page.getByRole('button', { name: '运行实证' })).toHaveCSS('border-radius', '0px');
+  const controlHeights = await page.locator('.ax-alpha-form').evaluate(form => Array.from(form.querySelectorAll('input, .ax-alpha-source strong, .ax-dd-trigger, .ax-alpha-run')).map(control => Math.round(control.getBoundingClientRect().height)));
+  expect(new Set(controlHeights).size).toBe(1);
   await page.getByRole('button', { name: '运行实证' }).click();
 
   await expect(page.getByLabel('因子研究结果')).toBeVisible();
+  expect(await page.locator('.ax-alpha-provenance summary').evaluate(node => getComputedStyle(node, '::before').content)).toBe('"+"');
   await expect(page.getByText('-0.2500', { exact: true })).toBeVisible();
   await expect(page.getByRole('img', { name: '因子时间序列' }).locator('path.ax-alpha-line')).toHaveCount(2);
   expect(requestBody).toEqual({ collection: 'qlib_alpha158', id: 'kmid', source: 'a_share', symbol: '600519', limit: 160 });
@@ -73,4 +105,6 @@ test('factor research route runs a verified exercise with mocked real-data prove
   await expect(page.getByRole('img', { name: '前瞻收益时间序列' })).toBeVisible();
   await expect(page.getByRole('img', { name: '因子与前瞻收益散点图' })).toBeVisible();
   await page.screenshot({ path: test.info().outputPath('alpha-research-light-mobile.png'), fullPage: true });
+  await page.getByLabel('切换到深色模式').click();
+  await page.screenshot({ path: test.info().outputPath('alpha-research-dark-mobile.png'), fullPage: true });
 });

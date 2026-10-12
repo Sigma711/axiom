@@ -22,6 +22,7 @@ import { ExecutionAssumptionsVisual, type ExecutionAssumption, type MarketProven
 import { marketSourceFromPracticeRoute, practiceRouteSource } from './practiceRoute';
 import { chartDataset, type DisplayPriceBasis } from './chartDataset';
 import { SymbolPicker } from './SymbolPicker';
+import { Dropdown } from './Dropdown';
 import { PdfBookReader } from './PdfBookReader';
 import { AlphaResearchPage } from './AlphaResearchPage';
 import { indicatorPanel, validSeries, type IndicatorPanel } from './chart';
@@ -218,68 +219,6 @@ function TabBar({ active, onChange }: { active: TabId; onChange: (t: TabId) => v
 // ===================================================================
 // 通用:下拉选择器
 // ===================================================================
-interface DropdownProps<T> {
-  label: string;
-  options: readonly { v: T; l: string }[];
-  value: T;
-  onChange: (v: T) => void;
-  minWidth?: number;
-}
-function Dropdown<T extends string | number>({ label, options, value, onChange, minWidth = 100 }: DropdownProps<T>) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  const current = options.find(o => o.v === value) || options[0];
-
-  return (
-    <div className={'ax-dropdown' + (open ? ' open' : '')} ref={ref} style={{ minWidth }} onKeyDown={event => {
-      if (event.key === 'Escape') { setOpen(false); ref.current?.querySelector('button')?.focus(); }
-    }}>
-      <button type="button" className="ax-dd-trigger" aria-label={label} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(o => !o)}>
-        <span>{current?.l || '选择...'}</span>
-      </button>
-      {open && (
-        <div className="ax-dd-menu" role="listbox" aria-label={label}>
-          {options.length > 5 && (
-            <input className="ax-dd-search" placeholder="搜索..." autoFocus
-              onChange={e => {
-                const q = e.target.value.toLowerCase();
-                e.target.dataset.filtered = q;
-                const items = (e.target.parentElement?.querySelectorAll('.ax-dd-item') || []) as NodeListOf<HTMLElement>;
-                items.forEach(it => {
-                  const label = (it.textContent || '').toLowerCase();
-                  (it as HTMLElement).style.display = label.includes(q) ? '' : 'none';
-                });
-              }}
-            />
-          )}
-          {options.map(o => (
-            <button
-              type="button"
-              role="option"
-              aria-selected={o.v === value}
-              key={String(o.v)}
-              className={'ax-dd-item' + (o.v === value ? ' selected' : '')}
-              onClick={() => { onChange(o.v); setOpen(false); }}
-            >
-              {o.l}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 interface MultiSelectDropdownProps<T> {
   label: string;
   options: readonly { v: T; l: string }[];

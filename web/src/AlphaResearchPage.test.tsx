@@ -43,6 +43,12 @@ const change = async (element: HTMLInputElement | HTMLSelectElement, value: stri
   Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(element, value);
   element.dispatchEvent(new Event(element instanceof HTMLInputElement ? 'input' : 'change', { bubbles: true }));
 });
+const choose = async (host: HTMLElement, label: string, option: string) => {
+  await act(async () => (host.querySelector(`.ax-dd-trigger[aria-label="${label}"]`) as HTMLButtonElement).click());
+  const item = Array.from(host.querySelectorAll<HTMLButtonElement>(`.ax-dd-menu[aria-label="${label}"] [role="option"]`)).find(button => button.textContent === option);
+  if (!item) throw new Error(`Missing ${option} in ${label}`);
+  await act(async () => item.click());
+};
 
 describe('Alpha research learning flow', () => {
   let host: HTMLDivElement; let root: Root;
@@ -56,7 +62,7 @@ describe('Alpha research learning flow', () => {
 
   it('lists and searches all 158 Qlib factors in a separate learning center', async () => {
     await act(async () => root.render(<AlphaResearchPage />)); await flush();
-    await change(host.querySelector('[aria-label="选择因子库"]')!, 'qlib_alpha158');
+    await choose(host, '选择因子库', 'Microsoft Qlib Alpha158');
     expect(host.textContent).toContain('Microsoft Qlib Alpha158'); expect(host.textContent).toContain('158 / 158');
     expect(host.querySelectorAll('[data-factor-card]')).toHaveLength(158);
     await change(host.querySelector('[aria-label="搜索因子"]')!, 'roc5');
@@ -72,10 +78,10 @@ describe('Alpha research learning flow', () => {
 
   it('filters runnable factors and runs a verified Qlib factor', async () => {
     await act(async () => root.render(<AlphaResearchPage />)); await flush();
-    await change(host.querySelector('[aria-label="选择因子库"]')!, 'qlib_alpha158');
-    await change(host.querySelector('[aria-label="因子状态"]')!, 'available');
+    await choose(host, '选择因子库', 'Microsoft Qlib Alpha158');
+    await choose(host, '因子状态', '可运行');
     expect(host.querySelectorAll('[data-factor-card]')).toHaveLength(10);
-    expect((host.querySelector('[aria-label="选择因子"]') as HTMLSelectElement).value).toBe('kmid');
+    expect(host.querySelector('.ax-dd-trigger[aria-label="选择因子"]')?.textContent).toBe('KMID');
     await act(async () => host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))); await flush();
     expect(alphaApi.research).toHaveBeenCalledWith({ collection: 'qlib_alpha158', id: 'kmid', source: 'a_share', symbol: '600519', limit: 160 });
     expect(host.textContent).toContain('-0.4200'); expect(host.textContent).toContain('查看核验实现');
@@ -100,7 +106,7 @@ describe('Alpha research learning flow', () => {
     const factors = families.map(id => ({ ...qlibFactors[0], id, name: id.toUpperCase(), formula: id === 'corr5' ? 'Corr(Ref($close, 1), Log($volume+1), 5)' : id === 'vma5' ? 'Mean($volume, 5)/$volume' : 'Mean($close, 5)/$close' }));
     vi.mocked(alphaApi.catalog).mockResolvedValue({ collections: [catalog.collections[0], { ...catalog.collections[1], total: factors.length, factors }] });
     await act(async () => root.render(<AlphaResearchPage />)); await flush();
-    await change(host.querySelector('[aria-label="选择因子库"]')!, 'qlib_alpha158');
+    await choose(host, '选择因子库', 'Microsoft Qlib Alpha158');
     for (const factor of factors) {
       await act(async () => (Array.from(host.querySelectorAll<HTMLButtonElement>('[data-factor-card]')).find(card => card.querySelector('span')?.textContent === factor.name)!).click());
       expect(host.querySelector('.ax-alpha-method h4')?.textContent).toContain(factor.name);
