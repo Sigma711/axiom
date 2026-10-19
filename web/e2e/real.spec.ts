@@ -199,20 +199,26 @@ test('every historical industry case follows its verified original disclosure fr
     }
     let bytes: Buffer | undefined;
     let fallbackReason: string | undefined;
-    try {
-      const response = await request.get(source.url, { timeout: 60_000 });
-      const live = await response.body();
-      if (!response.ok()) fallbackReason = `HTTP ${response.status()}`;
-      else if (live.subarray(0, 5).toString() !== '%PDF-') fallbackReason = 'provider returned a non-PDF body';
-      else {
-        if (live.byteLength !== source.bytes || createHash('sha256').update(live).digest('hex') !== source.hash) {
-          throw new Error(`${source.symbol}: reviewed PDF drift or oversized PDF`);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      fallbackReason = undefined;
+      try {
+        const response = await request.get(source.url, { timeout: 60_000 });
+        const live = await response.body();
+        if (!response.ok()) fallbackReason = `HTTP ${response.status()}`;
+        else if (live.subarray(0, 5).toString() !== '%PDF-') fallbackReason = 'provider returned a non-PDF body';
+        else if (live.byteLength !== source.bytes) fallbackReason = `incomplete PDF: ${live.byteLength} of ${source.bytes} bytes`;
+        else {
+          if (createHash('sha256').update(live).digest('hex') !== source.hash) {
+            throw new Error(`${source.symbol}: reviewed PDF drift`);
+          }
+          bytes = live;
         }
-        bytes = live;
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('reviewed PDF drift')) throw error;
+        fallbackReason = `transport failure: ${String(error)}`;
       }
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('reviewed PDF drift or oversized PDF')) throw error;
-      fallbackReason = `transport failure: ${String(error)}`;
+      if (bytes || !fallbackReason || !(fallbackReason.startsWith('transport failure') || fallbackReason.startsWith('incomplete PDF') || /^HTTP 5\d\d$/.test(fallbackReason))) break;
+      if (attempt < 2) await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 1000));
     }
     const archived = Boolean(fallbackReason);
     if (fallbackReason) {
