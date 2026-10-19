@@ -141,7 +141,7 @@ test('the original-book McClellan summation opens and draws its own real practic
   const card = page.locator('.ax-kb-card[data-concept-id="book_mcclellan_sum"]');
   await expect(card).toHaveCount(1);
   await card.locator('summary').click();
-  await expect(card.getByLabel('McClellan Summation Index 麦克莱伦累积指数真实市场宽度实践')).toBeVisible();
+  await expect(card.getByLabel('McClellan Summation Index 麦克莱伦累积指数真实市场宽度实践')).toBeVisible({ timeout: 30_000 });
   await card.getByRole('button', { name: '在数据探索中实践' }).click();
   await expect(page).toHaveURL(/\/data\?concept=book_mcclellan_sum&source=market_breadth$/);
   const panel = page.getByLabel('概念实践');

@@ -4,6 +4,13 @@ import { resolve } from 'node:path';
 import { expect, test } from './v8-coverage';
 import type { Locator, Page } from '@playwright/test';
 
+test('Rust service serves the strategy-family deep link and its full learning page', async ({ page }) => {
+  await page.goto('/learn/strategies');
+  await expect(page.getByRole('heading', { name: '11 类主流量化策略' })).toBeVisible();
+  await expect(page.locator('.ax-family')).toHaveCount(11);
+  await page.goto('/learn/strategies/trend/practice');
+  await expect(page.getByRole('heading', { name: '趋势跟踪：突破后赚到了吗？' })).toBeVisible();
+});
 test('Apple split practice independently matches the issuer announcement and live provider event', async ({ page, request }) => {
   test.setTimeout(120_000);
   const issuerUrl = 'https://www.apple.com/newsroom/2020/07/apple-reports-third-quarter-results/';
@@ -337,9 +344,16 @@ test('every ownership and analyst disclosure follows its fixed original source f
   const ownershipCache = resolve(process.cwd(), '..', 'target', 'e2e-data', 'ownership-sources');
   await mkdir(ownershipCache, { recursive: true });
   for (const document of documents) {
-    const response = await request.get(document.url, { timeout: 60_000 });
-    expect(response.ok(), document.url).toBe(true);
-    const bytes = await response.body();
+    const cachePath = resolve(ownershipCache, `${document.hash}.source`);
+    // Reuse previously verified historical bytes locally; a fresh runner fetches
+    // the original URL and the same hash/length checks below still apply.
+    let bytes: Buffer;
+    try { bytes = await readFile(cachePath); }
+    catch {
+      const response = await request.get(document.url, { timeout: 60_000 });
+      expect(response.ok(), document.url).toBe(true);
+      bytes = await response.body();
+    }
     if (document.url.endsWith('.csv')) {
       const text = Buffer.from(bytes).toString('utf8');
       expect(text).toContain('Cycle Settlement Date,BATS-Symbol');
@@ -349,7 +363,7 @@ test('every ownership and analyst disclosure follows its fixed original source f
     }
     expect(bytes).toHaveLength(document.bytes);
     expect(createHash('sha256').update(bytes).digest('hex')).toBe(document.hash);
-    await writeFile(resolve(ownershipCache, `${document.hash}.source`), bytes);
+    await writeFile(cachePath, bytes);
   }
   const holders = [681282935, 56996777, 55048844, 27849688, 11573000, 10397104, 10324650, 8039447, 7377868, 5629234];
   const cases = [

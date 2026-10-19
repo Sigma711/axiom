@@ -1154,6 +1154,78 @@ test('strategy creation guide connects research, validation, comparison, and pap
   }
 });
 
+test('eleven strategy families teach mechanism, data, failure and verification with shareable anchors', async ({ page }) => {
+  await page.goto('/learn/strategies');
+  await expect(page.getByRole('heading', { name: '11 类主流量化策略' })).toBeVisible();
+  const families = page.locator('.ax-family');
+  await expect(families).toHaveCount(11);
+  const names = ['趋势跟踪', '动量策略', '均值回归', '因子投资', '统计套利', '事件驱动', '套利交易', '做市策略', '波动率策略', '套息／持有收益', '资产配置'];
+  for (let index = 0; index < names.length; index += 1) {
+    const family = families.nth(index);
+    await expect(family.getByRole('heading', { name: names[index], exact: true })).toBeVisible();
+    await expect(family.locator('.ax-family-reading section')).toHaveCount(6);
+    await expect(family.locator('.ax-family-flow li')).toHaveCount(3);
+    await expect(family).toContainText('教学例子：');
+    await expect(family).not.toContainText('平台当前边界');
+  }
+  await page.getByRole('navigation', { name: '11 类策略目录' }).getByRole('link', { name: /套息／持有收益/ }).click();
+  await expect(page).toHaveURL(/\/learn\/strategies#strategy-carry$/);
+  await expect(page.locator('#strategy-carry')).toBeInViewport();
+  await page.screenshot({ path: test.info().outputPath('strategy-families-dark.png'), fullPage: true });
+  await page.getByLabel('切换到浅色模式').click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.locator('.ax-main').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await page.screenshot({ path: test.info().outputPath('strategy-families-light-mobile.png'), fullPage: true });
+  for (const [button, path] of [['数据探索', '/data'], ['因子研究', '/learn/alphas'], ['回测示例', '/backtest'], ['创建策略', '/learn/build']] as const) {
+    await page.goto('/learn/strategies');
+    await page.locator('.ax-families-next').getByRole('button', { name: button }).click();
+    await expect(page).toHaveURL(new RegExp(`${path}$`));
+  }
+  await page.goto('/learn/build');
+  await page.getByRole('button', { name: '阅读策略流派' }).click();
+  await expect(page).toHaveURL(/\/learn\/strategies$/);
+  await page.goto('/learn/path');
+  await page.getByRole('button', { name: '阅读策略流派' }).click();
+  await expect(page).toHaveURL(/\/learn\/strategies$/);
+});
+
+test('all eleven strategies open independent practice routes with editable calculations and honest evidence links', async ({ page }) => {
+  const ids = ['trend', 'momentum', 'reversion', 'factor', 'stat-arb', 'event', 'arbitrage', 'market-making', 'volatility', 'carry', 'allocation'];
+  for (const id of ids) {
+    await page.goto('/learn/strategies');
+    await page.locator(`#strategy-${id}`).getByRole('button', { name: /进入.*实践/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/learn/strategies/${id}/practice$`));
+    await expect(page.getByRole('heading', { name: /：/ }).first()).toBeVisible();
+    await expect(page.locator('.ax-practice-hero h3')).toBeInViewport();
+    await expect(page.getByLabel('教学输入').getByText('教学算例 · 手动输入')).toBeVisible();
+    await expect(page.locator('.ax-practice-metric').first()).toBeVisible();
+    const firstInput = page.getByLabel('教学输入').getByRole('textbox').first();
+    await firstInput.fill('');
+    await expect(page.getByRole('alert')).toBeVisible();
+    await expect(page.getByText('修正输入后显示计算结果。')).toBeVisible();
+    await page.getByRole('button', { name: '恢复示例数值' }).click();
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect(page.locator('.ax-practice-metric').first()).toBeVisible();
+    if (!['carry', 'allocation'].includes(id)) await expect(page.getByRole('link', { name: /打开真实数据实践/ })).toHaveAttribute('href', /\/(data|learn\/alphas)/);
+    await page.reload();
+    await expect(page.locator('.ax-practice-metric').first()).toBeVisible();
+    await page.getByRole('button', { name: '返回 11 类策略' }).click();
+    await expect(page).toHaveURL(/\/learn\/strategies$/);
+  }
+  await page.goto('/learn/strategies/no-such-strategy/practice');
+  await expect(page.getByRole('heading', { name: '没有找到这项实践' })).toBeVisible();
+  await page.getByRole('button', { name: '返回策略流派' }).click();
+  await expect(page).toHaveURL(/\/learn\/strategies$/);
+  await page.goto('/learn/strategies/trend/practice');
+  await page.getByRole('link', { name: '打开真实数据实践 →' }).click();
+  await expect(page).toHaveURL(/\/data\?concept=donchian&source=binance$/);
+  await page.goto('/learn/strategies/volatility/practice');
+  await page.getByLabel('切换到浅色模式').click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.locator('.ax-main').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await page.screenshot({ path: test.info().outputPath('strategy-practice-light-mobile.png'), fullPage: true });
+});
+
 test('book contents uses an arrow-only accessible collapse control', async ({ page }) => {
   await page.goto('/learn/book');
   const toggle = page.getByRole('button', { name: '收起原书目录' });

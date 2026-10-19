@@ -143,6 +143,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/", get(serve_index))
         .route("/learn", get(serve_index))
         .route("/learn/alphas", get(serve_index))
+        .route("/learn/strategies", get(serve_index))
+        .route("/learn/strategies/:family/practice", get(serve_index))
         .route("/learn/book", get(serve_index))
         .route("/learn/concepts", get(serve_index))
         .route("/learn/build", get(serve_index))

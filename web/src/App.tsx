@@ -25,6 +25,8 @@ import { SymbolPicker } from './SymbolPicker';
 import { Dropdown } from './Dropdown';
 import { PdfBookReader } from './PdfBookReader';
 import { AlphaResearchPage } from './AlphaResearchPage';
+import { StrategyFamiliesPage } from './StrategyFamiliesPage';
+import { StrategyPracticePage } from './StrategyPracticePage';
 import { indicatorPanel, validSeries, type IndicatorPanel } from './chart';
 const MARKET_SOURCE_OPTIONS = [
   { v: 'binance', l: '加密货币 · Binance' },
@@ -182,7 +184,7 @@ const TABS: { id: TabId; label: string }[] = [
 ];
 
 function routeFor(tab: TabId, sub: LearnSub = 'knowledge', concept?: string, source?: PracticeRouteSource) {
-  const learnPaths: Record<LearnSub, string> = { knowledge: '/learn', alphas: '/learn/alphas', book: '/learn/book', concepts: '/learn/concepts', build: '/learn/build', path: '/learn/path' };
+  const learnPaths: Record<LearnSub, string> = { knowledge: '/learn', alphas: '/learn/alphas', strategies: '/learn/strategies', book: '/learn/book', concepts: '/learn/concepts', build: '/learn/build', path: '/learn/path' };
   const base = tab === 'learn' ? learnPaths[sub] : `/${tab}`;
   const path = appPath(base);
   return concept ? `${path}?concept=${encodeURIComponent(concept)}${source ? `&source=${source}` : ''}` : path;
@@ -191,11 +193,12 @@ function readRoute() {
   const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
   const path = (appBase && pathname.startsWith(appBase) ? pathname.slice(appBase.length) : pathname) || '/';
   const tab = ({ '/data': 'data', '/backtest': 'backtest', '/paper': 'paper', '/compare': 'compare' } as Record<string, TabId>)[path] || 'learn';
-  const sub = ({ '/learn/alphas': 'alphas', '/learn/book': 'book', '/learn/concepts': 'concepts', '/learn/build': 'build', '/learn/path': 'path' } as Record<string, LearnSub>)[path] || 'knowledge';
+  const strategyPracticeId = /^\/learn\/strategies\/([a-z-]+)\/practice$/.exec(path)?.[1];
+  const sub = strategyPracticeId ? 'strategies' : (({ '/learn/alphas': 'alphas', '/learn/strategies': 'strategies', '/learn/book': 'book', '/learn/concepts': 'concepts', '/learn/build': 'build', '/learn/path': 'path' } as Record<string, LearnSub>)[path] || 'knowledge');
   const query = new URLSearchParams(window.location.search);
   const requestedSource = query.get('source');
   const source: PracticeRouteSource | undefined = requestedSource === 'binance' || requestedSource === 'a_share' || requestedSource === 'us_stock' || requestedSource === 'issuer_disclosure' || requestedSource === 'market_breadth' ? requestedSource : undefined;
-  return { tab, sub, concept: query.get('concept') || undefined, source };
+  return { tab, sub, concept: query.get('concept') || undefined, source, strategyPracticeId };
 }
 
 function TabBar({ active, onChange }: { active: TabId; onChange: (t: TabId) => void }) {
@@ -288,17 +291,18 @@ const INDICATOR_OPTIONS = [
 // ===================================================================
 // 学习中心
 // ===================================================================
-type LearnSub = 'knowledge' | 'alphas' | 'concepts' | 'build' | 'path' | 'book';
+type LearnSub = 'knowledge' | 'alphas' | 'strategies' | 'concepts' | 'build' | 'path' | 'book';
 const LEARN_SUBS: { id: LearnSub; label: string }[] = [
   { id: 'knowledge', label: '指标大全' },
   { id: 'alphas', label: '因子研究' },
   { id: 'concepts', label: '概念速览' },
+  { id: 'strategies', label: '策略流派' },
   { id: 'build', label: '创建策略' },
   { id: 'book', label: '原书阅读' },
   { id: 'path', label: '学习路径' },
 ];
 
-function LearnCenter({ sub, onSubChange, onPractice, onOpenModule }: { sub: LearnSub; onSubChange: (sub: LearnSub) => void; onPractice: (conceptId: string, module: PracticeModule, source: PracticeRouteSource) => void; onOpenModule: (tab: 'backtest' | 'compare' | 'paper') => void }) {
+function LearnCenter({ sub, strategyPracticeId, onSubChange, onPractice, onStrategyPractice, onOpenModule }: { sub: LearnSub; strategyPracticeId?: string; onSubChange: (sub: LearnSub) => void; onPractice: (conceptId: string, module: PracticeModule, source: PracticeRouteSource) => void; onStrategyPractice: (id: string) => void; onOpenModule: (tab: 'data' | 'backtest' | 'compare' | 'paper') => void }) {
 
   return (
     <section className="ax-section">
@@ -314,9 +318,10 @@ function LearnCenter({ sub, onSubChange, onPractice, onOpenModule }: { sub: Lear
       {sub === 'knowledge' && <KnowledgeView onPractice={onPractice} />}
       {sub === 'alphas' && <AlphaResearchPage />}
       {sub === 'concepts' && <ConceptsView onSubChange={onSubChange} />}
+      {sub === 'strategies' && (strategyPracticeId ? <StrategyPracticePage id={strategyPracticeId} onBack={() => onSubChange('strategies')} /> : <StrategyFamiliesPage onBuild={() => onSubChange('build')} onExplore={() => onOpenModule('data')} onBacktest={() => onOpenModule('backtest')} onFactors={() => onSubChange('alphas')} onPractice={onStrategyPractice} />)}
       {sub === 'book' && <PdfBookReader />}
-      {sub === 'build' && <BuildView onOpenFactors={() => onSubChange('alphas')} onOpenModule={onOpenModule} />}
-      {sub === 'path' && <PathView onOpenAlphas={() => onSubChange('alphas')} />}
+      {sub === 'build' && <BuildView onOpenFactors={() => onSubChange('alphas')} onOpenStrategies={() => onSubChange('strategies')} onOpenModule={onOpenModule} />}
+      {sub === 'path' && <PathView onOpenAlphas={() => onSubChange('alphas')} onOpenStrategies={() => onSubChange('strategies')} />}
     </section>
   );
 }
@@ -654,6 +659,7 @@ const WORKFLOW_STAGES = [
 const LEARNING_ROADMAP: Array<{ id: Exclude<LearnSub, 'concepts'>; title: string; desc: string }> = [
   { id: 'knowledge', title: '指标大全', desc: '查定义、公式、适用条件和实践入口。' },
   { id: 'alphas', title: '因子研究', desc: '用真实日线检查因子值与前瞻收益。' },
+  { id: 'strategies', title: '策略流派', desc: '从收益来源、数据前提与失效场景认识 11 类方法。' },
   { id: 'build', title: '创建策略', desc: '把假设写成信号、仓位、执行和验证规则。' },
   { id: 'book', title: '原书阅读', desc: '回到原始材料核对概念与上下文。' },
   { id: 'path', title: '学习路径', desc: '按九步路线连接概念、练习和源码。' },
@@ -721,11 +727,12 @@ const CONCEPT_CARDS = [
 ] as const;
 
 // 创建策略
-function BuildView({ onOpenFactors, onOpenModule }: { onOpenFactors: () => void; onOpenModule: (tab: 'backtest' | 'compare' | 'paper') => void }) {
+function BuildView({ onOpenFactors, onOpenStrategies, onOpenModule }: { onOpenFactors: () => void; onOpenStrategies: () => void; onOpenModule: (tab: 'backtest' | 'compare' | 'paper') => void }) {
   return (
     <div>
       <h3>创建自己的策略 - 6 步</h3>
       <p className="ax-lead">先写清研究合同，再把假设变成可执行规则，最后用时间顺序验证它是否经得起成本与风险。</p>
+      <div className="ax-path-alpha"><div><strong>还没决定研究哪类策略？</strong><p>先认识 11 类策略的收益来源、数据要求和常见失效场景，再回到这里写规则。</p></div><button className="ax-btn" type="button" onClick={onOpenStrategies}>阅读策略流派</button></div>
       <ol className="ax-path">
         {BUILD_STEPS.map((s, i) => (
           <li key={i}>
@@ -774,15 +781,15 @@ const LEARNING_PATH = [
   { title: '统一词汇与数据契约', learn: '理解 Bar、Signal、Order、Fill、Position 和 Equity 如何串成事件链。', practice: '在概念速览里打开 K线与信号模块，确认字段与含义。', codeRef: 'src/types.rs::Bar' },
   { title: '获取、校验与版本化行情', learn: '区分交易所行情、股票日线与历史缓存；先核对清洗、复权、时区、收盘状态和数据版本，再计算指标。', practice: '在数据探索切换加密、A股和美股数据，检查来源、周期和采样范围。', codeRef: 'src/data.rs::DataFeed' },
   { title: '指标与可证伪假设', learn: '指标是特征，不是交易建议；预热期为空是诚实的数据状态。', practice: '在指标大全展开一个概念，再用“在数据探索中实践”重算。', codeRef: 'src/indicators/ma.rs::sma' },
-  { title: '策略只产生意图', learn: 'Strategy 读取一根已完成 K 线，输出 Signal；它不能直接改持仓。', practice: '阅读均线交叉策略，写下一个可验证的入场与退出条件。', codeRef: 'src/strategy.rs::Strategy' },
+  { title: '策略只产生意图', learn: '先在策略流派选择一个可证伪问题；Strategy 读取已完成 K 线，输出 Signal，不直接改持仓。', practice: '对照策略流派与均线交叉示例，写下一个可验证的入场与退出条件。', codeRef: 'src/strategy.rs::Strategy' },
   { title: '仓位、风控与订单', learn: '组合先把信号换为候选订单，风险模块再拒绝不符合约束的订单或触发强平。', practice: '在回测调整止损、止盈和仓位，观察风险调整后指标。', codeRef: 'src/portfolio.rs::Portfolio::on_signal' },
   { title: '成交模拟与防未来函数', learn: '信号在 t 产生，下一可交易时点才执行；手续费与滑点属于成交事实。', practice: '运行回测，核对交易与净值曲线是否按事件顺序变化。', codeRef: 'src/engine.rs::BacktestEngine::run' },
   { title: '业绩、样本外与稳健性', learn: '收益须和回撤、夏普、索提诺、交易成本一起阅读；样本外和滚动验证防止挑样本。', practice: '在策略对比中选择多个策略，写下不会只看收益率的判断理由。', codeRef: 'src/metrics.rs::compute_metrics' },
   { title: '模拟盘、服务与验证', learn: '模拟盘复用事件链但当前状态在单进程内存；上线前要有可复现测试和运行监控。', practice: '启动模拟盘并检查日志、持仓、净值；阅读端到端测试如何覆盖用户路径。', codeRef: 'src/paper.rs::run_paper_loop' },
   { title: '研究扩展：ML / LLM 与数据存储', learn: 'ML/LLM 只能辅助研究；随着历史数据增长，再引入 Parquet + DuckDB，持久状态优先 SQLite。', practice: '先完成数据泄漏、回测和风险检查，再评估是否需要新增存储或模型。', codeRef: 'src/workflows.rs::entries' },
 ] as const;
-function PathView({ onOpenAlphas }: { onOpenAlphas: () => void }) {
-  return <div><h3>学习路径</h3><p className="ax-lead">从数据契约到可复现运行，共 9 步。每步都给出真实模块、一个动手验证和可定位的 GitHub 源码。</p><div className="ax-path-alpha"><div><strong>想把指标推广到因子研究？</strong><p>先读运算子和数据前提，再用真实日线检查因子与前瞻收益。</p></div><button className="ax-btn" onClick={onOpenAlphas}>进入因子研究</button></div><ol className="ax-path ax-learning-path">{LEARNING_PATH.map((step, i) => <li key={step.title}><p className="ax-path-kicker">第 {i + 1} 步</p><h4>{step.title}</h4><p>{step.learn}</p><div className="ax-path-practice"><strong>动手验证</strong><span>{step.practice}</span></div><ModuleSourceLink codeRef={step.codeRef} /></li>)}</ol></div>;
+function PathView({ onOpenAlphas, onOpenStrategies }: { onOpenAlphas: () => void; onOpenStrategies: () => void }) {
+  return <div><h3>学习路径</h3><p className="ax-lead">从数据契约到可复现运行，共 9 步。每步都给出真实模块、一个动手验证和可定位的 GitHub 源码。</p><div className="ax-path-alpha"><div><strong>先选研究问题，再写交易规则</strong><p>因子研究帮助检查特征；策略流派帮助辨认收益来源、数据前提与失败方式。</p></div><div className="ax-build-actions"><button className="ax-btn" onClick={onOpenAlphas}>进入因子研究</button><button className="ax-btn" onClick={onOpenStrategies}>阅读策略流派</button></div></div><ol className="ax-path ax-learning-path">{LEARNING_PATH.map((step, i) => <li key={step.title}><p className="ax-path-kicker">第 {i + 1} 步</p><h4>{step.title}</h4><p>{step.learn}</p><div className="ax-path-practice"><strong>动手验证</strong><span>{step.practice}</span></div><ModuleSourceLink codeRef={step.codeRef} /></li>)}</ol></div>;
 }
 
 // ===================================================================
@@ -1622,9 +1629,10 @@ function CompareStrategies({ targetConcept, targetSource, theme }: { targetConce
 // ===================================================================
 export default function App() {
   const [route, setRoute] = useState(readRoute);
-  const { tab, sub: learnSub, concept: practiceTarget, source: practiceSource } = route;
+  const { tab, sub: learnSub, concept: practiceTarget, source: practiceSource, strategyPracticeId } = route;
   const navigate = (nextTab: TabId, nextSub: LearnSub = 'knowledge', concept?: string, source?: PracticeRouteSource) => { window.history.pushState({}, '', routeFor(nextTab, nextSub, concept, source)); setRoute(readRoute()); };
   const openPractice = (conceptId: string, module: PracticeModule, source: PracticeRouteSource) => navigate(module, 'knowledge', conceptId, source);
+  const openStrategyPractice = (id: string) => { window.history.pushState({}, '', appPath(`/learn/strategies/${id}/practice`)); setRoute(readRoute()); };
   const practiceMarketSource = marketSourceFromPracticeRoute(practiceSource);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => localStorage.getItem('axiom-theme') === 'light' ? 'light' : 'dark');
   void practiceTarget;
@@ -1647,7 +1655,7 @@ export default function App() {
       <Header theme={theme} onToggleTheme={() => setTheme(current => current === 'dark' ? 'light' : 'dark')} />
       <TabBar active={tab} onChange={nextTab => navigate(nextTab)} />
       <main className="ax-main">
-        {tab === 'learn' && <LearnCenter sub={learnSub} onSubChange={nextSub => navigate('learn', nextSub)} onPractice={openPractice} onOpenModule={nextTab => navigate(nextTab)} />}
+        {tab === 'learn' && <LearnCenter sub={learnSub} strategyPracticeId={strategyPracticeId} onSubChange={nextSub => navigate('learn', nextSub)} onPractice={openPractice} onStrategyPractice={openStrategyPractice} onOpenModule={nextTab => navigate(nextTab)} />}
         {tab === 'data' && <DataExplore targetConcept={practiceTarget} targetSource={practiceMarketSource} theme={theme} />}
         {tab === 'backtest' && <Backtest targetConcept={practiceTarget} targetSource={practiceMarketSource} theme={theme} />}
         {tab === 'paper' && <PaperTrading targetConcept={practiceTarget} targetSource={practiceMarketSource} theme={theme} />}
