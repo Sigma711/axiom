@@ -56,6 +56,8 @@ from pathlib import Path
 import time
 import urllib.parse
 import urllib.request
+import urllib.error
+import http.client
 
 base = "https://sigma711.top/axiom"
 def read_json(path, params):
@@ -399,8 +401,18 @@ for concept in disclosure_ids:
     body = {"concept_id": concept, "module": "data", "source": source, "symbol": symbol, "inputs": {}}
     request = urllib.request.Request(base + "/api/practice", data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json"}, method="POST")
-    with urllib.request.urlopen(request, timeout=180) as response:
-        result = json.load(response)
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(request, timeout=180) as response:
+                result = json.load(response)
+            break
+        except urllib.error.HTTPError as error:
+            if error.code not in (502, 503, 504) or attempt == 3:
+                raise
+        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead):
+            if attempt == 3:
+                raise
+        time.sleep(2 * (attempt + 1))
     assert result["concept_id"] == concept and result["symbol"] == symbol
     assert result["source"] == source and result["bars"] == [] and result["inputs"] == {}
     assert result["status"] == ("partial" if concept == "short_interest" else "computed"), (concept, result)
