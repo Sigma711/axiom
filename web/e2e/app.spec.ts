@@ -1234,10 +1234,18 @@ test('book contents uses an arrow-only accessible collapse control', async ({ pa
   const selected = page.getByRole('button', { name: '使用说明 第 8 页', exact: true });
   await selected.click();
   await expect(selected).toHaveClass(/active/);
-  const darkBackground = await selected.evaluate(node => getComputedStyle(node).backgroundColor);
-  expect(darkBackground).not.toBe('rgb(239, 239, 239)');
+  const selectedContrast = () => selected.evaluate(node => {
+    const luminance = (color: string) => {
+      const channels = color.match(/[\d.]+/g)!.slice(0, 3).map(Number).map(value => value / 255).map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
+      return .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2];
+    };
+    const style = getComputedStyle(node), foreground = luminance(style.color), background = luminance(style.backgroundColor);
+    return (Math.max(foreground, background) + .05) / (Math.min(foreground, background) + .05);
+  });
+  await expect.poll(selectedContrast).toBeGreaterThanOrEqual(4.5);
   await page.getByLabel('切换到浅色模式').click();
-  expect(await selected.evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(darkBackground);
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await expect.poll(selectedContrast).toBeGreaterThanOrEqual(4.5);
   await toggle.click();
   await expect(page.getByRole('button', { name: '展开原书目录' })).toHaveText('›');
   await expect(page.locator('.ax-book-reader')).toHaveClass(/toc-collapsed/);
